@@ -5,4 +5,6 @@ func SetValidators() {
 	setNaturalValidator()
 	setPositiveValidator()
 	setAddressValidator()
+	setHexBytesValidator()
+	setChainIDValidator()
 }

@@ -70,7 +70,7 @@ func (repository *Repository) Edit(ctx context.Context, data user.User) (*user.U
 
 	rowsAffected, errRowsAffected := result.Result.RowsAffected()
 	if errRowsAffected != nil {
-		return nil, errors.InternalFromErr(err)
+		return nil, errors.InternalFromErr(errRowsAffected)
 	}
 
 	if rowsAffected == 0 {
@@ -182,13 +182,13 @@ func (filter *userDBFilter) Paged(limit int, offset int) user.UserFilters {
 
 // OrderByCreationDate orders resources in storage by creation date.
 func (filter *userDBFilter) OrderByCreationDate(orderDirection persistence.OrderDirection) user.UserFilters {
-	filter.UserDBFilter = filter.UserDBFilter.Sort("creation_date", orderDirection)
+	filter.UserDBFilter = filter.Sort("creation_date", orderDirection)
 	return filter
 }
 
 // OrderByLastUpdateDate orders resources in storage by last update date.
 func (filter *userDBFilter) OrderByLastUpdateDate(orderDirection persistence.OrderDirection) user.UserFilters {
-	filter.UserDBFilter = filter.UserDBFilter.Sort("last_update", orderDirection)
+	filter.UserDBFilter = filter.Sort("last_update", orderDirection)
 	return filter
 }
 

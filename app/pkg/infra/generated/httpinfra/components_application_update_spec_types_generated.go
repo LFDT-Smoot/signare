@@ -7,7 +7,7 @@ import (
 )
 
 type ApplicationUpdateSpec struct {
-	// The chain identifier with which the application interacts. It must be a valid integer.
+	// The default chain ID for signing transactions for this application. It must be a valid integer.
 	ChainId *string `json:"chainId"`
 	// Description of the resource.
 	Description *string `json:"description,omitempty"`

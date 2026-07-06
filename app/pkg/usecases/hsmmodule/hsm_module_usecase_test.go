@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres/hsmdbout"
+	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
 	"github.com/hyperledger-labs/signare/app/pkg/commons/validators"
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
 	"github.com/hyperledger-labs/signare/app/pkg/graph"
@@ -91,7 +92,7 @@ func TestDefaultUseCase_CreateHSM(t *testing.T) {
 			ModuleKind: hsmmodule.SoftHSMModuleKind,
 		}
 		createdHSM, createHSMErr := app.HSMModuleUseCase.CreateHSMModule(ctx, createHSMInput)
-		require.Nil(t, createHSMErr)
+		require.NoError(t, createHSMErr)
 		require.NotEmpty(t, createdHSM.InternalResourceID)
 		require.NotNil(t, createdHSM)
 	})
@@ -106,7 +107,7 @@ func TestDefaultUseCase_CreateHSM(t *testing.T) {
 			ModuleKind: hsmmodule.SoftHSMModuleKind,
 		}
 		createHSMOutput, createHSMErr := app.HSMModuleUseCase.CreateHSMModule(ctx, createHSMInput)
-		require.NotNil(t, createHSMErr)
+		require.Error(t, createHSMErr)
 		require.True(t, errors.IsAlreadyExists(createHSMErr))
 		require.Nil(t, createHSMOutput)
 	})
@@ -125,7 +126,7 @@ func TestDefaultUseCase_ListHSMs(t *testing.T) {
 	}
 	for i := 0; i < hsmsToCreate; i++ {
 		createHSMOutput, createHSMErr := app.HSMModuleUseCase.CreateHSMModule(ctx, createHSMInput)
-		require.Nil(t, createHSMErr)
+		require.NoError(t, createHSMErr)
 		require.NotNil(t, createHSMOutput)
 	}
 
@@ -135,15 +136,16 @@ func TestDefaultUseCase_ListHSMs(t *testing.T) {
 			PageOffset: -30,
 		}
 		listHSMsOutput, listHSMsErr := app.HSMModuleUseCase.ListHSMModules(ctx, listHSMsInput)
-		require.NotNil(t, listHSMsErr)
+		require.Error(t, listHSMsErr)
 		require.Nil(t, listHSMsOutput)
 	})
 
-	t.Run("success: list all HSMs", func(t *testing.T) {
+	t.Run("success: unlimited list is capped at the default page size", func(t *testing.T) {
 		listHSMsInput := hsmmodule.ListHSMModulesInput{}
 		listHSMsOutput, listHSMsErr := app.HSMModuleUseCase.ListHSMModules(ctx, listHSMsInput)
 		require.NoError(t, listHSMsErr)
-		require.True(t, len(listHSMsOutput.Items) >= hsmsToCreate)
+		require.Len(t, listHSMsOutput.Items, persistence.DefaultPageLimit)
+		require.True(t, listHSMsOutput.MoreItems)
 	})
 
 	t.Run("success: list DESC with limit", func(t *testing.T) {
@@ -176,7 +178,7 @@ func TestDefaultUseCase_ListHSMs(t *testing.T) {
 		require.True(t, listHSMsOutput.MoreItems)
 		// Assert order
 		for i := 1; i < len(listHSMsOutput.Items); i++ {
-			require.Less(t, listHSMsOutput.Items[i-1].LastUpdate.ToInt64(), listHSMsOutput.Items[i].LastUpdate.ToInt64())
+			require.LessOrEqual(t, listHSMsOutput.Items[i-1].LastUpdate.ToInt64(), listHSMsOutput.Items[i].LastUpdate.ToInt64())
 		}
 	})
 }

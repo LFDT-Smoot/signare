@@ -1,4 +1,5 @@
 // Package httpin provides the implementation of the HTTP input adapters.
+// nolint: gosec
 package httpin
 
 import (
@@ -11,7 +12,6 @@ import (
 	generatedhttpinfra "github.com/hyperledger-labs/signare/app/pkg/infra/generated/httpinfra"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/user"
-	"github.com/hyperledger-labs/signare/app/pkg/utils"
 )
 
 var _ generatedhttpinfra.ApplicationAPIAdapter = new(DefaultApplicationAPIAdapter)
@@ -19,9 +19,9 @@ var _ generatedhttpinfra.ApplicationAPIAdapter = new(DefaultApplicationAPIAdapte
 func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationAccountsCreate(ctx context.Context, data generatedhttpinfra.ApplicationAccountsCreateRequest) (*generatedhttpinfra.ApplicationAccountsCreateResponseWrapper, *httpinfra.HTTPError) {
 	addresses := make([]address.Address, len(*data.AccountCreation.Spec.Accounts))
 	for i, addr := range *data.AccountCreation.Spec.Accounts {
-		a, err := address.NewFromHexString(addr)
+		a, err := address.NewFromHexStringChecksum(addr)
 		if err != nil {
-			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument).SetMessage(fmt.Sprintf("address '%s' is not a valid hex address", addr))
+			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument).SetMessage(fmt.Sprintf("address '%s' is not a valid address", addr))
 			return nil, httpError
 		}
 		addresses[i] = a
@@ -46,9 +46,9 @@ func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationAccountsCreate(ctx 
 }
 
 func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationAccountsRemove(ctx context.Context, data generatedhttpinfra.ApplicationAccountsRemoveRequest) (*generatedhttpinfra.ApplicationAccountsRemoveResponseWrapper, *httpinfra.HTTPError) {
-	addr, err := address.NewFromHexString(data.AccountId)
+	addr, err := address.NewFromHexStringChecksum(data.AccountId)
 	if err != nil {
-		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument).SetMessage(fmt.Sprintf("address '%s' is not a valid hex address", data.AccountId))
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument).SetMessage(fmt.Sprintf("address '%s' is not a valid address", data.AccountId))
 		return nil, httpError
 	}
 
@@ -156,8 +156,7 @@ func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationUsersList(ctx conte
 	if data.Offset != nil {
 		offsetInput = int(*data.Offset)
 	}
-	pageLimit := utils.MaxValue(utils.DefaultIntValue(limitInput, defaultApplicationListLimit), maxListApplicationLimit)
-	input.PageLimit = pageLimit
+	input.PageLimit = limitInput
 	input.PageOffset = offsetInput
 	input.OrderBy = data.OrderBy
 	input.OrderDirection = data.OrderDirection

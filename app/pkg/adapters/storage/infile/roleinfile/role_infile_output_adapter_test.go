@@ -6,6 +6,7 @@ import (
 	"path"
 	"runtime"
 	"testing"
+	"testing/fstest"
 
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/infile/roleinfile"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/role"
@@ -46,20 +47,49 @@ func TestDefaultRoleStorageInFileYAMLOutputAdapter_ListActions_Success(t *testin
 	require.NoError(t, listRolesErr)
 	require.NotNil(t, listRolesOutput)
 
-	expectedRoles := map[string]bool{
-		"test-admin": false,
-		"test-user":  false,
+	expectedScopes := map[string]role.Scope{
+		"test-admin": role.ScopeAdmin,
+		"test-user":  role.ScopeApplication,
 	}
+	seen := make(map[string]bool, len(expectedScopes))
 
-	for _, role := range listRolesOutput.Roles {
-		_, ok := expectedRoles[role.ID]
+	for _, r := range listRolesOutput.Roles {
+		expectedScope, ok := expectedScopes[r.ID]
 		require.True(t, ok)
-
-		expectedRoles[role.ID] = true
+		require.Equal(t, expectedScope, r.Scope)
+		seen[r.ID] = true
 	}
 
-	for _, role := range listRolesOutput.Roles {
-		found := expectedRoles[role.ID]
-		require.True(t, found)
+	for id := range expectedScopes {
+		require.True(t, seen[id])
 	}
+}
+
+func TestProvideDefaultRoleStorageInFile_RejectsUnsupportedScope(t *testing.T) {
+	fileSystem := fstest.MapFS{
+		"roles.yaml": &fstest.MapFile{Data: []byte("roles:\n  - id: bad-role\n    scope: nonsense\n    permissions:\n      - allow-manual-actions\n")},
+	}
+
+	adapter, err := roleinfile.ProvideDefaultRoleStorageInFile(roleinfile.DefaultRoleStorageInFileOptions{
+		FileSystem: fileSystem,
+		BasePath:   "",
+	})
+	require.Error(t, err)
+	require.Nil(t, adapter)
+}
+
+// TestProvideDefaultRoleStorageInFile_RejectsMissingScope covers the realistic misconfiguration: a
+// role whose scope field is omitted entirely (empty string). Like an unsupported scope value, this
+// must fail closed at load time rather than default to an assignable scope.
+func TestProvideDefaultRoleStorageInFile_RejectsMissingScope(t *testing.T) {
+	fileSystem := fstest.MapFS{
+		"roles.yaml": &fstest.MapFile{Data: []byte("roles:\n  - id: missing-scope-role\n    permissions:\n      - allow-manual-actions\n")},
+	}
+
+	adapter, err := roleinfile.ProvideDefaultRoleStorageInFile(roleinfile.DefaultRoleStorageInFileOptions{
+		FileSystem: fileSystem,
+		BasePath:   "",
+	})
+	require.Error(t, err)
+	require.Nil(t, adapter)
 }

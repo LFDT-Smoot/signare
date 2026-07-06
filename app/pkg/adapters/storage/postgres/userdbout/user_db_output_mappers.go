@@ -32,7 +32,7 @@ func mapToCreateDB(user user.User) (*userdb.UserCreateDB, error) {
 	db := userdb.UserCreateDB{
 		UserDB: userdb.UserDB{
 			ApplicationStandardID: user.ApplicationStandardID,
-			InternalResourceID:    user.InternalResourceID.String(),
+			InternalResourceID:    user.String(),
 			Roles:                 string(roles),
 			CreationDate:          user.CreationDate.ToInt64(),
 			LastUpdate:            user.LastUpdate.ToInt64(),
@@ -64,7 +64,7 @@ func mapToUpdateDB(user user.User) (*userdb.UserUpdateDB, error) {
 			ApplicationStandardID: user.ApplicationStandardID,
 			Roles:                 string(roles),
 			CreationDate:          user.CreationDate.ToInt64(),
-			InternalResourceID:    user.InternalResourceID.String(),
+			InternalResourceID:    user.String(),
 			LastUpdate:            user.LastUpdate.ToInt64(),
 			ResourceVersion:       user.ResourceVersion,
 		},

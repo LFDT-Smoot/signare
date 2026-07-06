@@ -22,7 +22,7 @@ func TestDefaultHTTPResponseHandler_ProvideDefaultHTTPResponseHandler_Correct(t 
 		HTTPMetrics: httpinfra.DefaultHTTPMetrics{},
 	}
 	handler, err := httpinfra.ProvideDefaultHTTPResponseHandler(options)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, handler)
 }
 
@@ -32,7 +32,7 @@ func TestDefaultHTTPResponseHandler_HandleSuccessResponse_Correct(t *testing.T) 
 		HTTPMetrics: httpinfra.DefaultHTTPMetrics{},
 	}
 	handler, err := httpinfra.ProvideDefaultHTTPResponseHandler(options)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, handler)
 
 	responseInfo := httpinfra.ResponseInfo{
@@ -56,7 +56,7 @@ func TestDefaultHTTPResponseHandler_HandleErrorResponse_Correct(t *testing.T) {
 		HTTPMetrics: httpinfra.DefaultHTTPMetrics{},
 	}
 	handler, err := httpinfra.ProvideDefaultHTTPResponseHandler(options)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, handler)
 
 	rr := httptest.NewRecorder()

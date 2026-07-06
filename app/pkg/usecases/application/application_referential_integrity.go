@@ -33,14 +33,14 @@ func (u *DefaultUseCase) removeAllDependencies(ctx context.Context, applicationS
 			referencingResourcesString += fmt.Sprintf("[id=%s,thisKind=%s]", entry.ResourceID, entry.ResourceKind)
 		}
 		msg := fmt.Sprintf("application '%s' can't be removed, there are elements depending on it", applicationStandardID.ID)
-		return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	var deleteInput referentialintegrity.DeleteMyEntriesIfAnyInput
 	deleteInput.ResourceID = string(internalResourceID)
 	deleteInput.ResourceKind = referentialintegrity.KindApplication
 	deleteMyEntriesIfAnyErr := u.referentialIntegrityUseCase.DeleteMyEntriesIfAny(ctx, deleteInput)
-	if listMyChildrenEntriesErr != nil {
+	if deleteMyEntriesIfAnyErr != nil {
 		return deleteMyEntriesIfAnyErr
 	}
 

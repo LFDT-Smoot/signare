@@ -37,6 +37,15 @@ func (_d *DefaultUseCaseTransactionalDecorator) EditPin(ctx context.Context, inp
 	return returnValue.(*EditPinOutput), nil
 }
 
+func (_d *DefaultUseCaseTransactionalDecorator) EditConfig(ctx context.Context, input EditConfigInput) (*EditConfigOutput, error) {
+	returnValue, failure := _d.transactionalManager.ExecuteInTransaction(ctx, _d.editConfigInternal(ctx, input))
+	if failure != nil {
+		return nil, failure
+	}
+
+	return returnValue.(*EditConfigOutput), nil
+}
+
 // DeleteHSMSlot implements DefaultUseCase's DeleteHSMSlot to be a transactional operation.
 func (_d *DefaultUseCaseTransactionalDecorator) DeleteHSMSlot(ctx context.Context, input DeleteHSMSlotInput) (*DeleteHSMSlotOutput, error) {
 	returnValue, failure := _d.transactionalManager.ExecuteInTransaction(ctx, _d.deleteHSMSlot(ctx, input))
@@ -85,6 +94,12 @@ func (_d *DefaultUseCaseTransactionalDecorator) editPinInternal(_ context.Contex
 	}
 }
 
+func (_d *DefaultUseCaseTransactionalDecorator) editConfigInternal(_ context.Context, input EditConfigInput) func(context.Context) (interface{}, error) {
+	return func(ctx2 context.Context) (interface{}, error) {
+		return _d.DefaultUseCase.EditConfig(ctx2, input)
+	}
+}
+
 func (_d *DefaultUseCaseTransactionalDecorator) deleteHSMSlot(_ context.Context, input DeleteHSMSlotInput) func(context.Context) (interface{}, error) {
 	return func(ctx2 context.Context) (interface{}, error) {
 		return _d.DefaultUseCase.DeleteHSMSlot(ctx2, input)
@@ -125,11 +140,11 @@ type DefaultUseCaseTransactionalDecoratorOptions struct {
 func ProvideDefaultUseCaseTransactionalDecorator(options DefaultUseCaseTransactionalDecoratorOptions) (*DefaultUseCaseTransactionalDecorator, error) {
 	if options.DefaultUseCase == nil {
 		errorMessage := "'DefaultAccountUseCase' is mandatory"
-		return nil, errors.InvalidArgument().WithMessage(errorMessage)
+		return nil, errors.InvalidArgument().WithMessage("%s", errorMessage)
 	}
 	if options.TransactionalManager == nil {
 		errorMessage := "'TransactionalManager' is mandatory"
-		return nil, errors.InvalidArgument().WithMessage(errorMessage)
+		return nil, errors.InvalidArgument().WithMessage("%s", errorMessage)
 	}
 	return &DefaultUseCaseTransactionalDecorator{
 		DefaultUseCase:       *options.DefaultUseCase,

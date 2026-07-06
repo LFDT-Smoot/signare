@@ -6,6 +6,7 @@ import (
 
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization"
+	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/recovery"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/telemetry"
 )
 
@@ -17,7 +18,10 @@ func (f HTTPMiddlewareFactory) Create() []func(handler http.Handler) http.Handle
 	authenticationMiddlewareChain := f.authenticationMiddleware.CreateMiddlewareChain()
 	authorizationMiddleware := f.authorizationMiddleware.CreateMiddlewareChain(false)
 
+	// Recovery sits just inside telemetry so its logs carry tracing context and it
+	// backstops panics in authentication, authorization and the handler.
 	fullChain = append(fullChain, telemetryMiddleware...)
+	fullChain = append(fullChain, f.recoveryMiddleware.Handle)
 	fullChain = append(fullChain, authenticationMiddlewareChain...)
 	fullChain = append(fullChain, authorizationMiddleware...)
 
@@ -28,6 +32,7 @@ func (f HTTPMiddlewareFactory) Create() []func(handler http.Handler) http.Handle
 type HTTPMiddlewareFactory struct {
 	authenticationMiddleware *authentication.AuthenticationMiddleware
 	authorizationMiddleware  *authorization.AuthorizationMiddleware
+	recoveryMiddleware       *recovery.RecoveryMiddleware
 	telemetryMiddleware      *telemetry.TelemetryMiddleware
 }
 
@@ -37,6 +42,8 @@ type HTTPMiddlewareFactoryOptions struct {
 	AuthenticationMiddleware *authentication.AuthenticationMiddleware
 	// AuthorizationMiddleware is the middleware used for authorize the user making a request
 	AuthorizationMiddleware *authorization.AuthorizationMiddleware
+	// RecoveryMiddleware recovers panics in the request handling chain
+	RecoveryMiddleware *recovery.RecoveryMiddleware
 	// TelemetryMiddleware is the middleware used for handling telemetry within requests
 	TelemetryMiddleware *telemetry.TelemetryMiddleware
 }
@@ -49,12 +56,16 @@ func ProvideHTTPMiddlewareFactory(options HTTPMiddlewareFactoryOptions) (*HTTPMi
 	if options.AuthenticationMiddleware == nil {
 		return nil, errors.New("mandatory 'AuthenticationMiddleware' not provided")
 	}
+	if options.RecoveryMiddleware == nil {
+		return nil, errors.New("mandatory 'RecoveryMiddleware' not provided")
+	}
 	if options.TelemetryMiddleware == nil {
 		return nil, errors.New("mandatory 'TelemetryMiddleware' not provided")
 	}
 	return &HTTPMiddlewareFactory{
 		authenticationMiddleware: options.AuthenticationMiddleware,
 		authorizationMiddleware:  options.AuthorizationMiddleware,
+		recoveryMiddleware:       options.RecoveryMiddleware,
 		telemetryMiddleware:      options.TelemetryMiddleware,
 	}, nil
 }

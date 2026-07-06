@@ -131,14 +131,14 @@ func (prometheusServer PrometheusTestServer) GetSummaryMetricValue(prometheusAda
 		return nil, errors.New("not a prometheus histogram adapter")
 	}
 
-	name := instance.metricDescriptorInfo.name
-	instance.metricDescriptorInfo.name = name + "_sum"
+	name := instance.name
+	instance.name = name + "_sum"
 	sum, err := prometheusServer.doGetMetricValue(instance.metricDescriptorInfo, labels)
 	if err != nil {
 		return nil, err
 	}
 
-	instance.metricDescriptorInfo.name = name + "_count"
+	instance.name = name + "_count"
 	count, err := prometheusServer.doGetMetricValue(instance.metricDescriptorInfo, labels)
 	if err != nil {
 		return nil, err

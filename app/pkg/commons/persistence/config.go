@@ -133,7 +133,7 @@ func readConfigXMLFileBytes(dataBytes []byte) (*StorageConfig, error) {
 	var mapperConfig MapperConfig
 	err := xml.Unmarshal(dataBytes, &mapperConfig)
 	if err != nil {
-		return nil, fmt.Errorf("File cand not be parsed as xml,\noriginal error: %w", err)
+		return nil, fmt.Errorf("file cand not be parsed as xml,\noriginal error: %w", err)
 	}
 
 	config := newPersistenceFwConfig()

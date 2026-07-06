@@ -55,26 +55,28 @@ func (e *PrivateError) Type() ErrorType {
 // GetStack returns the PrivateError's stack trace.
 func (e *PrivateError) GetStack() string {
 	err := *e
-	var originalSignerErr *PrivateError
+	var publicSignerErr *PublicError
 	var stackTraceBottom = false
 
 	for !stackTraceBottom {
-		if errors.As(err.wrappedErr, &originalSignerErr) {
-			err.wrappedErr = originalSignerErr.wrappedErr
+		if errors.As(err.wrappedErr, &publicSignerErr) {
+			err.wrappedErr = publicSignerErr.wrappedErr
 			continue
 		}
 		stackTraceBottom = true
 	}
 
-	// As there were no wrapped error of type [PrivateError], we use the original error for printing the stack
-	if originalSignerErr == nil {
-		originalSignerErr = &err
+	// As there were no wrapped error of type [PublicError], we use the original error for printing the stack
+	if publicSignerErr == nil {
+		publicSignerErr = &PublicError{
+			PrivateError: err,
+		}
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, 256))
 	_, _ = fmt.Fprintf(buf, "Error: %s\n", e.Error())
 	_, _ = fmt.Fprintf(buf, "Original Error Stack Trace:\n")
-	for _, frame := range originalSignerErr.stack {
+	for _, frame := range publicSignerErr.stack {
 		_, _ = fmt.Fprintf(buf, "\tat %s\n", frame.function)
 		_, _ = fmt.Fprintf(buf, "\t\t%s:%d\n", frame.file, frame.line)
 	}

@@ -2,3 +2,9 @@ migration_steps:
   - up: /include/dbschemas/postgres/000001_initial_schema.up.sql
     down: /include/dbschemas/postgres/000001_initial_schema.down.sql
     version_description: "000001 initial schema"
+  - up: /include/dbschemas/postgres/000002_support_for_akv.up.sql
+    down: /include/dbschemas/postgres/000002_support_for_akv.down.sql
+    version_description: "000002 support for akv"
+  - up: /include/dbschemas/postgres/000003_include_default_chain_id_per_app.up.sql
+    down: /include/dbschemas/postgres/000003_include_default_chain_id_per_app.down.sql
+    version_description: "000003 decouple applications from chain_id"

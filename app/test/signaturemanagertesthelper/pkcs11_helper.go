@@ -11,14 +11,23 @@ import (
 )
 
 const (
-	SoftHSMLib         = "/usr/local/lib/softhsm/libsofthsm2.so"
+	SoftHSMLib = "/usr/lib/softhsm/libsofthsm2.so"
+	// SlotPin and the SO-PIN ("superpin", see initToken) are fixed SoftHSM PINs
+	// used only by this test suite. They guard no production token.
 	SlotPin            = "userpin"
 	ImportedKeyAddress = "0xa2c16184fA76cD6D16685900292683dF905e4Bf2"
 
-	tokenLabel                       = "WALLET-000"
-	relativePathToPrivateKeyFileName = "app/test/signaturemanagertesthelper/testdata/private.pem"
-	importedKeyID                    = "0001"
-	privateKey                       = `-----BEGIN PRIVATE KEY-----
+	tokenLabel    = "WALLET-000"
+	importedKeyID = "0001"
+
+	// privateKey is a throwaway secp256k1 key used solely by the SoftHSM-backed
+	// signing tests. It controls no real funds: its address (ImportedKeyAddress)
+	// has a zero balance and nonce 0 on Ethereum mainnet (checked 2026-06-29), so
+	// it has never originated a transaction. It must never be used outside this
+	// test suite. The HSM tests assert against the address, so the key is fixed
+	// here rather than generated at runtime. The repo-root .gitleaks.toml
+	// allowlists this file so secret scanners do not flag it.
+	privateKey = `-----BEGIN PRIVATE KEY-----
 MIGEAgEAMBAGByqGSM49AgEGBSuBBAAKBG0wawIBAQQgEACcTiQhuQ9kiLjdLx6N
 G2EcQ7i3aST+P0si+B3QomahRANCAAQbSGsG/Mmtv3Tqh9h5RClPY3UGAom2+kAv
 /E9AReYIpjXFumvF4SxujDHZA/y1VRSPcb+b/LVY/s2Oo9nyk3MC

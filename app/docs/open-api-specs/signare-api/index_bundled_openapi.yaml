@@ -4,7 +4,7 @@ info:
   description: signare public API spec
   version: 1.0.0
 servers:
-  - url: 'http://localhost:34343'
+  - url: http://localhost:34343
     description: Local test
 tags:
   - name: Admin
@@ -62,7 +62,7 @@ paths:
           $ref: '#/components/responses/PermissionDeniedResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/admin/modules/{moduleId}':
+  /admin/modules/{moduleId}:
     get:
       operationId: admin.modules.describe
       tags:
@@ -140,7 +140,7 @@ paths:
           $ref: '#/components/responses/FailedPreconditionResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/admin/modules/{moduleId}/slots':
+  /admin/modules/{moduleId}/slots:
     post:
       operationId: admin.slots.create
       tags:
@@ -199,7 +199,7 @@ paths:
           $ref: '#/components/responses/PermissionDeniedResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/admin/modules/{moduleId}/slots/{slotId}':
+  /admin/modules/{moduleId}/slots/{slotId}:
     get:
       operationId: admin.slots.describe
       tags:
@@ -250,7 +250,7 @@ paths:
           $ref: '#/components/responses/FailedPreconditionResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/admin/modules/{moduleId}/slots/{slotId}:update-pin':
+  /admin/modules/{moduleId}/slots/{slotId}:update-pin:
     post:
       operationId: admin.slots.updatePin
       tags:
@@ -266,6 +266,37 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SlotUpdatePin'
+      responses:
+        '200':
+          description: Slot details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotDetail'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '403':
+          $ref: '#/components/responses/PermissionDeniedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerErrorResponse'
+  /admin/modules/{moduleId}/slots/{slotId}:update-config:
+    post:
+      operationId: admin.slots.updateConfig
+      tags:
+        - Admin
+      summary: Updates the config for the slot
+      description: Update the slot's config of a given Hardware Security Module (HSM)
+      parameters:
+        - $ref: '#/components/parameters/ModuleId'
+        - $ref: '#/components/parameters/SlotId'
+      requestBody:
+        description: The new Config of the slot
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlotUpdateConfig'
       responses:
         '200':
           description: Slot details
@@ -333,7 +364,7 @@ paths:
           $ref: '#/components/responses/PermissionDeniedResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/admin/users/{adminUserId}':
+  /admin/users/{adminUserId}:
     get:
       operationId: admin.users.describe
       tags:
@@ -461,7 +492,7 @@ paths:
           $ref: '#/components/responses/PermissionDeniedResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/applications/{applicationId}':
+  /applications/{applicationId}:
     get:
       operationId: admin.applications.describe
       tags:
@@ -539,7 +570,7 @@ paths:
           $ref: '#/components/responses/FailedPreconditionResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/applications/{applicationId}/users':
+  /applications/{applicationId}/users:
     post:
       operationId: application.users.create
       tags:
@@ -596,7 +627,7 @@ paths:
           $ref: '#/components/responses/PermissionDeniedResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/applications/{applicationId}/users/{userId}':
+  /applications/{applicationId}/users/{userId}:
     get:
       operationId: application.users.describe
       tags:
@@ -677,7 +708,7 @@ paths:
           $ref: '#/components/responses/FailedPreconditionResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/applications/{applicationId}/users/{userId}/accounts':
+  /applications/{applicationId}/users/{userId}/accounts:
     post:
       operationId: application.accounts.create
       tags:
@@ -708,7 +739,7 @@ paths:
           $ref: '#/components/responses/FailedPreconditionResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  '/applications/{applicationId}/users/{userId}/accounts/{accountId}':
+  /applications/{applicationId}/users/{userId}/accounts/{accountId}:
     delete:
       operationId: application.accounts.remove
       tags:
@@ -737,7 +768,195 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
 components:
+  parameters:
+    Limit:
+      name: limit
+      required: false
+      in: query
+      description: The numbers of items to return
+      schema:
+        type: integer
+        default: 30
+        example: 5
+    Offset:
+      name: offset
+      required: false
+      in: query
+      description: The number of items to skip before starting to collect the result set
+      schema:
+        type: integer
+        default: 0
+        example: 10
+    OrderBy:
+      name: orderBy
+      required: false
+      in: query
+      description: |
+        Resources ordered by one of these fields:
+        * `creationDate` - Date when the resource was created.
+        * `lastUpdate` - Date when the resource was last updated.
+      schema:
+        type: string
+        enum:
+          - creationDate
+          - lastUpdate
+        default: creationDate
+        example: lastUpdate
+    OrderDirection:
+      name: orderDirection
+      in: query
+      required: false
+      description: |
+        Order direction of the listed resources:
+        * `asc` - Ascending order.
+        * `desc` - Descending order.
+      schema:
+        type: string
+        enum:
+          - asc
+          - desc
+        default: desc
+        example: asc
+    ModuleId:
+      name: moduleId
+      in: path
+      description: Hardware Security Module (HSM) identifier
+      required: true
+      schema:
+        type: string
+      example: hsm-1
+    ApplicationIdQuery:
+      name: applicationId
+      required: false
+      in: query
+      description: Application identifier of the resource/s
+      schema:
+        type: string
+      example: application-1
+    SlotId:
+      name: slotId
+      in: path
+      description: Slot identifier
+      required: true
+      schema:
+        type: string
+      example: slot-1
+    AdminUserId:
+      name: adminUserId
+      in: path
+      description: Admin user identifier
+      required: true
+      schema:
+        type: string
+      example: admin-1
+    ApplicationId:
+      name: applicationId
+      in: path
+      description: Application identifier
+      required: true
+      schema:
+        type: string
+      example: application-1
+    UserId:
+      name: userId
+      in: path
+      description: User identifier
+      required: true
+      schema:
+        type: string
+      example: user-1
+    AccountId:
+      name: accountId
+      in: path
+      description: Ethereum account address
+      required: true
+      schema:
+        type: string
+      example: '0xc0ffee254729296a45a3885639AC7E10F9d54979'
   schemas:
+    ResourceMetaDetail:
+      type: object
+      x-required: mandatory
+      nullable: false
+      description: |
+        Metainformation of the resource
+      properties:
+        id:
+          type: string
+          maxLength: 64
+          x-required: mandatory
+          nullable: false
+          description: |
+            The unique identifier of the resource. It must be aligned with the value in the endpoint path.
+        resourceVersion:
+          type: string
+          x-required: mandatory
+          nullable: false
+          description: |
+            An opaque value that represents the internal version of this object that can be used by clients to determine when objects have changed. May be used for optimistic concurrency, change detection,
+            and the watch operation on a resource or set of resources. Clients must treat these values as opaque and passed unmodified back to the server. They may only be valid for a particular resource or set of resources.
+            Populated by the system. Read-only. Value must be treated as opaque by clients
+          example: 7e032829-249d-4498-aa3e-344a16cd6a93
+        creationDate:
+          type: string
+          x-required: mandatory
+          nullable: false
+          description: |
+            Instant when the resource was registered in the signare. Read only
+            Unix time in milliseconds UTC.
+          example: '1581675232372'
+        lastUpdate:
+          type: string
+          x-required: mandatory
+          nullable: false
+          description: |
+            Last instant when the resource was updated. Read only
+            Unix time in milliseconds UTC.
+          example: '1581675232372'
+      required:
+        - id
+        - resourceVersion
+        - creationDate
+        - lastUpdate
+    ModuleKindSoftHSM:
+      type: object
+      additionalProperties: false
+      properties:
+        hsmKind:
+          type: string
+          enum:
+            - softHSM
+          x-required: mandatory
+          nullable: false
+          description: The kind of HSM
+      required:
+        - hsmKind
+    ModuleKindAKV:
+      type: object
+      additionalProperties: false
+      properties:
+        hsmKind:
+          type: string
+          enum:
+            - AKV
+          x-required: mandatory
+          nullable: false
+          description: The kind of HSM
+      required:
+        - hsmKind
+    ModuleKindLocalKeyVault:
+      type: object
+      additionalProperties: false
+      properties:
+        hsmKind:
+          type: string
+          enum:
+            - LocalKeyVault
+          x-required: mandatory
+          nullable: false
+          description: The kind of HSM
+      required:
+        - hsmKind
     ModuleSpec:
       type: object
       x-required: mandatory
@@ -747,9 +966,13 @@ components:
           discriminator:
             propertyName: hsmKind
             mapping:
-              softHSM: '#/components/schemas/SoftHSM'
+              softHSM: '#/components/schemas/ModuleKindSoftHSM'
+              AKV: '#/components/schemas/ModuleKindAKV'
+              LocalKeyVault: '#/components/schemas/ModuleKindLocalKeyVault'
           oneOf:
-            - $ref: '#/components/schemas/SoftHSM'
+            - $ref: '#/components/schemas/ModuleKindAKV'
+            - $ref: '#/components/schemas/ModuleKindSoftHSM'
+            - $ref: '#/components/schemas/ModuleKindLocalKeyVault'
           x-required: optional
           nullable: true
           additionalProperties: false
@@ -763,36 +986,6 @@ components:
       required:
         - configuration
         - description
-    ModuleCreation:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaCreation'
-        spec:
-          $ref: '#/components/schemas/ModuleSpec'
-      example:
-        meta:
-          id: hsm-1
-        spec:
-          configuration:
-            hsmKind: softHSM
-          description: my hardware security module
-      required:
-        - spec
-    SoftHSM:
-      type: object
-      additionalProperties: false
-      properties:
-        hsmKind:
-          type: string
-          enum:
-            - softHSM
-          x-required: mandatory
-          nullable: false
-          description: The kind of HSM
-      required:
-        - hsmKind
     ModuleDetail:
       type: object
       additionalProperties: false
@@ -813,571 +1006,6 @@ components:
           description: my hardware security module
       required:
         - meta
-        - spec
-    ModuleUpdate:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaUpdate'
-        spec:
-          $ref: '#/components/schemas/ModuleSpec'
-      required:
-        - meta
-        - spec
-      example:
-        meta:
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-        spec:
-          configuration:
-            hsmKind: softHSM
-          description: my hardware security module
-    ModuleCollection:
-      allOf:
-        - type: object
-          properties:
-            items:
-              type: array
-              x-required: mandatory
-              description: collection of Hardware Security Modules.
-              items:
-                $ref: '#/components/schemas/ModuleDetail'
-          required:
-            - items
-        - $ref: '#/components/schemas/CollectionPage'
-    SlotCreation:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaCreation'
-        spec:
-          type: object
-          x-required: mandatory
-          nullable: false
-          additionalProperties: false
-          properties:
-            applicationId:
-              type: string
-              x-required: mandatory
-              nullable: false
-              description: |
-                Identifier of the application that owns the slot.
-            slot:
-              type: string
-              x-required: mandatory
-              nullable: false
-              description: |
-                Slot number assigned by the HSM.
-            pin:
-              type: string
-              x-required: mandatory
-              nullable: false
-              description: |
-                PIN that provides access to the slot number inside the HSM.
-          required:
-            - applicationId
-            - slot
-            - pin
-      example:
-        meta:
-          id: slot-1
-        spec:
-          applicationId: application-1
-          slot: '342'
-          pin: '123'
-      required:
-        - spec
-    SlotDetail:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaDetail'
-        spec:
-          type: object
-          x-required: mandatory
-          additionalProperties: false
-          properties:
-            hardwareSecurityModuleId:
-              type: string
-              x-required: mandatory
-              description: |
-                Identifier of the Hardware Security Module (HSM) where the slot belongs.
-            applicationId:
-              type: string
-              x-required: mandatory
-              description: |
-                Identifier of the application that owns the slot.
-            slot:
-              type: string
-              x-required: mandatory
-              description: |
-                Slot number assigned by the HSM.
-          required:
-            - hardwareSecurityModuleId
-            - applicationId
-            - slot
-      example:
-        meta:
-          id: slot-1
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-          creationDate: '1581675232372'
-          lastUpdate: '1581675232372'
-        spec:
-          hardwareSecurityModuleId: module-1
-          applicationId: application-1
-          slot: '342'
-      required:
-        - meta
-        - spec
-    SlotCollection:
-      allOf:
-        - type: object
-          properties:
-            items:
-              type: array
-              x-required: mandatory
-              description: collection of slots for a given Hardware Security Module.
-              items:
-                $ref: '#/components/schemas/SlotDetail'
-          required:
-            - items
-        - $ref: '#/components/schemas/CollectionPage'
-    SlotUpdatePin:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaUpdate'
-        spec:
-          type: object
-          x-required: optional
-          nullable: true
-          additionalProperties: false
-          properties:
-            pin:
-              type: string
-              x-required: mandatory
-              nullable: false
-              description: |
-                PIN that provides access to the slot number inside the HSM.
-          required:
-            - pin
-      example:
-        meta:
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-        spec:
-          pin: '698'
-      required:
-        - meta
-        - spec
-    AdminUserDetail:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaDetail'
-        spec:
-          type: object
-          x-required: mandatory
-          additionalProperties: false
-          properties:
-            roles:
-              type: array
-              x-required: mandatory
-              items:
-                type: string
-                description: |
-                  List of roles assigned to the administrator user
-                example:
-                  - SignerAdministrator
-            description:
-              type: string
-              x-required: mandatory
-              description: |
-                Description of the resource.
-          required:
-            - roles
-            - description
-      example:
-        meta:
-          id: admin-user-1
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-          creationDate: '1581675232372'
-          lastUpdate: '1581675232372'
-        spec:
-          roles:
-            - SignerAdministrator
-          description: my admin user
-      required:
-        - meta
-        - spec
-    AdminUserCreation:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaCreation'
-        spec:
-          type: object
-          x-required: optional
-          nullable: true
-          additionalProperties: false
-          properties:
-            description:
-              type: string
-              x-required: optional
-              nullable: true
-              maxLength: 256
-              description: |
-                Description of the resource.
-      example:
-        meta:
-          id: admin-user-1
-        spec:
-          description: my admin user
-    AdminUserUpdate:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaUpdate'
-        spec:
-          type: object
-          x-required: optional
-          nullable: true
-          additionalProperties: false
-          properties:
-            description:
-              type: string
-              x-required: optional
-              nullable: true
-              maxLength: 256
-              description: |
-                Description of the resource.
-      example:
-        meta:
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-        spec:
-          description: my admin user
-      required:
-        - meta
-    AdminUserCollection:
-      allOf:
-        - type: object
-          properties:
-            items:
-              type: array
-              x-required: mandatory
-              description: collection of signer administrator users.
-              items:
-                $ref: '#/components/schemas/AdminUserDetail'
-          required:
-            - items
-        - $ref: '#/components/schemas/CollectionPage'
-    ApplicationDetail:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaDetail'
-        spec:
-          type: object
-          x-required: mandatory
-          additionalProperties: false
-          properties:
-            chainId:
-              type: string
-              x-required: mandatory
-              description: |
-                The chain identifier with which the application interacts. It must be a valid integer.
-            description:
-              type: string
-              x-required: mandatory
-              description: |
-                Description of the resource.
-          required:
-            - chainId
-            - description
-      example:
-        meta:
-          id: application-1
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-          creationDate: '1581675232372'
-          lastUpdate: '1581675232372'
-        spec:
-          chainId: '44844'
-          description: my application
-      required:
-        - meta
-        - spec
-    ApplicationUpdate:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaUpdate'
-        spec:
-          type: object
-          x-required: optional
-          nullable: true
-          additionalProperties: false
-          properties:
-            chainId:
-              type: string
-              x-required: mandatory
-              nullable: false
-              description: |
-                The chain identifier with which the application interacts. It must be a valid integer.
-            description:
-              type: string
-              x-required: optional
-              nullable: true
-              maxLength: 256
-              description: |
-                Description of the resource.
-          required:
-            - chainId
-      example:
-        meta:
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-        spec:
-          chainId: '55966'
-          description: my application
-      required:
-        - meta
-        - spec
-    ApplicationCreation:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaCreation'
-        spec:
-          type: object
-          x-required: mandatory
-          nullable: false
-          additionalProperties: false
-          properties:
-            chainId:
-              type: string
-              x-required: mandatory
-              nullable: false
-              description: |
-                The chain identifier with which the application will interact. It must be a valid integer.
-            description:
-              type: string
-              x-required: optional
-              nullable: true
-              maxLength: 256
-              description: |
-                Description of the resource.
-          required:
-            - chainId
-      example:
-        meta:
-          id: application-1
-        spec:
-          chainId: '44844'
-          description: my application
-      required:
-        - spec
-    ApplicationCollection:
-      allOf:
-        - type: object
-          properties:
-            items:
-              type: array
-              x-required: mandatory
-              description: collection of applications.
-              items:
-                $ref: '#/components/schemas/ApplicationDetail'
-          required:
-            - items
-        - $ref: '#/components/schemas/CollectionPage'
-    UserCreation:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaCreation'
-        spec:
-          type: object
-          x-required: mandatory
-          nullable: false
-          additionalProperties: false
-          properties:
-            roles:
-              type: array
-              x-required: mandatory
-              nullable: false
-              items:
-                type: string
-                description: |
-                  List of roles assigned to the user
-                example:
-                  - ApplicationAdministrator
-                  - TransactionSigner
-            description:
-              type: string
-              x-required: optional
-              nullable: true
-              maxLength: 256
-              description: |
-                Description of the resource.
-          required:
-            - roles
-      example:
-        meta:
-          id: user-1
-        spec:
-          roles:
-            - ApplicationAdministrator
-            - TransactionSigner
-          description: my user
-      required:
-        - spec
-    UserDetail:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaDetail'
-        spec:
-          type: object
-          x-required: mandatory
-          additionalProperties: false
-          properties:
-            roles:
-              type: array
-              x-required: mandatory
-              items:
-                type: string
-                description: |
-                  List of roles assigned to the user
-                example:
-                  - ApplicationAdministrator
-                  - TransactionSigner
-            accounts:
-              type: array
-              x-required: mandatory
-              items:
-                type: string
-                description: |
-                  List of ethereum accounts assigned to the user
-                example:
-                  - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
-                  - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
-            description:
-              type: string
-              x-required: mandatory
-              description: |
-                Description of the resource.
-          required:
-            - roles
-            - accounts
-            - description
-      example:
-        meta:
-          id: user-1
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-          creationDate: '1581675232372'
-          lastUpdate: '1581675232372'
-        spec:
-          roles:
-            - ApplicationAdministrator
-            - TransactionSigner
-          accounts:
-            - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
-            - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
-          description: my user
-      required:
-        - meta
-        - spec
-    UserUpdate:
-      type: object
-      additionalProperties: false
-      properties:
-        meta:
-          $ref: '#/components/schemas/ResourceMetaUpdate'
-        spec:
-          type: object
-          x-required: optional
-          nullable: true
-          additionalProperties: false
-          properties:
-            roles:
-              type: array
-              x-required: mandatory
-              nullable: false
-              items:
-                type: string
-                description: |
-                  List of roles assigned to the user
-                example:
-                  - TransactionSigner
-            description:
-              type: string
-              x-required: optional
-              nullable: true
-              maxLength: 256
-              description: |
-                Description of the resource.
-          required:
-            - roles
-      example:
-        meta:
-          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
-        spec:
-          roles:
-            - TransactionSigner
-          description: my user
-      required:
-        - meta
-        - spec
-    UserCollection:
-      allOf:
-        - type: object
-          properties:
-            items:
-              type: array
-              x-required: mandatory
-              description: collection of users.
-              items:
-                $ref: '#/components/schemas/UserDetail'
-          required:
-            - items
-        - $ref: '#/components/schemas/CollectionPage'
-    AccountCreation:
-      type: object
-      additionalProperties: false
-      properties:
-        spec:
-          type: object
-          x-required: mandatory
-          nullable: false
-          additionalProperties: false
-          properties:
-            accounts:
-              type: array
-              x-required: mandatory
-              nullable: false
-              items:
-                type: string
-                description: |
-                  List of ethereum accounts that will be assigned to the user
-                example:
-                  - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
-                  - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
-          required:
-            - accounts
-      example:
-        spec:
-          accounts:
-            - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
-            - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
-      required:
         - spec
     CollectionPage:
       type: object
@@ -1403,6 +1031,19 @@ components:
         - limit
         - offset
         - moreItems
+    ModuleCollection:
+      allOf:
+        - type: object
+          properties:
+            items:
+              type: array
+              x-required: mandatory
+              description: collection of Hardware Security Modules.
+              items:
+                $ref: '#/components/schemas/ModuleDetail'
+          required:
+            - items
+        - $ref: '#/components/schemas/CollectionPage'
     BaseError:
       type: object
       properties:
@@ -1478,50 +1119,6 @@ components:
             - details
       required:
         - error
-    ResourceMetaDetail:
-      type: object
-      x-required: mandatory
-      nullable: false
-      description: |
-        Metainformation of the resource
-      properties:
-        id:
-          type: string
-          maxLength: 64
-          x-required: mandatory
-          nullable: false
-          description: |
-            The unique identifier of the resource. It must be aligned with the value in the endpoint path.
-        resourceVersion:
-          type: string
-          x-required: mandatory
-          nullable: false
-          description: |
-            An opaque value that represents the internal version of this object that can be used by clients to determine when objects have changed. May be used for optimistic concurrency, change detection,
-            and the watch operation on a resource or set of resources. Clients must treat these values as opaque and passed unmodified back to the server. They may only be valid for a particular resource or set of resources.
-            Populated by the system. Read-only. Value must be treated as opaque by clients
-          example: 7e032829-249d-4498-aa3e-344a16cd6a93
-        creationDate:
-          type: string
-          x-required: mandatory
-          nullable: false
-          description: |
-            Instant when the resource was registered in the signare. Read only
-            Unix time in milliseconds UTC.
-          example: '1581675232372'
-        lastUpdate:
-          type: string
-          x-required: mandatory
-          nullable: false
-          description: |
-            Last instant when the resource was updated. Read only
-            Unix time in milliseconds UTC.
-          example: '1581675232372'
-      required:
-        - id
-        - resourceVersion
-        - creationDate
-        - lastUpdate
     ResourceMetaCreation:
       type: object
       x-required: optional
@@ -1536,6 +1133,23 @@ components:
           nullable: true
           description: |
             The unique identifier of the resource. If not present, a random identifier will be generated for the created resource.
+    ModuleCreation:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaCreation'
+        spec:
+          $ref: '#/components/schemas/ModuleSpec'
+      example:
+        meta:
+          id: hsm-1
+        spec:
+          configuration:
+            hsmKind: softHSM
+          description: my hardware security module
+      required:
+        - spec
     ResourceMetaUpdate:
       type: object
       x-required: mandatory
@@ -1554,6 +1168,625 @@ components:
           example: 7e032829-249d-4498-aa3e-344a16cd6a93
       required:
         - resourceVersion
+    ModuleUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaUpdate'
+        spec:
+          $ref: '#/components/schemas/ModuleSpec'
+      required:
+        - meta
+        - spec
+      example:
+        meta:
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+        spec:
+          configuration:
+            hsmKind: softHSM
+          description: my hardware security module
+    SlotDetailConfig:
+      type: object
+      description: configuration objects
+      properties:
+        keyName:
+          type: string
+          x-required: mandatory
+          description: |
+            Key name to use in AKV.
+        keyVersion:
+          type: string
+          x-required: mandatory
+          description: |
+            Key version to use in AKV.
+        keyPublicAddress:
+          type: string
+          x-required: mandatory
+          description: |
+            Key public address to use in AKV.
+      required:
+        - keyName
+        - keyVersion
+        - keyPublicAddress
+    SlotDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaDetail'
+        spec:
+          type: object
+          x-required: mandatory
+          additionalProperties: false
+          properties:
+            hardwareSecurityModuleId:
+              type: string
+              x-required: mandatory
+              description: |
+                Identifier of the Hardware Security Module (HSM) where the slot belongs.
+            applicationId:
+              type: string
+              x-required: mandatory
+              description: |
+                Identifier of the application that owns the slot.
+            slot:
+              type: string
+              x-required: mandatory
+              description: |
+                Slot number assigned by the HSM.
+            config:
+              type: array
+              x-required: mandatory
+              description: collection of configuration objects
+              items:
+                $ref: '#/components/schemas/SlotDetailConfig'
+          required:
+            - hardwareSecurityModuleId
+            - applicationId
+            - slot
+            - config
+      example:
+        meta:
+          id: slot-1
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+          creationDate: '1581675232372'
+          lastUpdate: '1581675232372'
+        spec:
+          hardwareSecurityModuleId: module-1
+          applicationId: application-1
+          slot: '342'
+          config: {}
+      required:
+        - meta
+        - spec
+    SlotCollection:
+      allOf:
+        - type: object
+          properties:
+            items:
+              type: array
+              x-required: mandatory
+              description: collection of slots for a given Hardware Security Module.
+              items:
+                $ref: '#/components/schemas/SlotDetail'
+          required:
+            - items
+        - $ref: '#/components/schemas/CollectionPage'
+    SlotCreation:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaCreation'
+        spec:
+          type: object
+          x-required: mandatory
+          nullable: false
+          additionalProperties: false
+          properties:
+            applicationId:
+              type: string
+              x-required: mandatory
+              nullable: false
+              description: |
+                Identifier of the application that owns the slot.
+            slot:
+              type: string
+              x-required: optional
+              nullable: true
+              description: |
+                Slot number assigned by the HSM.
+            pin:
+              type: string
+              x-required: optional
+              nullable: true
+              description: |
+                PIN that provides access to the slot number inside the HSM.
+            config:
+              type: array
+              x-required: optional
+              nullable: true
+              description: collection of config
+              items:
+                $ref: '#/components/schemas/SlotDetailConfig'
+          required:
+            - applicationId
+      example:
+        meta:
+          id: slot-1
+        spec:
+          applicationId: application-1
+          slot: '342'
+          pin: '123'
+          configMap: {}
+      required:
+        - spec
+    SlotUpdatePin:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaUpdate'
+        spec:
+          type: object
+          x-required: optional
+          nullable: true
+          additionalProperties: false
+          properties:
+            pin:
+              type: string
+              x-required: mandatory
+              nullable: false
+              description: |
+                PIN that provides access to the slot number inside the HSM.
+          required:
+            - pin
+      example:
+        meta:
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+        spec:
+          pin: '698'
+      required:
+        - meta
+        - spec
+    SlotUpdateConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaUpdate'
+        spec:
+          type: object
+          x-required: optional
+          nullable: true
+          additionalProperties: false
+          properties:
+            config:
+              type: array
+              x-required: optional
+              description: collection of config
+              items:
+                $ref: '#/components/schemas/SlotDetailConfig'
+          required:
+            - config
+      example:
+        meta:
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+        spec:
+          config:
+            keyName: someKey
+            keyVersion: '1234'
+      required:
+        - meta
+        - spec
+    AdminUserDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaDetail'
+        spec:
+          type: object
+          x-required: mandatory
+          additionalProperties: false
+          properties:
+            roles:
+              type: array
+              x-required: mandatory
+              items:
+                type: string
+                description: |
+                  List of roles assigned to the administrator user
+                example:
+                  - SignerAdministrator
+            description:
+              type: string
+              x-required: mandatory
+              description: |
+                Description of the resource.
+          required:
+            - roles
+            - description
+      example:
+        meta:
+          id: admin-user-1
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+          creationDate: '1581675232372'
+          lastUpdate: '1581675232372'
+        spec:
+          roles:
+            - SignerAdministrator
+          description: my admin user
+      required:
+        - meta
+        - spec
+    AdminUserCollection:
+      allOf:
+        - type: object
+          properties:
+            items:
+              type: array
+              x-required: mandatory
+              description: collection of signer administrator users.
+              items:
+                $ref: '#/components/schemas/AdminUserDetail'
+          required:
+            - items
+        - $ref: '#/components/schemas/CollectionPage'
+    AdminUserCreation:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaCreation'
+        spec:
+          type: object
+          x-required: optional
+          nullable: true
+          additionalProperties: false
+          properties:
+            description:
+              type: string
+              x-required: optional
+              nullable: true
+              maxLength: 256
+              description: |
+                Description of the resource.
+      example:
+        meta:
+          id: admin-user-1
+        spec:
+          description: my admin user
+    AdminUserUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaUpdate'
+        spec:
+          type: object
+          x-required: optional
+          nullable: true
+          additionalProperties: false
+          properties:
+            description:
+              type: string
+              x-required: optional
+              nullable: true
+              maxLength: 256
+              description: |
+                Description of the resource.
+      example:
+        meta:
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+        spec:
+          description: my admin user
+      required:
+        - meta
+    ApplicationDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaDetail'
+        spec:
+          type: object
+          x-required: mandatory
+          additionalProperties: false
+          properties:
+            chainId:
+              type: string
+              x-required: mandatory
+              description: |
+                The chain identifier with which the application interacts. It must be a valid integer.
+            description:
+              type: string
+              x-required: mandatory
+              description: |
+                Description of the resource.
+          required:
+            - chainId
+            - description
+      example:
+        meta:
+          id: application-1
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+          creationDate: '1581675232372'
+          lastUpdate: '1581675232372'
+        spec:
+          chainId: '44844'
+          description: my application
+      required:
+        - meta
+        - spec
+    ApplicationCollection:
+      allOf:
+        - type: object
+          properties:
+            items:
+              type: array
+              x-required: mandatory
+              description: collection of applications.
+              items:
+                $ref: '#/components/schemas/ApplicationDetail'
+          required:
+            - items
+        - $ref: '#/components/schemas/CollectionPage'
+    ApplicationCreation:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaCreation'
+        spec:
+          type: object
+          x-required: mandatory
+          nullable: false
+          additionalProperties: false
+          properties:
+            chainId:
+              type: string
+              x-required: mandatory
+              nullable: false
+              description: |
+                The default chain ID for signing transactions for this application. It must be a valid integer.
+            description:
+              type: string
+              x-required: optional
+              nullable: true
+              maxLength: 256
+              description: |
+                Description of the resource.
+          required:
+            - chainId
+      example:
+        meta:
+          id: application-1
+        spec:
+          chainId: '44844'
+          description: my application
+      required:
+        - spec
+    ApplicationUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaUpdate'
+        spec:
+          type: object
+          x-required: optional
+          nullable: true
+          additionalProperties: false
+          properties:
+            chainId:
+              type: string
+              x-required: mandatory
+              nullable: false
+              description: |
+                The default chain ID for signing transactions for this application. It must be a valid integer.
+            description:
+              type: string
+              x-required: optional
+              nullable: true
+              maxLength: 256
+              description: |
+                Description of the resource.
+          required:
+            - chainId
+      example:
+        meta:
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+        spec:
+          chainId: '55966'
+          description: my application
+      required:
+        - meta
+        - spec
+    UserDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaDetail'
+        spec:
+          type: object
+          x-required: mandatory
+          additionalProperties: false
+          properties:
+            roles:
+              type: array
+              x-required: mandatory
+              items:
+                type: string
+                description: |
+                  List of roles assigned to the user
+                example:
+                  - ApplicationAdministrator
+                  - TransactionSigner
+            accounts:
+              type: array
+              x-required: mandatory
+              items:
+                type: string
+                description: |
+                  List of ethereum accounts assigned to the user
+                example:
+                  - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
+                  - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
+            description:
+              type: string
+              x-required: mandatory
+              description: |
+                Description of the resource.
+          required:
+            - roles
+            - accounts
+            - description
+      example:
+        meta:
+          id: user-1
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+          creationDate: '1581675232372'
+          lastUpdate: '1581675232372'
+        spec:
+          roles:
+            - ApplicationAdministrator
+            - TransactionSigner
+          accounts:
+            - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
+            - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
+          description: my user
+      required:
+        - meta
+        - spec
+    UserCollection:
+      allOf:
+        - type: object
+          properties:
+            items:
+              type: array
+              x-required: mandatory
+              description: collection of users.
+              items:
+                $ref: '#/components/schemas/UserDetail'
+          required:
+            - items
+        - $ref: '#/components/schemas/CollectionPage'
+    UserCreation:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaCreation'
+        spec:
+          type: object
+          x-required: mandatory
+          nullable: false
+          additionalProperties: false
+          properties:
+            roles:
+              type: array
+              x-required: mandatory
+              nullable: false
+              items:
+                type: string
+                description: |
+                  List of roles assigned to the user
+                example:
+                  - ApplicationAdministrator
+                  - TransactionSigner
+            description:
+              type: string
+              x-required: optional
+              nullable: true
+              maxLength: 256
+              description: |
+                Description of the resource.
+          required:
+            - roles
+      example:
+        meta:
+          id: user-1
+        spec:
+          roles:
+            - ApplicationAdministrator
+            - TransactionSigner
+          description: my user
+      required:
+        - spec
+    UserUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        meta:
+          $ref: '#/components/schemas/ResourceMetaUpdate'
+        spec:
+          type: object
+          x-required: optional
+          nullable: true
+          additionalProperties: false
+          properties:
+            roles:
+              type: array
+              x-required: mandatory
+              nullable: false
+              items:
+                type: string
+                description: |
+                  List of roles assigned to the user
+                example:
+                  - TransactionSigner
+            description:
+              type: string
+              x-required: optional
+              nullable: true
+              maxLength: 256
+              description: |
+                Description of the resource.
+          required:
+            - roles
+      example:
+        meta:
+          resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
+        spec:
+          roles:
+            - TransactionSigner
+          description: my user
+      required:
+        - meta
+        - spec
+    AccountCreation:
+      type: object
+      additionalProperties: false
+      properties:
+        spec:
+          type: object
+          x-required: mandatory
+          nullable: false
+          additionalProperties: false
+          properties:
+            accounts:
+              type: array
+              x-required: mandatory
+              nullable: false
+              items:
+                type: string
+                description: |
+                  List of ethereum accounts that will be assigned to the user
+                example:
+                  - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
+                  - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
+          required:
+            - accounts
+      example:
+        spec:
+          accounts:
+            - '0xc0ffee254729296a45a3885639AC7E10F9d54979'
+            - '0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E'
+      required:
+        - spec
   responses:
     BadRequestResponse:
       description: Error with the request input parameters. Invalid argument in the given parameters or the resource that a client tried to create already exists.
@@ -1582,34 +1815,20 @@ components:
                     errorId: 12
                     message: Invalid address.
                     traceableErrorId: 82673438f-00d9-4c58-b3a0-e0a6e1231f23
-    BadGatewayResponse:
-      description: Resource was not found.
+    PermissionDeniedResponse:
+      description: Client does not have sufficient permission. This can happen because the OAuth token does not have the right scopes, the client doesn't have permission, or the API has not been enabled for the client project.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/BaseError'
           example:
             error:
-              code: 502
-              status: BAD_GATEWAY
+              code: 401
+              status: PERMISSION_DENIED
               details:
-                errorId: 33
-                message: The RPC call did not succeed
-                traceableErrorId: 2699538f-00d9-4c58-b3a0-e0a6e1231f24
-    FailedPreconditionResponse:
-      description: Request can not be executed in the current system state.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/BaseError'
-          example:
-            error:
-              code: 412
-              status: PRECONDITION_FAILED
-              details:
-                errorId: 31
-                message: User info couldn't be updated because user does not exists.
-                traceableErrorId: 7851921y-2254f-4c58-b3a0-e0a6e1231f23
+                errorId: 45
+                message: Permission denied.
+                traceableErrorId: 673286g-782d4-4c58-b3a0-e0a6e1231f23
     InternalServerErrorResponse:
       description: Internal server error. Contact with Support or Admin with traceableErrorId for diagnose
       content:
@@ -1638,48 +1857,20 @@ components:
                 errorId: 29
                 message: User not found
                 traceableErrorId: 2699538f-00d9-4c58-b3a0-e0a6e1231f23
-    NotImplementedResponse:
-      description: API method not implemented by the server.
+    FailedPreconditionResponse:
+      description: Request can not be executed in the current system state.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/BaseError'
           example:
             error:
-              code: 501
-              status: NOT_IMPLEMENTED
+              code: 412
+              status: PRECONDITION_FAILED
               details:
-                errorId: 39
-                message: API method not implemented by the server.
-                traceableErrorId: 9060122k-2254f-4c58-b3a0-e0a6e1231f23
-    PermissionDeniedResponse:
-      description: 'Client does not have sufficient permission. This can happen because the OAuth token does not have the right scopes, the client doesn''t have permission, or the API has not been enabled for the client project.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/BaseError'
-          example:
-            error:
-              code: 401
-              status: PERMISSION_DENIED
-              details:
-                errorId: 45
-                message: Permission denied.
-                traceableErrorId: 673286g-782d4-4c58-b3a0-e0a6e1231f23
-    TimeoutResponse:
-      description: Upstream request deadline exceeded.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/BaseError'
-          example:
-            error:
-              code: 504
-              status: TIMEOUT
-              details:
-                errorId: 22
-                message: Upstream request deadline exceeded.
-                traceableErrorId: 94585153g-782d4-4c58-c3ds0-e0a6e2771f23
+                errorId: 31
+                message: User info couldn't be updated because user does not exists.
+                traceableErrorId: 7851921y-2254f-4c58-b3a0-e0a6e1231f23
     TooManyRequestResponse:
       description: Too many incoming request at this moment.
       content:
@@ -1694,8 +1885,50 @@ components:
                 errorId: 51
                 message: Too many incoming request at this moment.
                 traceableErrorId: 8380122k-2254f-4c58-b3a0-e0a6e1231f23
+    BadGatewayResponse:
+      description: Resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BaseError'
+          example:
+            error:
+              code: 502
+              status: BAD_GATEWAY
+              details:
+                errorId: 33
+                message: The RPC call did not succeed
+                traceableErrorId: 2699538f-00d9-4c58-b3a0-e0a6e1231f24
+    NotImplementedResponse:
+      description: API method not implemented by the server.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BaseError'
+          example:
+            error:
+              code: 501
+              status: NOT_IMPLEMENTED
+              details:
+                errorId: 39
+                message: API method not implemented by the server.
+                traceableErrorId: 9060122k-2254f-4c58-b3a0-e0a6e1231f23
+    TimeoutResponse:
+      description: Upstream request deadline exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BaseError'
+          example:
+            error:
+              code: 504
+              status: TIMEOUT
+              details:
+                errorId: 22
+                message: Upstream request deadline exceeded.
+                traceableErrorId: 94585153g-782d4-4c58-c3ds0-e0a6e2771f23
     UnauthenticatedResponse:
-      description: 'Request not authenticated due to missing, invalid, or expired OAuth token.'
+      description: Request not authenticated due to missing, invalid, or expired OAuth token.
       content:
         application/json:
           schema:
@@ -1722,108 +1955,3 @@ components:
                 errorId: 78
                 message: Service unavailable. Typically the server is down.
                 traceableErrorId: 9023153g-782d4-4c58-b3a0-e0a6e1231f23
-  parameters:
-    ApplicationId:
-      name: applicationId
-      in: path
-      description: Application identifier
-      required: true
-      schema:
-        type: string
-      example: application-1
-    ModuleId:
-      name: moduleId
-      in: path
-      description: Hardware Security Module (HSM) identifier
-      required: true
-      schema:
-        type: string
-      example: hsm-1
-    SlotId:
-      name: slotId
-      in: path
-      description: Slot identifier
-      required: true
-      schema:
-        type: string
-      example: slot-1
-    AdminUserId:
-      name: adminUserId
-      in: path
-      description: Admin user identifier
-      required: true
-      schema:
-        type: string
-      example: admin-1
-    UserId:
-      name: userId
-      in: path
-      description: User identifier
-      required: true
-      schema:
-        type: string
-      example: user-1
-    AccountId:
-      name: accountId
-      in: path
-      description: Ethereum account address
-      required: true
-      schema:
-        type: string
-      example: '0xc0ffee254729296a45a3885639AC7E10F9d54979'
-    ApplicationIdQuery:
-      name: applicationId
-      required: false
-      in: query
-      description: Application identifier of the resource/s
-      schema:
-        type: string
-      example: application-1
-    Limit:
-      name: limit
-      required: false
-      in: query
-      description: The numbers of items to return
-      schema:
-        type: integer
-        default: 30
-        example: 5
-    Offset:
-      name: offset
-      required: false
-      in: query
-      description: The number of items to skip before starting to collect the result set
-      schema:
-        type: integer
-        default: 0
-        example: 10
-    OrderBy:
-      name: orderBy
-      required: false
-      in: query
-      description: |
-        Resources ordered by one of these fields:
-        * `creationDate` - Date when the resource was created.
-        * `lastUpdate` - Date when the resource was last updated.
-      schema:
-        type: string
-        enum:
-          - creationDate
-          - lastUpdate
-        default: creationDate
-        example: lastUpdate
-    OrderDirection:
-      name: orderDirection
-      in: query
-      required: false
-      description: |
-        Order direction of the listed resources:
-        * `asc` - Ascending order.
-        * `desc` - Descending order.
-      schema:
-        type: string
-        enum:
-          - asc
-          - desc
-        default: desc
-        example: asc

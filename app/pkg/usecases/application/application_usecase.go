@@ -58,14 +58,16 @@ func (u *DefaultUseCase) ListApplications(ctx context.Context, input ListApplica
 
 	filters := u.storage.Filter()
 	direction := utils.DefaultString(input.OrderDirection, defaultOrderDirection)
+	direction, validDirection := entities.NormalizeOrderDirection(direction)
+	if !validDirection {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("invalid order direction %q, expected one of [asc, desc]", input.OrderDirection)
+	}
 	filters.OrderByCreationDate(persistence.OrderDirection(direction))
 	if input.OrderBy == entities.OrderByLastUpdate {
 		filters.OrderByLastUpdateDate(persistence.OrderDirection(direction))
 	}
 
-	if input.PageLimit > 0 {
-		filters.Paged(input.PageLimit, input.PageOffset)
-	}
+	filters.Paged(persistence.ClampPageLimit(input.PageLimit), input.PageOffset)
 
 	applicationCollection, err := u.storage.All(ctx, filters)
 	if err != nil {

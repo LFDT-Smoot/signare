@@ -4,8 +4,11 @@
 
 # IDEs
 **/.idea/
+**/.claude/
 
 # Generated binaries
 **/bin/
 **/tools/bin/
 
+# Docs changelog generated from the canonical root CHANGELOG.md (make tools.sync_changelog)
+/app/docs/mkdocs/docs/CHANGELOG.md

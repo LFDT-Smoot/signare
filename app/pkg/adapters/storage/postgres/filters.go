@@ -9,15 +9,6 @@ func NewEqualFilter(by string) persistence.EqualFilter {
 	}
 }
 
-// NewBetweenFilter creates a BetweenFilter instance with the given options
-func NewBetweenFilter(by string, minValue string, maxValue string) persistence.BetweenFilter {
-	return persistence.BetweenFilter{
-		By:       by,
-		MinValue: minValue,
-		MaxValue: maxValue,
-	}
-}
-
 // NewLessFilter creates a LessFilter instance with the given options
 func NewLessFilter(by string) persistence.LessFilter {
 	return persistence.LessFilter{
@@ -43,13 +34,5 @@ func NewGreaterFilter(by string) persistence.GreaterFilter {
 func NewGreaterOrEqualFilter(by string) persistence.GreaterOrEqualFilter {
 	return persistence.GreaterOrEqualFilter{
 		By: by,
-	}
-}
-
-// NewListEqualFilter creates a ListEqualFilter instance with the given options
-func NewListEqualFilter(by string, values []string) persistence.ListEqualFilter {
-	return persistence.ListEqualFilter{
-		By:     by,
-		Values: values,
 	}
 }

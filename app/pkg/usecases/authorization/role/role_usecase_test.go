@@ -49,7 +49,7 @@ func TestProvideDefaultRoleUseCase_CreateHSM(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		getSupportedRolesInput := role.GetSupportedRolesInput{}
 		getSupportedRolesOutput, getSupportedRolesErr := app.RoleUseCase.GetSupportedRoles(ctx, getSupportedRolesInput)
-		require.Nil(t, getSupportedRolesErr)
+		require.NoError(t, getSupportedRolesErr)
 		require.NotNil(t, getSupportedRolesOutput)
 	})
 }

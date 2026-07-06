@@ -5,8 +5,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger-labs/signare/app/pkg/utils"
-
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_DefaultIntValue(t *testing.T) {
@@ -32,7 +31,7 @@ func Test_DefaultIntValue(t *testing.T) {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			result := utils.DefaultIntValue(tt.have, tt.defaultValue)
-			assert.Equal(t, tt.expected, result)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -65,7 +64,7 @@ func Test_DefaultMaxValue(t *testing.T) {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			result := defaultIntMaxValue(tt.have, tt.maxValue)
-			assert.Equal(t, tt.expected, result)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -100,7 +99,7 @@ func Test_DefaultPtrBigIntValue(t *testing.T) {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			result := defaultPtrBigIntValue(tt.have, tt.defaultValue)
-			assert.Equal(t, tt.expected.String(), result.String())
+			require.Equal(t, tt.expected.String(), result.String())
 		})
 	}
 }
@@ -128,7 +127,7 @@ func Test_PtrStringDefaultValue(t *testing.T) {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			result := utils.PtrStringDefaultValue(tt.value, defaultValue)
-			assert.Equal(t, tt.expected, result)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -156,7 +155,7 @@ func Test_PtrIntDefaultValue(t *testing.T) {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			result := utils.PtrIntDefaultValue(tt.value, defaultValue)
-			assert.Equal(t, tt.expected, result)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -187,7 +186,7 @@ func Test_DefaultString(t *testing.T) {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			result := utils.DefaultString(tt.value, defaultValue)
-			assert.Equal(t, tt.expected, result)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -225,7 +224,7 @@ func TestMaxOf(t *testing.T) {
 		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			result := utils.MaxOf(tt.firstValue, tt.secondValue)
-			assert.Equal(t, tt.expectedResult, result)
+			require.Equal(t, tt.expectedResult, result)
 		})
 	}
 }

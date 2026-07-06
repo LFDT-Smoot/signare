@@ -4,6 +4,8 @@ import "github.com/hyperledger-labs/signare/app/pkg/entities"
 
 const (
 	SoftHSMModuleKind = "SoftHSM"
+	AKVModuleKind     = "AKV"
+	LKVModuleKind     = "LocalKeyVault"
 )
 
 // HardwareSecurityModuleDB is the data struct of the resource in the database

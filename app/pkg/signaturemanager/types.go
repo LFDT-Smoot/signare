@@ -22,6 +22,20 @@ type GenerateKeyOutput struct {
 	Address address.Address `json:"address"`
 }
 
+// DeriveAddressFromPrivateKeyInput for account import requests.
+type DeriveAddressFromPrivateKeyInput struct {
+	// PrivateKey
+	PrivateKey entities.HexBytes
+	// Tracer to log what is needed
+	Tracer logger.Tracer
+}
+
+// DeriveAddressFromPrivateKeyOutput for account import responses.
+type DeriveAddressFromPrivateKeyOutput struct {
+	// Address derived from the private key's public key.
+	Address address.Address `json:"address"`
+}
+
 // RemoveKeyInput for account removal requests.
 type RemoveKeyInput struct {
 	// Slot the slot to look for the keys
@@ -58,12 +72,36 @@ type SignInput struct {
 	Slot string
 	// Pin the pin to authorize the user
 	Pin string
+	// Config of the slot.
+	Config SlotConfig
 	// Tracer to log what is needed
 	Tracer logger.Tracer
 	// From address identifying the private key to use.
 	From address.Address
 	// Data to sign.
 	Data entities.HexBytes
+}
+
+// SlotConfig defines the configuration for a particular slot.
+type SlotConfig struct {
+	AKV           []AKVConfig
+	LocalKeyVault *LocalKeyVaultConfig
+}
+
+// AKVConfig defines possible configurations for Azure Key Vault.
+type AKVConfig struct {
+	// KeyName is the name for the key to use in AKV
+	KeyName string
+	// KeyVersion is the version for the key to use in AKV
+	KeyVersion string
+	// KeyPublicAddress is the public address for the key to use in AKV
+	KeyPublicAddress string
+}
+
+// LocalKeyVaultConfig defines possible configurations for Local Key Vault.
+type LocalKeyVaultConfig struct {
+	// KeyStore holds the stored addresses and its private keys
+	KeyStore map[address.Address]string
 }
 
 // SignOutput for transaction signing responses.

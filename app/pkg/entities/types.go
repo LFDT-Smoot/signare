@@ -1,6 +1,8 @@
 package entities
 
 import (
+	"strings"
+
 	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
 
 	"github.com/google/uuid"
@@ -12,7 +14,29 @@ const (
 
 	OrderByLastUpdate   = "lastUpdate"
 	OrderByCreationDate = "creationDate"
+
+	TransactionType0Legacy  = "Legacy"
+	TransactionType1EIP2930 = "EIP2930"
+	TransactionType2EIP1559 = "EIP1559"
+	TransactionType3EIP4844 = "EIP4844"
+	TransactionType4EIP7702 = "EIP7702"
 )
+
+// NormalizeOrderDirection returns the canonical order direction (OrderAsc or
+// OrderDesc) for the given value, accepting any letter casing and surrounding
+// whitespace. The second return value is false when the value is not a recognised
+// direction, so callers can reject it as invalid input rather than letting it reach
+// the query layer.
+func NormalizeOrderDirection(direction string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(direction)) {
+	case OrderAsc:
+		return OrderAsc, true
+	case OrderDesc:
+		return OrderDesc, true
+	default:
+		return "", false
+	}
+}
 
 // ContextKey used in the signare for storing and retrieving values from context.
 type ContextKey string

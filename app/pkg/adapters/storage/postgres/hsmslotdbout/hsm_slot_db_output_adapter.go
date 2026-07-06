@@ -78,7 +78,40 @@ func (r *Repository) EditPin(ctx context.Context, data hsmslot.HSMSlot) (*hsmslo
 
 	rowsAffected, errRowsAffected := result.Result.RowsAffected()
 	if errRowsAffected != nil {
+		return nil, errors.InternalFromErr(errRowsAffected)
+	}
+
+	if rowsAffected == 0 {
+		return nil, errors.NotFound().WithMessage("resource 'hsm_slot' does not match the one stored")
+	}
+
+	if rowsAffected > 1 {
+		return nil, errors.Internal().WithMessage("unexpected number of results when obtaining 'hsm_slot'")
+	}
+
+	storageData, err := r.Get(ctx, entities.StandardID{ID: data.ID})
+	if err != nil {
 		return nil, errors.InternalFromErr(err)
+	}
+
+	return storageData, nil
+}
+
+// EditConfig edits an HSMSlot's Config in storage.
+func (r *Repository) EditConfig(ctx context.Context, data hsmslot.HSMSlot) (*hsmslot.HSMSlot, error) {
+	db, err := mapToUpdateConfigDB(data)
+	if err != nil {
+		return nil, errors.InternalFromErr(err)
+	}
+
+	result, err := r.infra.EditConfig(ctx, *db)
+	if err != nil {
+		return nil, mapPersistenceErrorToSignerError(err)
+	}
+
+	rowsAffected, errRowsAffected := result.Result.RowsAffected()
+	if errRowsAffected != nil {
+		return nil, errors.InternalFromErr(errRowsAffected)
 	}
 
 	if rowsAffected == 0 {
@@ -191,13 +224,13 @@ func (filter *hsmSlotDBFilter) FilterByHSMModuleID(hsmID entities.StandardID) hs
 
 // OrderByCreationDate orders resources in storage by creation date.
 func (filter *hsmSlotDBFilter) OrderByCreationDate(orderDirection persistence.OrderDirection) hsmslot.HSMSlotFilters {
-	filter.HSMSlotDBFilter = filter.HSMSlotDBFilter.Sort("creation_date", orderDirection)
+	filter.HSMSlotDBFilter = filter.Sort("creation_date", orderDirection)
 	return filter
 }
 
 // OrderByLastUpdateDate orders resources in storage by last update date.
 func (filter *hsmSlotDBFilter) OrderByLastUpdateDate(orderDirection persistence.OrderDirection) hsmslot.HSMSlotFilters {
-	filter.HSMSlotDBFilter = filter.HSMSlotDBFilter.Sort("last_update", orderDirection)
+	filter.HSMSlotDBFilter = filter.Sort("last_update", orderDirection)
 	return filter
 }
 

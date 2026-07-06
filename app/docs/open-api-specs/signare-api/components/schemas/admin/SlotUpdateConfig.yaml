@@ -1,0 +1,33 @@
+type: object
+additionalProperties: false
+properties:
+  meta:
+    $ref: '../../_index.yaml#/schemas/ResourceMetaUpdate'
+  spec:
+    type: object
+    x-required: optional
+    nullable: true
+    additionalProperties: false
+    properties:
+      config:
+        type: array
+        x-required: optional
+        description: collection of config
+        items:
+          $ref: '../../_index.yaml#/schemas/SlotDetailConfig'
+    required:
+      - config
+
+example:
+  meta:
+    resourceVersion: '7e032829-249d-4498-aa3e-344a16cd6a93'
+  spec:
+    config:
+      {
+        "keyName":"someKey",
+        "keyVersion":"1234"
+      }
+
+required:
+  - meta
+  - spec

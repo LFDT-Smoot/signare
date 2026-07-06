@@ -16,8 +16,8 @@ type Application struct {
 	entities.StandardResourceMeta
 	// InternalResourceID uniquely identifies an Application by a single ID.
 	entities.InternalResourceID
-	// ChainID defines the identifier of the chain configured in the Application.
-	ChainID entities.Int256
+	// DefaultChainID defines the identifier of the chain configured in the Application.
+	DefaultChainID entities.Int256
 	// Description contains the definition of the Application.
 	Description *string
 }
@@ -27,7 +27,7 @@ type CreateApplicationInput struct {
 	// ID defines the identifier of the Application resource.
 	ID *string `valid:"optional"`
 	// ChainID defines the identifier of the chain configured in the Application.
-	ChainID entities.Int256 `valid:"required"`
+	ChainID entities.Int256 `valid:"required,chainID"`
 	// Description contains the definition of the Application.
 	Description *string `valid:"optional"`
 }
@@ -44,7 +44,7 @@ type EditApplicationInput struct {
 	// ResourceVersion resource version for resource locking.
 	ResourceVersion string `valid:"required"`
 	// ChainID defines the identifier of the chain configured in the Application.
-	ChainID *entities.Int256
+	ChainID *entities.Int256 `valid:"chainID"`
 	// Description contains the definition of the Application.
 	Description *string
 }
@@ -119,8 +119,8 @@ func createToApplication(input CreateApplicationInput) Application {
 				},
 			},
 		},
-		ChainID:     input.ChainID,
-		Description: input.Description,
+		DefaultChainID: input.ChainID,
+		Description:    input.Description,
 	}
 }
 
@@ -139,7 +139,7 @@ func mapEditedValues(input EditApplicationInput) Application {
 		},
 	}
 	if input.ChainID != nil {
-		application.ChainID = *input.ChainID
+		application.DefaultChainID = *input.ChainID
 	}
 	if input.Description != nil {
 		application.Description = input.Description

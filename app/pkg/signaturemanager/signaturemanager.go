@@ -9,6 +9,8 @@ import (
 type DigitalSignatureManager interface {
 	// GenerateKey generates a new public and private key returning the corresponding address.
 	GenerateKey(ctx context.Context, input GenerateKeyInput) (*GenerateKeyOutput, error)
+	// DeriveAddressFromPrivateKey takes a private key and returns the corresponding address.
+	DeriveAddressFromPrivateKey(ctx context.Context, input DeriveAddressFromPrivateKeyInput) (*DeriveAddressFromPrivateKeyOutput, error)
 	// RemoveKey removes the public and private key identified by the provided address. It returns an error if it fails or if the key pair doesn't exist.
 	RemoveKey(ctx context.Context, input RemoveKeyInput) (*RemoveKeyOutput, error)
 	// ListKeys retrieves all stored keys as a list of addresses.

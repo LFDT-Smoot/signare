@@ -9,3 +9,5 @@ The target audience of this document is every user searching for instructions on
 * [**How to configure users**](how-to-configure-users): create and configure different types of users.
 * [**How to create an account**](how-to-create-an-account.md): create an account using a configured HSM.
 * [**How to sign a transaction**](how-to-sign-a-tx.md): sign an Ethereum transaction.
+* [**How to configure AKV**](how-to-configure-akv.md): configure Signare to use Azure Key Vault.
+* [**How to configure Local Key Vault**](how-to-configure-lkv.md): configure Signare to use a Local Key Vault.

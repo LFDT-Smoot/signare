@@ -16,6 +16,8 @@ type BuildConfig struct {
 	BuildTime *string `valid:"optional"`
 	// Tag in current commit
 	Tag *string `valid:"optional"`
+	// Branch timestamp of current branch
+	Branch *string `valid:"optional"`
 	// CommitHash Git commit hash
 	CommitHash *string `valid:"optional"`
 }
@@ -29,7 +31,7 @@ type LibrariesConfig struct {
 	// PersistenceFw persistence framework configuration
 	PersistenceFw PersistenceFwConfig `valid:"required"`
 	// HSMModules provides the configuration of the hardware security modules.
-	HSMModules HSMModules `mapstructure:"hsmmodules" valid:"required"`
+	HSMModules *HSMModules `mapstructure:"hsmmodules" valid:"optional"`
 }
 
 // LoggerConfig configuration of the logger
@@ -70,11 +72,18 @@ type PersistenceFwConfig struct {
 type HSMModules struct {
 	// SoftHSM configuration for SoftHSM.
 	SoftHSM *SoftHSMConfig `mapstructure:"softhsm" valid:"optional"`
+	// AKVConfig configuration for AKVConfig.
+	AKV *AKVConfig `mapstructure:"akv" valid:"optional"`
 }
 
 // SoftHSMConfig configures a SoftHSM.
 type SoftHSMConfig struct {
 	Library string `mapstructure:"lib" valid:"required"`
+}
+
+// AKVConfig configures AKV.
+type AKVConfig struct {
+	URL string `mapstructure:"url" valid:"required"`
 }
 
 // PostgresSQLConfig configuration to connect to a PostgreSQL database

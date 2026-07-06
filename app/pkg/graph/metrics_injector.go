@@ -4,6 +4,7 @@ package graph
 
 import (
 	"github.com/google/wire"
+
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/metricsout"
 	"github.com/hyperledger-labs/signare/app/pkg/commons/metricrecorder"
 )

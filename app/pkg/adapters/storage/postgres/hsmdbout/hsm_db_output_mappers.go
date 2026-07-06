@@ -24,7 +24,7 @@ func mapToCreateDB(module hsmmodule.HSMModule) (*hsmmoduledb.HardwareSecurityMod
 	db := hsmmoduledb.HardwareSecurityModuleCreateDB{
 		HardwareSecurityModuleDB: hsmmoduledb.HardwareSecurityModuleDB{
 			StandardID:         module.StandardID,
-			InternalResourceID: module.InternalResourceID.String(),
+			InternalResourceID: module.String(),
 			Kind:               *dbModuleKind,
 			Configuration:      *configuration,
 			LastUpdate:         module.LastUpdate.ToInt64(),
@@ -55,7 +55,7 @@ func mapToUpdateDB(module hsmmodule.HSMModule) (*hsmmoduledb.HardwareSecurityMod
 			StandardID:         module.StandardID,
 			Kind:               *dbModuleKind,
 			Configuration:      *configuration,
-			InternalResourceID: module.InternalResourceID.String(),
+			InternalResourceID: module.String(),
 			CreationDate:       module.CreationDate.ToInt64(),
 			LastUpdate:         module.LastUpdate.ToInt64(),
 			ResourceVersion:    module.ResourceVersion,
@@ -119,6 +119,12 @@ func mapUseCaseConfiguration(module hsmmoduledb.HardwareSecurityModuleDB) *hsmmo
 	if module.Kind == string(hsmmodule.SoftHSMModuleKind) {
 		configuration.SoftHSMConfiguration = &hsmmodule.SoftHSMConfiguration{}
 	}
+	if module.Kind == string(hsmmodule.AKVModuleKind) {
+		configuration.AKVConfiguration = &hsmmodule.AKVConfiguration{}
+	}
+	if module.Kind == string(hsmmodule.LKVModuleKind) {
+		configuration.LKVConfiguration = &hsmmodule.LKVConfiguration{}
+	}
 
 	return &configuration
 }
@@ -127,6 +133,10 @@ func mapConfigurationDBFrom(module hsmmodule.HSMModule) *string {
 	var configuration string
 	if module.Kind == hsmmodule.SoftHSMModuleKind {
 		// SoftHSM configuration is static and not persisted
+		configuration = ""
+	}
+	if module.Kind == hsmmodule.AKVModuleKind {
+		// AKV configuration is static and not persisted
 		configuration = ""
 	}
 
@@ -138,12 +148,28 @@ func mapUseCaseModuleKindFrom(kind string) (*hsmmodule.ModuleKind, error) {
 		k := hsmmodule.SoftHSMModuleKind
 		return &k, nil
 	}
+	if kind == hsmmoduledb.AKVModuleKind {
+		k := hsmmodule.AKVModuleKind
+		return &k, nil
+	}
+	if kind == hsmmoduledb.LKVModuleKind {
+		k := hsmmodule.LKVModuleKind
+		return &k, nil
+	}
 	return nil, errors.Internal().WithMessage("couldn't map '%s' to usecase HSM kind", kind)
 }
 
 func mapDBModuleKindFrom(moduleKind hsmmodule.ModuleKind) (*string, error) {
 	if moduleKind == hsmmodule.SoftHSMModuleKind {
 		kind := hsmmoduledb.SoftHSMModuleKind
+		return &kind, nil
+	}
+	if moduleKind == hsmmodule.AKVModuleKind {
+		kind := hsmmoduledb.AKVModuleKind
+		return &kind, nil
+	}
+	if moduleKind == hsmmodule.LKVModuleKind {
+		kind := hsmmoduledb.LKVModuleKind
 		return &kind, nil
 	}
 	return nil, errors.InvalidArgument().WithMessage("couldn't map '%s' to database HSM type", moduleKind)

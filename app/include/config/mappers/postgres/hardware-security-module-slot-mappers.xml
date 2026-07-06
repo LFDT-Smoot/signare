@@ -7,6 +7,7 @@
             application_id,
             slot,
             pin,
+            configuration,
             creation_date,
             last_update,
             resource_version
@@ -17,6 +18,7 @@
             :application_id,
             :slot,
             :pin,
+            :configuration,
             :creation_date,
             :last_update,
             :resource_version
@@ -30,6 +32,7 @@
             application_id,
             slot,
             pin,
+            configuration,
             creation_date,
             last_update,
             resource_version
@@ -46,10 +49,10 @@
             {{end}}
         {{ end }}
         {{ if .Order }}
-            ORDER BY {{ .Order.By }} {{ if eq .Order.Direction "asc" }}ASC{{ else }}DESC{{end}}
-            {{ if .Pagination}}
-                LIMIT {{.Pagination.Limit}} OFFSET {{.Pagination.Offset}}
-            {{ end }}
+            ORDER BY {{ .Order.ToSQLStmt }}
+        {{ end }}
+        {{ if .Pagination}}
+            LIMIT {{.Pagination.Limit}} OFFSET {{.Pagination.Offset}}
         {{ end }}
     </statement>
     <statement id="getById">
@@ -60,6 +63,7 @@
             application_id,
             slot,
             pin,
+            configuration,
             creation_date,
             last_update,
             resource_version
@@ -76,6 +80,7 @@
             application_id,
             slot,
             pin,
+            configuration,
             creation_date,
             last_update,
             resource_version
@@ -83,6 +88,17 @@
             cfg_hardware_security_module_slot
         WHERE
             application_id=:application_id
+    </statement>
+    <statement id="updateConfig">
+        UPDATE
+            cfg_hardware_security_module_slot
+        SET
+            configuration=:configuration,
+            last_update=:last_update,
+            resource_version=:new_resource_version
+        WHERE
+            id=:id AND
+            resource_version=:resource_version
     </statement>
     <statement id="updatePin">
         UPDATE

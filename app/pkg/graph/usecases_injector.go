@@ -98,6 +98,7 @@ var useCasesSet = wire.NewSet(
 
 	// Digital Signature Manager DigitalSignatureManagerFactory
 	provideSoftHSMConfiguration,
+	provideAKVConfiguration,
 	hsmconnector.ProvideDefaultDigitalSignatureManagerFactory,
 	wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)),
 	wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"),
@@ -129,9 +130,16 @@ func initializeUseCases(
 }
 
 func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {
-	if config.Libraries.HSMModules.SoftHSM != nil {
+	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.SoftHSM != nil {
 		softHSMConfig := hsmconnector.PKCS11Library(config.Libraries.HSMModules.SoftHSM.Library)
 		return &softHSMConfig
+	}
+	return nil
+}
+
+func provideAKVConfiguration(config Config) *string {
+	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.AKV != nil {
+		return &config.Libraries.HSMModules.AKV.URL
 	}
 	return nil
 }

@@ -1,5 +1,5 @@
 SHELL = /bin/bash -o pipefail
-WIRE_VERSION = "v0.6.0"
+WIRE_VERSION = "v0.7.0"
 
 .PHONY: build
 build:

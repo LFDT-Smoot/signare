@@ -87,6 +87,10 @@ func ProvideAdminAPIRoutes(options AdminAPIPublisherOptions) (AdminAPIRoutesPubl
 	if err != nil {
 		return 0, err
 	}
+	err = PublishAdminSlotsUpdateConfig(options.HTTPInfra, options.Handler)
+	if err != nil {
+		return 0, err
+	}
 	err = PublishAdminSlotsUpdatePin(options.HTTPInfra, options.Handler)
 	if err != nil {
 		return 0, err
@@ -305,6 +309,20 @@ func PublishAdminSlotsRemove(httpInfra httpinfra.HTTPRouter, handler AdminAPIHTT
 		Action: "admin.slots.remove",
 	}
 	err := httpInfra.RegisterRawHandler(opts, handler.HandleHTTPAdminSlotsRemove)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// PublishAdminSlotsUpdateConfig publishes the AdminSlotsUpdateConfig endpoint
+func PublishAdminSlotsUpdateConfig(httpInfra httpinfra.HTTPRouter, handler AdminAPIHTTPHandler) error {
+	opts := httpinfra.HandlerMatchOptions{Path: "/admin/modules/{moduleId}/slots/{slotId}:update-config", Methods: []string{
+		http.MethodPost,
+	},
+		Action: "admin.slots.updateConfig",
+	}
+	err := httpInfra.RegisterRawHandler(opts, handler.HandleHTTPAdminSlotsUpdateConfig)
 	if err != nil {
 		return err
 	}

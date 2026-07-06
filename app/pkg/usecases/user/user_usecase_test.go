@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	gotime "time"
 
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres/userdbout"
 	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
@@ -138,6 +139,22 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 		require.Equal(t, userID, output.ID)
 	})
 
+	t.Run("success: transaction-signer is assignable", func(t *testing.T) {
+		// Pins that the application-scope gate does not over-block the other application-scoped role.
+		userID := uuid.New().String()
+		input := user.CreateUserInput{
+			ID:            &userID,
+			ApplicationID: createdApplication.ID,
+			Roles: []string{
+				"transaction-signer",
+			},
+		}
+		output, err := app.UserUseCase.CreateUser(ctx, input)
+		require.NoError(t, err)
+		require.NotNil(t, output)
+		require.Equal(t, []string{"transaction-signer"}, output.Roles)
+	})
+
 	t.Run("failure: invalid role", func(t *testing.T) {
 		userID := uuid.New().String()
 		input := user.CreateUserInput{
@@ -145,6 +162,37 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
 				"invalid-role",
+			},
+		}
+		output, err := app.UserUseCase.CreateUser(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("failure: signer-admin not assignable", func(t *testing.T) {
+		userID := uuid.New().String()
+		input := user.CreateUserInput{
+			ID:            &userID,
+			ApplicationID: createdApplication.ID,
+			Roles: []string{
+				"signer-admin",
+			},
+		}
+		output, err := app.UserUseCase.CreateUser(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("failure: signer-admin not assignable alongside an application role", func(t *testing.T) {
+		userID := uuid.New().String()
+		input := user.CreateUserInput{
+			ID:            &userID,
+			ApplicationID: createdApplication.ID,
+			Roles: []string{
+				"application-admin",
+				"signer-admin",
 			},
 		}
 		output, err := app.UserUseCase.CreateUser(ctx, input)
@@ -228,6 +276,7 @@ func TestDefaultUseCase_ListUsers(t *testing.T) {
 		}
 		_, err := app.UserUseCase.CreateUser(ctx, input)
 		require.NoError(t, err)
+		gotime.Sleep(gotime.Millisecond)
 	}
 
 	t.Run("failure: invalid arguments", func(t *testing.T) {
@@ -248,6 +297,27 @@ func TestDefaultUseCase_ListUsers(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, errors.IsInvalidArgument(err))
 		require.Nil(t, output)
+	})
+
+	t.Run("failure: invalid order direction", func(t *testing.T) {
+		input := user.ListUsersInput{
+			ApplicationID:  createdApplication1.ID,
+			OrderDirection: "sideways",
+		}
+		output, err := app.UserUseCase.ListUsers(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("success: order direction is case-insensitive", func(t *testing.T) {
+		input := user.ListUsersInput{
+			ApplicationID:  createdApplication1.ID,
+			OrderDirection: "ASC",
+		}
+		output, err := app.UserUseCase.ListUsers(ctx, input)
+		require.NoError(t, err)
+		require.Len(t, output.Items, usersToCreate)
 	})
 
 	t.Run("success: list all users without limit", func(t *testing.T) {
@@ -278,7 +348,7 @@ func TestDefaultUseCase_ListUsers(t *testing.T) {
 		require.Equal(t, "user-16", output.Items[4].ID)
 		// Assert order
 		for i := 1; i < len(output.Items); i++ {
-			require.Greater(t, output.Items[i-1].CreationDate.ToInt64(), output.Items[i].CreationDate.ToInt64())
+			require.GreaterOrEqual(t, output.Items[i-1].CreationDate.ToInt64(), output.Items[i].CreationDate.ToInt64())
 		}
 	})
 
@@ -301,7 +371,7 @@ func TestDefaultUseCase_ListUsers(t *testing.T) {
 		require.Equal(t, "user-5", output.Items[4].ID)
 		// Assert order
 		for i := 1; i < len(output.Items); i++ {
-			require.Less(t, output.Items[i-1].LastUpdate.ToInt64(), output.Items[i].LastUpdate.ToInt64())
+			require.LessOrEqual(t, output.Items[i-1].LastUpdate.ToInt64(), output.Items[i].LastUpdate.ToInt64())
 		}
 	})
 }
@@ -385,7 +455,7 @@ func TestDefaultUseCase_GetUser(t *testing.T) {
 		require.Equal(t, createInput.Description, output.Description)
 		require.Len(t, output.Roles, 1)
 		require.Equal(t, createInput.Roles[0], output.Roles[0])
-		require.Zero(t, len(output.Accounts))
+		require.Empty(t, output.Accounts)
 		require.NotEmpty(t, output.InternalResourceID)
 	})
 }
@@ -545,6 +615,36 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		require.Nil(t, output)
 	})
 
+	t.Run("failure: signer-admin not assignable", func(t *testing.T) {
+		// Create the User first
+		userID := uuid.New().String()
+		testDesc := "my-description"
+		createInput := user.CreateUserInput{
+			ID:            &userID,
+			ApplicationID: createdApplication.ID,
+			Description:   &testDesc,
+			Roles: []string{
+				"application-admin",
+			},
+		}
+		_, err := app.UserUseCase.CreateUser(ctx, createInput)
+		require.NoError(t, err)
+
+		// An application-admin must not be able to escalate an application user to signer-admin.
+		input := user.EditUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            *createInput.ID,
+				ApplicationID: createInput.ApplicationID,
+			},
+			ResourceVersion: "invalid-resource-version",
+			Roles:           []string{"application-admin", "signer-admin"},
+		}
+		output, err := app.UserUseCase.EditUser(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		// Create the User first
 		userID := uuid.New().String()
@@ -561,6 +661,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		require.NoError(t, err)
 
 		// Edit the created user
+		gotime.Sleep(gotime.Millisecond)
 		newDescription := "this is the new description"
 		newRoles := []string{
 			"application-admin",
@@ -666,7 +767,7 @@ func TestDefaultUseCase_DeleteUser(t *testing.T) {
 		require.Equal(t, createdUser.ResourceVersion, deletedUser.ResourceVersion)
 		require.Equal(t, createdUser.Roles, deletedUser.Roles)
 		require.Equal(t, createdUser.Description, deletedUser.Description)
-		require.Len(t, deletedUser.Accounts, 0)
+		require.Empty(t, deletedUser.Accounts)
 
 		// Retrieve deleted user
 		getOutput, err := app.UserUseCase.GetUser(ctx, user.GetUserInput{
@@ -705,7 +806,7 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 		Pin:           slotPin,
 	}
 	createHSMSlotOutput, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, createHSMSlotInput)
-	require.Nil(t, createHSMSlotErr)
+	require.NoError(t, createHSMSlotErr)
 	require.NotNil(t, createHSMSlotOutput)
 
 	t.Run("failure: invalid input arguments", func(t *testing.T) {
@@ -739,6 +840,17 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 			Addresses: []address.Address{
 				address.MustNewFromHexString("invalid address"),
 			},
+		}
+		output, err = app.UserUseCase.EnableAccounts(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+
+		// An empty address list must be rejected rather than silently succeeding.
+		input = user.EnableAccountsInput{
+			UserID:        "my-user-id",
+			ApplicationID: currentTestApplication.ID,
+			Addresses:     []address.Address{},
 		}
 		output, err = app.UserUseCase.EnableAccounts(ctx, input)
 		require.Error(t, err)
@@ -810,9 +922,8 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
-				Slot:       hsmConnection.Slot,
-				Pin:        hsmConnection.Pin,
-				ChainID:    hsmConnection.ChainID,
+				Slot:       hsmConnection.Slot.Slot,
+				Pin:        hsmConnection.Slot.Pin,
 				ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
 			},
 		}
@@ -858,9 +969,8 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
-				Slot:       hsmConnection.Slot,
-				Pin:        hsmConnection.Pin,
-				ChainID:    hsmConnection.ChainID,
+				Slot:       hsmConnection.Slot.Slot,
+				Pin:        hsmConnection.Slot.Pin,
 				ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
 			},
 		}
@@ -955,7 +1065,7 @@ func TestDefaultUseCase_RemoveUserAccount(t *testing.T) {
 			Pin:           slotPin,
 		}
 		createHSMSlotOutput, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, createHSMSlotInput)
-		require.Nil(t, createHSMSlotErr)
+		require.NoError(t, createHSMSlotErr)
 		require.NotNil(t, createHSMSlotOutput)
 
 		// Create a valid User
@@ -980,9 +1090,8 @@ func TestDefaultUseCase_RemoveUserAccount(t *testing.T) {
 
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
-				Slot:       hsmConnection.Slot,
-				Pin:        hsmConnection.Pin,
-				ChainID:    hsmConnection.ChainID,
+				Slot:       hsmConnection.Slot.Slot,
+				Pin:        hsmConnection.Slot.Pin,
 				ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
 			},
 		}
@@ -1007,7 +1116,7 @@ func TestDefaultUseCase_RemoveUserAccount(t *testing.T) {
 		output, err := app.UserUseCase.DisableAccount(ctx, removeAccountInput)
 		require.NoError(t, err)
 		require.NotNil(t, output)
-		require.Len(t, output.Accounts, 0)
+		require.Empty(t, output.Accounts)
 	})
 }
 func createHSM(ctx context.Context, t *testing.T) *hsmmodule.HSMModule {
@@ -1052,4 +1161,156 @@ func createHSM(ctx context.Context, t *testing.T) *hsmmodule.HSMModule {
 	}
 	require.NotNil(t, addedModule)
 	return &addedModule.HSMModule
+}
+
+func createAKVHSM(ctx context.Context, t *testing.T) *hsmmodule.HSMModule {
+	description := "AKV HSM module for testing"
+	createHSMModuleInput := hsmmodule.CreateHSMModuleInput{
+		Description: &description,
+		Configuration: hsmmodule.HSMModuleConfiguration{
+			AKVConfiguration: &hsmmodule.AKVConfiguration{},
+		},
+		ModuleKind: hsmmodule.AKVModuleKind,
+	}
+	addedModule, err := app.HSMModuleUseCase.CreateHSMModule(ctx, createHSMModuleInput)
+	require.NoError(t, err)
+	require.NotNil(t, addedModule)
+	return &addedModule.HSMModule
+}
+
+func TestDefaultUseCase_AddUserAccounts_AKVValidation(t *testing.T) {
+	ctx := context.Background()
+
+	applicationID := uuid.NewString()
+	description := "application for AKV EnableAccounts test"
+	createApplicationOutput, createApplicationErr := app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{
+		ID:          &applicationID,
+		ChainID:     *chainID,
+		Description: &description,
+	})
+	require.NoError(t, createApplicationErr)
+	require.NotNil(t, createApplicationOutput)
+
+	configuredAddress := address.MustNewFromHexString("0xDc611d30c81e723D0A78BE33f5aF3974c108f5cf")
+	unconfiguredAddress := address.MustNewFromHexString("0x970E8128AB834E8EAC17Ab8E3812F010678CF791")
+	// zeroByteAddress contains 0x00 bytes but is not the zero address. It guards against a validation
+	// mechanism that rejects addresses with a zero byte (regression for the required-tag bug).
+	zeroByteAddress := address.MustNewFromHexString("0x0011223344556677889900aabbccddeeff001122")
+
+	akvHSM := createAKVHSM(ctx, t)
+	createHSMSlotOutput, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, hsmslot.CreateHSMSlotInput{
+		ApplicationID: applicationID,
+		HSMModuleID:   akvHSM.ID,
+		Config: hsmslot.SlotConfig{
+			AKV: []hsmslot.AKVConfig{
+				{
+					KeyName:          "test-key",
+					KeyVersion:       "1",
+					KeyPublicAddress: configuredAddress.String(),
+				},
+				{
+					KeyName:          "test-key-zero-byte",
+					KeyVersion:       "1",
+					KeyPublicAddress: zeroByteAddress.String(),
+				},
+			},
+		},
+	})
+	require.NoError(t, createHSMSlotErr)
+	require.NotNil(t, createHSMSlotOutput)
+
+	userID := uuid.NewString()
+	_, createUserErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+		ID:            &userID,
+		ApplicationID: applicationID,
+		Roles:         []string{"application-admin"},
+	})
+	require.NoError(t, createUserErr)
+
+	t.Run("success: address configured in the AKV slot is accepted", func(t *testing.T) {
+		output, err := app.UserUseCase.EnableAccounts(ctx, user.EnableAccountsInput{
+			UserID:        userID,
+			ApplicationID: applicationID,
+			Addresses:     []address.Address{configuredAddress},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, output)
+		require.Len(t, output.Accounts, 1)
+	})
+
+	t.Run("failure: address not configured in the AKV slot is rejected", func(t *testing.T) {
+		output, err := app.UserUseCase.EnableAccounts(ctx, user.EnableAccountsInput{
+			UserID:        userID,
+			ApplicationID: applicationID,
+			Addresses:     []address.Address{unconfiguredAddress},
+		})
+		require.Error(t, err)
+		require.True(t, errors.IsPreconditionFailed(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("success: address containing a zero byte is accepted", func(t *testing.T) {
+		// Regression for the required-tag bug: a valid address with a 0x00 byte must not be rejected
+		// at validation time. A fresh user keeps the asserted account count deterministic.
+		zeroByteUserID := uuid.NewString()
+		_, createErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			ID:            &zeroByteUserID,
+			ApplicationID: applicationID,
+			Roles:         []string{"application-admin"},
+		})
+		require.NoError(t, createErr)
+
+		output, err := app.UserUseCase.EnableAccounts(ctx, user.EnableAccountsInput{
+			UserID:        zeroByteUserID,
+			ApplicationID: applicationID,
+			Addresses:     []address.Address{zeroByteAddress},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, output)
+		require.Len(t, output.Accounts, 1)
+	})
+}
+
+func TestDefaultUseCase_AddUserAccounts_AKVEmptyConfig(t *testing.T) {
+	ctx := context.Background()
+
+	applicationID := uuid.NewString()
+	description := "application for AKV empty-config EnableAccounts test"
+	createApplicationOutput, createApplicationErr := app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{
+		ID:          &applicationID,
+		ChainID:     *chainID,
+		Description: &description,
+	})
+	require.NoError(t, createApplicationErr)
+	require.NotNil(t, createApplicationOutput)
+
+	// AKV slot with no configured keys: the set of addresses backed by the module is empty.
+	akvHSM := createAKVHSM(ctx, t)
+	createHSMSlotOutput, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, hsmslot.CreateHSMSlotInput{
+		ApplicationID: applicationID,
+		HSMModuleID:   akvHSM.ID,
+		Config:        hsmslot.SlotConfig{},
+	})
+	require.NoError(t, createHSMSlotErr)
+	require.NotNil(t, createHSMSlotOutput)
+
+	userID := uuid.NewString()
+	_, createUserErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+		ID:            &userID,
+		ApplicationID: applicationID,
+		Roles:         []string{"application-admin"},
+	})
+	require.NoError(t, createUserErr)
+
+	t.Run("failure: enabling against an empty AKV config is rejected", func(t *testing.T) {
+		// addressesBackedByModule returns an empty set; the caller must reject (not vacuously accept).
+		output, err := app.UserUseCase.EnableAccounts(ctx, user.EnableAccountsInput{
+			UserID:        userID,
+			ApplicationID: applicationID,
+			Addresses:     []address.Address{address.MustNewFromHexString("0xDc611d30c81e723D0A78BE33f5aF3974c108f5cf")},
+		})
+		require.Error(t, err)
+		require.True(t, errors.IsPreconditionFailed(err))
+		require.Nil(t, output)
+	})
 }

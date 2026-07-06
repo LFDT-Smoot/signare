@@ -1,4 +1,5 @@
 // Package httpin provides the implementation of the HTTP input adapters.
+// nolint: gosec
 package httpin
 
 import (
@@ -13,14 +14,6 @@ import (
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/application"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmmodule"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
-	"github.com/hyperledger-labs/signare/app/pkg/utils"
-)
-
-const (
-	defaultApplicationListLimit int = 30
-	maxListApplicationLimit     int = 100
-	defaultAdminUserListLimit   int = 30
-	maxListAdminUserLimit       int = 100
 )
 
 var _ generatedhttpinfra.AdminAPIAdapter = new(DefaultAdminAPIAdapter)
@@ -115,8 +108,7 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminApplicationsList(ctx context.Co
 	if data.Offset != nil {
 		offsetInput = int(*data.Offset)
 	}
-	pageLimit := utils.MaxValue(utils.DefaultIntValue(limitInput, defaultApplicationListLimit), maxListApplicationLimit)
-	input.PageLimit = pageLimit
+	input.PageLimit = limitInput
 	input.PageOffset = offsetInput
 	input.OrderBy = data.OrderBy
 	input.OrderDirection = data.OrderDirection
@@ -170,7 +162,7 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminApplicationsRemove(ctx context.
 func mapApplicationOut(in application.Application) generatedhttpinfra.ApplicationDetail {
 	creationDate := in.CreationDate.String()
 	lastUpdate := in.LastUpdate.String()
-	chainID := in.ChainID.String()
+	chainID := in.DefaultChainID.String()
 	return generatedhttpinfra.ApplicationDetail{
 		Meta: &generatedhttpinfra.ResourceMetaDetail{
 			Id:              &in.ID,
@@ -208,6 +200,12 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminModulesCreate(ctx context.Conte
 			input.ModuleKind = *moduleKind
 			if request.ModuleCreation.Spec.Configuration.HsmKind == generatedhttpinfra.HsmKindSofthsm {
 				input.Configuration.SoftHSMConfiguration = &hsmmodule.SoftHSMConfiguration{}
+			}
+			if request.ModuleCreation.Spec.Configuration.HsmKind == generatedhttpinfra.HsmKindAkv {
+				input.Configuration.AKVConfiguration = &hsmmodule.AKVConfiguration{}
+			}
+			if request.ModuleCreation.Spec.Configuration.HsmKind == generatedhttpinfra.HsmKindLocalkeyvault {
+				input.Configuration.LKVConfiguration = &hsmmodule.LKVConfiguration{}
 			}
 		}
 	}
@@ -285,6 +283,9 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminModulesEdit(ctx context.Context
 			if request.ModuleUpdate.Spec.Configuration.HsmKind == generatedhttpinfra.HsmKindSofthsm {
 				input.Configuration.SoftHSMConfiguration = &hsmmodule.SoftHSMConfiguration{}
 			}
+			if request.ModuleUpdate.Spec.Configuration.HsmKind == generatedhttpinfra.HsmKindAkv {
+				input.Configuration.AKVConfiguration = &hsmmodule.AKVConfiguration{}
+			}
 		}
 	}
 
@@ -318,8 +319,7 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminModulesList(ctx context.Context
 	if request.Offset != nil {
 		offsetInput = int(*request.Offset)
 	}
-	pageLimit := utils.MaxValue(utils.DefaultIntValue(limitInput, defaultAdminUserListLimit), maxListAdminUserLimit)
-	input.PageLimit = pageLimit
+	input.PageLimit = limitInput
 	input.PageOffset = offsetInput
 	input.OrderBy = request.OrderBy
 	input.OrderDirection = request.OrderDirection
@@ -400,6 +400,17 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsCreate(ctx context.Context
 	if data.SlotCreation.Spec != nil && data.SlotCreation.Spec.Pin != nil {
 		input.Pin = *data.SlotCreation.Spec.Pin
 	}
+	if data.SlotCreation.Spec != nil && data.SlotCreation.Spec.Config != nil {
+		config := *data.SlotCreation.Spec.Config
+		input.Config.AKV = make([]hsmslot.AKVConfig, len(config))
+		for i, configItem := range config {
+			input.Config.AKV[i] = hsmslot.AKVConfig{
+				KeyName:          *configItem.KeyName,
+				KeyVersion:       *configItem.KeyVersion,
+				KeyPublicAddress: *configItem.KeyPublicAddress,
+			}
+		}
+	}
 
 	out, err := adapter.hsmSlotUseCase.CreateHSMSlot(ctx, input)
 	if err != nil {
@@ -446,8 +457,7 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsList(ctx context.Context, 
 	if data.Offset != nil {
 		offsetInput = int(*data.Offset)
 	}
-	pageLimit := utils.MaxValue(utils.DefaultIntValue(limitInput, defaultApplicationListLimit), maxListApplicationLimit)
-	input.PageLimit = pageLimit
+	input.PageLimit = limitInput
 	input.PageOffset = offsetInput
 	input.OrderBy = data.OrderBy
 	input.OrderDirection = data.OrderDirection
@@ -521,6 +531,41 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsUpdatePin(ctx context.Cont
 	}
 
 	return &generatedhttpinfra.AdminSlotsUpdatePinResponseWrapper{
+		SlotDetail: mapSlot(out.HSMSlot),
+		ResponseInfo: httpinfra.ResponseInfo{
+			ResponseType: httpinfra.ResponseTypeOk,
+		},
+	}, nil
+}
+
+func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsUpdateConfig(ctx context.Context, data generatedhttpinfra.AdminSlotsUpdateConfigRequest) (*generatedhttpinfra.AdminSlotsUpdateConfigResponseWrapper, *httpinfra.HTTPError) {
+	input := hsmslot.EditConfigInput{
+		StandardID: entities.StandardID{
+			ID: data.SlotId,
+		},
+		HSMModuleID: data.ModuleId,
+	}
+	if data.SlotUpdateConfig.Meta != nil && data.SlotUpdateConfig.Meta.ResourceVersion != nil {
+		input.ResourceVersion = *data.SlotUpdateConfig.Meta.ResourceVersion
+	}
+	if data.SlotUpdateConfig.Spec != nil && data.SlotUpdateConfig.Spec.Config != nil {
+		config := *data.SlotUpdateConfig.Spec.Config
+		input.Config.AKV = make([]hsmslot.AKVConfig, len(config))
+		for i, configItem := range config {
+			input.Config.AKV[i] = hsmslot.AKVConfig{
+				KeyName:          *configItem.KeyName,
+				KeyVersion:       *configItem.KeyVersion,
+				KeyPublicAddress: *configItem.KeyPublicAddress,
+			}
+		}
+	}
+
+	out, err := adapter.hsmSlotUseCase.EditConfig(ctx, input)
+	if err != nil {
+		return nil, httpinfra.NewHTTPErrorFromUseCaseError(ctx, err)
+	}
+
+	return &generatedhttpinfra.AdminSlotsUpdateConfigResponseWrapper{
 		SlotDetail: mapSlot(out.HSMSlot),
 		ResponseInfo: httpinfra.ResponseInfo{
 			ResponseType: httpinfra.ResponseTypeOk,
@@ -658,8 +703,7 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminUsersList(ctx context.Context, 
 	if request.Offset != nil {
 		offsetInput = int(*request.Offset)
 	}
-	pageLimit := utils.MaxValue(utils.DefaultIntValue(limitInput, defaultAdminUserListLimit), maxListAdminUserLimit)
-	input.PageLimit = pageLimit
+	input.PageLimit = limitInput
 	input.PageOffset = offsetInput
 	input.OrderBy = request.OrderBy
 	input.OrderDirection = request.OrderDirection
@@ -747,6 +791,15 @@ func mapSlot(slot hsmslot.HSMSlot) generatedhttpinfra.SlotDetail {
 	creationDate := slot.CreationDate.String()
 	lastUpdate := slot.LastUpdate.String()
 
+	collectionToReturn := make([]generatedhttpinfra.SlotDetailConfig, 0)
+	for i := range slot.Config.AKV {
+		item := generatedhttpinfra.SlotDetailConfig{}
+		item.KeyName = &slot.Config.AKV[i].KeyName
+		item.KeyVersion = &slot.Config.AKV[i].KeyVersion
+		item.KeyPublicAddress = &slot.Config.AKV[i].KeyPublicAddress
+		collectionToReturn = append(collectionToReturn, item)
+	}
+
 	return generatedhttpinfra.SlotDetail{
 		Meta: &generatedhttpinfra.ResourceMetaDetail{
 			Id:              &slot.ID,
@@ -758,6 +811,7 @@ func mapSlot(slot hsmslot.HSMSlot) generatedhttpinfra.SlotDetail {
 			HardwareSecurityModuleId: &slot.HSMModuleID,
 			ApplicationId:            &slot.ApplicationID,
 			Slot:                     &slot.Slot,
+			Config:                   &collectionToReturn,
 		},
 	}
 }
@@ -785,7 +839,7 @@ func mapModule(module hsmmodule.HSMModule) (*generatedhttpinfra.ModuleDetail, er
 		Spec: &generatedhttpinfra.ModuleSpec{
 			Configuration: &generatedhttpinfra.ModuleSpecConfiguration{
 				HsmKind: *infraHSMKind,
-				SoftHsm: &generatedhttpinfra.SoftHsm{
+				ModuleKindSoftHsm: &generatedhttpinfra.ModuleKindSoftHsm{
 					HsmKind: &kind,
 				},
 			},
@@ -799,12 +853,28 @@ func mapModuleCreationSpecConfigurationTypeFrom(configurationType hsmmodule.Modu
 		t := generatedhttpinfra.HsmKindSofthsm
 		return &t, nil
 	}
+	if configurationType == hsmmodule.AKVModuleKind {
+		t := generatedhttpinfra.HsmKindAkv
+		return &t, nil
+	}
+	if configurationType == hsmmodule.LKVModuleKind {
+		t := generatedhttpinfra.HsmKindLocalkeyvault
+		return &t, nil
+	}
 	return nil, httpinfra.NewHTTPError(httpinfra.StatusInternal).SetMessage(fmt.Sprintf("cannot map invalid module kind [%s]", configurationType))
 }
 
 func mapUseCaseHSMKindFrom(configurationKind generatedhttpinfra.ModuleSpecConfigurationHsmKind) (*hsmmodule.ModuleKind, *httpinfra.HTTPError) {
 	if configurationKind == generatedhttpinfra.HsmKindSofthsm {
 		t := hsmmodule.SoftHSMModuleKind
+		return &t, nil
+	}
+	if configurationKind == generatedhttpinfra.HsmKindAkv {
+		t := hsmmodule.AKVModuleKind
+		return &t, nil
+	}
+	if configurationKind == generatedhttpinfra.HsmKindLocalkeyvault {
+		t := hsmmodule.LKVModuleKind
 		return &t, nil
 	}
 	return nil, httpinfra.NewHTTPError(httpinfra.StatusInternal).SetMessage(fmt.Sprintf("can't map '%s' to usecase HSM type", configurationKind))

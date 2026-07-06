@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 
 	curves "github.com/btcsuite/btcd/btcec/v2"
 	"github.com/miekg/pkcs11"
@@ -29,6 +30,7 @@ const (
 type PKCS11HSMSignatureManager struct {
 	pkcsContext       *pkcs11.Ctx
 	connectionDetails PKCS11HSMConnectionDetails
+	mutex             sync.Mutex
 }
 
 // PKCS11HSMSignatureManagerOptions defines options to create a new instance of PKCS11HSMSignatureManager.
@@ -55,6 +57,9 @@ func ProvidePKCS11HSMSignatureManager(options PKCS11HSMSignatureManagerOptions) 
 }
 
 func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signaturemanager.GenerateKeyInput) (*signaturemanager.GenerateKeyOutput, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	tracer := input.Tracer
 	slot, err := strconv.ParseUint(input.Slot, 10, 32)
 	if err != nil {
@@ -132,7 +137,14 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 	}, nil
 }
 
+func (s *PKCS11HSMSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, _ signaturemanager.DeriveAddressFromPrivateKeyInput) (*signaturemanager.DeriveAddressFromPrivateKeyOutput, error) {
+	return nil, signaturemanager.NewNotImplementedError()
+}
+
 func (s *PKCS11HSMSignatureManager) RemoveKey(_ context.Context, input signaturemanager.RemoveKeyInput) (*signaturemanager.RemoveKeyOutput, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	tracer := input.Tracer
 	tracer.AddProperty("address", input.Address.String())
 	slot, err := strconv.ParseUint(input.Slot, 10, 32)
@@ -162,7 +174,7 @@ func (s *PKCS11HSMSignatureManager) RemoveKey(_ context.Context, input signature
 	}
 	privateKeyObjects, err := s.findObjects(session, templatePrivate)
 	if err != nil {
-		return nil, signererrors.InternalFromErr(err).WithMessage(fmt.Sprintf("error finding PKCS11 attributes: %v", err))
+		return nil, signererrors.InternalFromErr(err).WithMessage("error finding PKCS11 attributes: %v", err)
 	}
 
 	// Public key
@@ -174,7 +186,7 @@ func (s *PKCS11HSMSignatureManager) RemoveKey(_ context.Context, input signature
 	}
 	publicKeyObjects, err := s.findObjects(session, templatePublic)
 	if err != nil {
-		return nil, signererrors.InternalFromErr(err).WithMessage(fmt.Sprintf("error finding PKCS11 attributes: %v", err))
+		return nil, signererrors.InternalFromErr(err).WithMessage("error finding PKCS11 attributes: %v", err)
 	}
 
 	if len(privateKeyObjects) == 0 && len(publicKeyObjects) == 0 {
@@ -198,6 +210,9 @@ func (s *PKCS11HSMSignatureManager) RemoveKey(_ context.Context, input signature
 }
 
 func (s *PKCS11HSMSignatureManager) ListKeys(_ context.Context, input signaturemanager.ListKeysInput) (*signaturemanager.ListKeysOutput, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	tracer := input.Tracer
 	slot, err := strconv.ParseUint(input.Slot, 10, 32)
 	if err != nil {
@@ -255,6 +270,9 @@ func (s *PKCS11HSMSignatureManager) ListKeys(_ context.Context, input signaturem
 }
 
 func (s *PKCS11HSMSignatureManager) Sign(ctx context.Context, input signaturemanager.SignInput) (*signaturemanager.SignOutput, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	tracer := input.Tracer
 	slot, err := strconv.ParseUint(input.Slot, 10, 32)
 	if err != nil {
@@ -276,6 +294,9 @@ func (s *PKCS11HSMSignatureManager) Sign(ctx context.Context, input signatureman
 }
 
 func (s *PKCS11HSMSignatureManager) Close(_ context.Context, _ signaturemanager.CloseInput) (*signaturemanager.CloseOutput, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	err := s.pkcsContext.Finalize()
 	if err != nil {
 		return nil, toSignatureManagerErr(err, "error calling PKCS11 finalize")
@@ -285,6 +306,9 @@ func (s *PKCS11HSMSignatureManager) Close(_ context.Context, _ signaturemanager.
 }
 
 func (s *PKCS11HSMSignatureManager) Open(_ context.Context, _ signaturemanager.OpenInput) (*signaturemanager.OpenOutput, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	err := s.pkcsContext.Initialize()
 	if err != nil {
 		return nil, toSignatureManagerErr(err, "error calling PKCS11 finalize")
@@ -294,6 +318,9 @@ func (s *PKCS11HSMSignatureManager) Open(_ context.Context, _ signaturemanager.O
 }
 
 func (s *PKCS11HSMSignatureManager) IsAlive(_ context.Context, input signaturemanager.IsAliveInput) (*signaturemanager.IsAliveOutput, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	tracer := input.Tracer
 	slot, err := strconv.ParseUint(input.Slot, 10, 32)
 	if err != nil {
@@ -375,7 +402,7 @@ func (s *PKCS11HSMSignatureManager) getLabel(session pkcs11.SessionHandle, objec
 	}
 	as, err := s.pkcsContext.GetAttributeValue(session, objectHandle, attributeTemplate)
 	if err != nil {
-		return nil, signererrors.InternalFromErr(err).WithMessage(fmt.Sprintf("error retrieving attribute value: %v", err))
+		return nil, signererrors.InternalFromErr(err).WithMessage("error retrieving attribute value: %v", err)
 	}
 	result := string(as[0].Value)
 	return &result, nil
@@ -456,7 +483,7 @@ func (s *PKCS11HSMSignatureManager) findObjects(session pkcs11.SessionHandle, te
 	var done = false
 	var objects = make([]pkcs11.ObjectHandle, 0)
 	for !done {
-		os, _, errFindObjects := s.pkcsContext.FindObjects(session, 10000) //the second returned parameter is deprecated and must be ignored
+		os, _, errFindObjects := s.pkcsContext.FindObjects(session, 10000) // the second returned parameter is deprecated and must be ignored
 		if errFindObjects != nil {
 			return nil, signaturemanager.NewInternalError().WithMessage(fmt.Sprintf("PKCS11 find objects failed. Error: %v", errFindObjects))
 		}
@@ -524,6 +551,8 @@ func (s *PKCS11HSMSignatureManager) closeSession(tracer logger.Tracer, session p
 }
 
 // GenerateTimestampId returns a timestamp to use as CKA_ID so keys can be sorted chronologically
+//
+//nolint:gosec
 func generateTimestampId() []byte {
 	t := time.Now().UnixNano()
 	ts := make([]byte, 8)

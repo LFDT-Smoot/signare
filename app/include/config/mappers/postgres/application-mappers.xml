@@ -3,7 +3,7 @@
         INSERT INTO cfg_application (
             id,
             internal_resource_id,
-            chain_id,
+            default_chain_id,
             description,
             creation_date,
             last_update,
@@ -11,7 +11,7 @@
         ) VALUES (
             :id,
             :internal_resource_id,
-            :chain_id,
+            :default_chain_id,
             :description,
             :creation_date,
             :last_update,
@@ -22,7 +22,7 @@
         SELECT
             id,
             internal_resource_id,
-            chain_id,
+            default_chain_id,
             description,
             creation_date,
             last_update,
@@ -40,17 +40,17 @@
             {{end}}
         {{ end }}
         {{ if .Order }}
-            ORDER BY {{ .Order.By }} {{ if eq .Order.Direction "asc" }}ASC{{ else }}DESC{{end}}
-            {{ if .Pagination}}
-                LIMIT {{.Pagination.Limit}} OFFSET {{.Pagination.Offset}}
-            {{ end }}
+            ORDER BY {{ .Order.ToSQLStmt }}
+        {{ end }}
+        {{ if .Pagination}}
+            LIMIT {{.Pagination.Limit}} OFFSET {{.Pagination.Offset}}
         {{ end }}
     </statement>
     <statement id="getById">
         SELECT
             id,
             internal_resource_id,
-            chain_id,
+            default_chain_id,
             description,
             creation_date,
             last_update,
@@ -64,7 +64,7 @@
         UPDATE
             cfg_application
         SET
-            chain_id=:chain_id,
+            default_chain_id=:default_chain_id,
             description=:description,
             last_update=:last_update,
             resource_version=:new_resource_version

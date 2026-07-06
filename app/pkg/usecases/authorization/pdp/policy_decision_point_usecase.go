@@ -2,12 +2,25 @@ package pdp
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
 	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
 
 	"github.com/asaskevich/govalidator"
 )
+
+// adminActionPrefix is the action namespace reserved for global administrator actions. A request
+// carrying an application context may never authorize an action in this namespace.
+//
+// This guard is intentionally independent of the role scope metadata used at assignment time
+// (role.ScopeAdmin): the two layers reason over different signals (action namespace here, role
+// scope there) so a failure in one does not defeat the other. The coupling between them is the
+// invariant "every action granted only to admin-scoped roles lives under this namespace", which is
+// enforced by TestRBACInvariant_AdminExclusiveActionsAreInAdminNamespace. If a future privileged
+// action is added under a different namespace, that test fails and both it and this prefix must be
+// updated together.
+const adminActionPrefix = "admin."
 
 // PolicyDecisionPointUseCase is the business logic to perform user authorization for different actions.
 type PolicyDecisionPointUseCase interface {
@@ -47,6 +60,13 @@ func (useCase DefaultPolicyDecisionPointUseCase) AuthorizeUser(ctx context.Conte
 
 	var roles *[]string
 	if input.ApplicationID != nil && *input.ApplicationID != "" {
+		// Defense-in-depth: a request scoped to an application can never authorize an admin-scoped
+		// action, regardless of the roles assigned to the user. This prevents privilege escalation
+		// even if an admin-scoped role was somehow assigned to an application user.
+		if strings.HasPrefix(input.ActionID, adminActionPrefix) {
+			return nil, errors.PreconditionFailed().SetHumanReadableMessage("action not authorized for user [%s]", input.UserID)
+		}
+
 		getUserInput := GetUserRolesInput{
 			UserID:        input.UserID,
 			ApplicationID: *input.ApplicationID,

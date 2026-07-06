@@ -43,6 +43,25 @@ func MustNewFromHexString(address string) Address {
 	return a
 }
 
+// NewFromHexStringChecksum behaves like NewFromHexString but, when the input is mixed-case, it
+// additionally requires the EIP-55 checksum to match. All-lowercase or all-uppercase inputs carry no
+// checksum information and are accepted as-is. Use it for externally-supplied addresses so a mistyped
+// address that flips a nibble is rejected rather than accepted as a different valid address.
+func NewFromHexStringChecksum(address string) (Address, error) {
+	a, err := NewFromHexString(address)
+	if err != nil {
+		return ZeroAddress, err
+	}
+	hexPart := removeHexPrefix(address)
+	if hexPart == strings.ToLower(hexPart) || hexPart == strings.ToUpper(hexPart) {
+		return a, nil
+	}
+	if a.String() != "0x"+hexPart {
+		return ZeroAddress, signererrors.InvalidArgument().SetHumanReadableMessage("invalid address checksum: '%s'", address)
+	}
+	return a, nil
+}
+
 // NewFromRawBytes creates a new address from raw unencoded bytes. If b is larger than len(a), b will be cropped from the left
 func NewFromRawBytes(b []byte) (*Address, error) {
 	var a [addressLength]byte

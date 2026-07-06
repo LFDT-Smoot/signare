@@ -20,10 +20,20 @@ type HSMModule struct {
 type HSMModuleConfiguration struct {
 	// SoftHSMConfiguration configuration of a SoftHSM module.
 	SoftHSMConfiguration *SoftHSMConfiguration
+	// AKVConfiguration configuration of a AKV module.
+	AKVConfiguration *AKVConfiguration
+	// LKVConfiguration configuration of a LKV module.
+	LKVConfiguration *LKVConfiguration
 }
 
 // SoftHSMConfiguration configuration of a SoftHSM module.
 type SoftHSMConfiguration struct{}
+
+// AKVConfiguration configuration of a AKV module.
+type AKVConfiguration struct{}
+
+// LKVConfiguration configuration of a LKV module.
+type LKVConfiguration struct{}
 
 // HSMModulesCollection defines a collection of HSMModule resources.
 type HSMModulesCollection struct {
@@ -42,7 +52,7 @@ type CreateHSMModuleInput struct {
 	// Configuration defines the configuration of the CreateHSMModuleOutput.
 	Configuration HSMModuleConfiguration
 	// ModuleKind defines the type of the CreateHSMModuleOutput.
-	ModuleKind ModuleKind `valid:"in(SoftHSM)"`
+	ModuleKind ModuleKind `valid:"in(SoftHSM|AKV|LocalKeyVault)"`
 }
 
 // CreateHSMModuleOutput defines the output of the CreateHSMModule method.

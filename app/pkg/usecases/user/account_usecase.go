@@ -9,6 +9,7 @@ import (
 	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnection"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
+	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
 
 	"github.com/asaskevich/govalidator"
 )
@@ -151,23 +152,31 @@ func (u *DefaultUserUseCase) DeleteAllAccountsForAddress(ctx context.Context, in
 	tracer.Debug("removing address from HSM")
 
 	// 1. Remove it from the HSM
-	removeAddressInput := hsmconnector.RemoveAddressInput{
-		SlotConnectionData: hsmconnector.SlotConnectionData{
-			Slot:       hsmConnection.Slot,
-			Pin:        hsmConnection.Pin,
-			ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
-			ChainID:    hsmConnection.ChainID,
-		},
-		Address: input.Address,
+	switch hsmConnection.ModuleKind {
+	case hsmconnector.LKVModuleKind:
+		removeLocalKeyInput := hsmslot.RemoveLocalKeyInput{
+			StandardID: hsmConnection.Slot.StandardID,
+			Address:    input.Address,
+		}
+		err = u.slotUseCase.RemoveLocalKey(ctx, removeLocalKeyInput)
+	default:
+		removeAddressInput := hsmconnector.RemoveAddressInput{
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       hsmConnection.Slot.Slot,
+				Pin:        hsmConnection.Slot.Pin,
+				ModuleKind: hsmConnection.ModuleKind,
+			},
+			Address: input.Address,
+		}
+		_, err = u.hsmConnector.RemoveAddress(ctx, removeAddressInput)
 	}
-	_, err = u.hsmConnector.RemoveAddress(ctx, removeAddressInput)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, errors.NotFoundFromErr(err)
 		}
 		return nil, errors.InternalFromErr(err)
 	}
-
 	tracer.Trace("removed address from HSM")
 
 	// 2. Remove it from storage

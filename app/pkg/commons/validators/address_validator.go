@@ -7,7 +7,7 @@ import (
 )
 
 func setAddressValidator() {
-	govalidator.CustomTypeTagMap.Set("address", func(i any, o any) bool {
+	govalidator.CustomTypeTagMap.Set("address", func(i any, _ any) bool {
 		addr, ok := i.(address.Address)
 		if ok {
 			return !addr.IsEmpty()

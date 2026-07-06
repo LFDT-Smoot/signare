@@ -105,10 +105,12 @@ func (u *DefaultUseCase) ListEntries(ctx context.Context, input ListEntriesInput
 
 	filters := u.storage.Filter()
 	direction := utils.DefaultString(input.OrderDirection, defaultOrderDirection)
-	filters.OrderByCreationDate(persistence.OrderDirection(direction))
-	if input.PageLimit > 0 {
-		filters.Paged(input.PageLimit, input.PageOffset)
+	direction, validDirection := entities.NormalizeOrderDirection(direction)
+	if !validDirection {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("invalid order direction %q, expected one of [asc, desc]", input.OrderDirection)
 	}
+	filters.OrderByCreationDate(persistence.OrderDirection(direction))
+	filters.Paged(persistence.ClampPageLimit(input.PageLimit), input.PageOffset)
 	if input.Resource != nil {
 		filters.FilterByResource(input.Resource.ResourceID, string(input.Resource.ResourceKind))
 	}

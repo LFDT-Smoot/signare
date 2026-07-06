@@ -108,12 +108,12 @@ type DefaultUseCaseTransactionalDecoratorOptions struct {
 // ProvideDefaultUseCaseTransactionalDecorator creates a new DefaultUseCaseTransactionalDecorator instance.
 func ProvideDefaultUseCaseTransactionalDecorator(options DefaultUseCaseTransactionalDecoratorOptions) (*DefaultUseCaseTransactionalDecorator, error) {
 	if options.DefaultUseCase == nil {
-		errorMessage := "'DefaultAccountUseCase' is mandatory"
-		return nil, errors.InvalidArgument().WithMessage(errorMessage)
+		errorMessage := ""
+		return nil, errors.InvalidArgument().WithMessage("%s", errorMessage)
 	}
 	if options.TransactionalManager == nil {
 		errorMessage := "'TransactionalManager' is mandatory"
-		return nil, errors.InvalidArgument().WithMessage(errorMessage)
+		return nil, errors.InvalidArgument().WithMessage("%s", errorMessage)
 	}
 	return &DefaultUseCaseTransactionalDecorator{
 		DefaultUseCase:       *options.DefaultUseCase,

@@ -85,14 +85,16 @@ func (u *DefaultUseCase) ListAdmins(ctx context.Context, input ListAdminsInput) 
 
 	filters := u.adminStorage.Filter()
 	direction := utils.DefaultString(input.OrderDirection, defaultOrderDirection)
+	direction, validDirection := entities.NormalizeOrderDirection(direction)
+	if !validDirection {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("invalid order direction %q, expected one of [asc, desc]", input.OrderDirection)
+	}
 	filters.OrderByCreationDate(persistence.OrderDirection(direction))
 	if input.OrderBy == entities.OrderByLastUpdate {
 		filters.OrderByLastUpdateDate(persistence.OrderDirection(direction))
 	}
 
-	if input.PageLimit > 0 {
-		filters.Paged(input.PageLimit, input.PageOffset)
-	}
+	filters.Paged(persistence.ClampPageLimit(input.PageLimit), input.PageOffset)
 
 	collection, err := u.adminStorage.All(ctx, filters)
 	if err != nil {
@@ -161,7 +163,7 @@ func (u *DefaultUseCase) DeleteAdmin(ctx context.Context, input DeleteAdminInput
 
 	if len(listAdminsOutput.Items) <= 1 {
 		msg := "not possible to delete admin"
-		return nil, errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	removeAllDependenciesErr := u.removeAllDependencies(ctx, input.StandardID)

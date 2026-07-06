@@ -11,6 +11,43 @@ import (
 // FuncToExecuteAfterCommitType callback function to execute after a database transaction commit
 type FuncToExecuteAfterCommitType func(context.Context) error
 
+// afterCommitCallbacksContextKeyType is the unexported type for the after-commit callbacks context key.
+type afterCommitCallbacksContextKeyType struct{}
+
+// afterCommitCallbacksContextKey is the context key under which the per-transaction callback registry is stored.
+var afterCommitCallbacksContextKey = afterCommitCallbacksContextKeyType{}
+
+// afterCommitCallbacks holds the callbacks registered during a single transaction. It is carried in the
+// request context for the lifetime of the transaction, so it is released together with the context on every
+// exit path (commit, rollback, commit failure or recovered panic) and therefore cannot leak.
+type afterCommitCallbacks struct {
+	mu        sync.Mutex
+	callbacks []FuncToExecuteAfterCommitType
+}
+
+// add appends a callback to the registry.
+func (c *afterCommitCallbacks) add(funcToExecuteAfterCommit FuncToExecuteAfterCommitType) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.callbacks = append(c.callbacks, funcToExecuteAfterCommit)
+}
+
+// snapshot returns a copy of the registered callbacks in registration order.
+func (c *afterCommitCallbacks) snapshot() []FuncToExecuteAfterCommitType {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]FuncToExecuteAfterCommitType, len(c.callbacks))
+	copy(out, c.callbacks)
+	return out
+}
+
+// callbacksFromContext returns the per-transaction callback registry from the context, or nil if no
+// manager-managed transaction is in progress.
+func callbacksFromContext(ctx context.Context) *afterCommitCallbacks {
+	holder, _ := ctx.Value(afterCommitCallbacksContextKey).(*afterCommitCallbacks)
+	return holder
+}
+
 // TransactionalManagerUseCase defines the functionality to execute a transaction in a transactional manner.
 type TransactionalManagerUseCase interface {
 	// ExecuteInTransaction executes a database transaction.
@@ -32,11 +69,14 @@ func (t *TransactionalManager) ExecuteInTransaction(ctx context.Context, transac
 		if errBeginTransaction != nil {
 			return nil, errBeginTransaction
 		}
-		txCtx = beginTransactionCtx
-	}
-	tx, err := t.transactionalStorage.GetTransaction(txCtx)
-	if err != nil {
-		return nil, errors.InternalFromErr(err)
+		// The outermost transaction owns the after-commit callback registry for its entire lifetime.
+		// Carrying it in the context means it is released on every exit path, so it cannot leak.
+		txCtx = context.WithValue(beginTransactionCtx, afterCommitCallbacksContextKey, &afterCommitCallbacks{})
+		// Sanity-check that the transaction we just began is retrievable from the context. On the
+		// ongoing/nested path the transaction was already confirmed above, so no re-check is needed.
+		if _, err = t.transactionalStorage.GetTransaction(txCtx); err != nil {
+			return nil, errors.InternalFromErr(err)
+		}
 	}
 	defer func() {
 		if x := recover(); x != nil {
@@ -71,15 +111,11 @@ func (t *TransactionalManager) ExecuteInTransaction(ctx context.Context, transac
 			return nil, commitTransactionErr
 		}
 
-		value, needToExecuteFunc := funcToExecuteAfterCommitMap.LoadAndDelete(tx)
-		if needToExecuteFunc {
-			funcToExecuteAfterCommitArray, correctValueType := value.([]FuncToExecuteAfterCommitType)
-			if correctValueType {
-				for _, funcToExecute := range funcToExecuteAfterCommitArray {
-					failureFunc := funcToExecute(txCtx)
-					if failureFunc != nil {
-						return nil, failureFunc
-					}
+		if holder := callbacksFromContext(txCtx); holder != nil {
+			for _, funcToExecute := range holder.snapshot() {
+				failureFunc := funcToExecute(txCtx)
+				if failureFunc != nil {
+					return nil, failureFunc
 				}
 			}
 		}
@@ -90,26 +126,12 @@ func (t *TransactionalManager) ExecuteInTransaction(ctx context.Context, transac
 
 // RegisterAfterCommitIfTransactionInProgress registers a callback function to execute after the database transaction in the provided context is committed
 func (t *TransactionalManager) RegisterAfterCommitIfTransactionInProgress(ctx context.Context, funcToExecuteAfterCommit FuncToExecuteAfterCommitType) bool {
-	tx, _ := t.transactionalStorage.GetTransaction(ctx)
-	if tx == nil {
-		// if transaction is nil, no transaction is in progress and no function can be registered
+	holder := callbacksFromContext(ctx)
+	if holder == nil {
+		// no transaction in progress: no callback can be registered
 		return false
 	}
-
-	value, alreadyLoaded := funcToExecuteAfterCommitMap.Load(tx)
-	if alreadyLoaded {
-		funcToExecuteAfterCommitArray, correctValueType := value.([]FuncToExecuteAfterCommitType)
-		if !correctValueType {
-			logger.LogEntry(ctx).Warnf("Functions to execute after commit incorrectly registered [%s]", value)
-			initialFuncToExecuteAfterCommitArray := []FuncToExecuteAfterCommitType{funcToExecuteAfterCommit}
-			funcToExecuteAfterCommitMap.Store(tx, initialFuncToExecuteAfterCommitArray)
-		} else {
-			funcToExecuteAfterCommitMap.Store(tx, append(funcToExecuteAfterCommitArray, funcToExecuteAfterCommit))
-		}
-	} else {
-		initialFuncToExecuteAfterCommitArray := []FuncToExecuteAfterCommitType{funcToExecuteAfterCommit}
-		funcToExecuteAfterCommitMap.Store(tx, initialFuncToExecuteAfterCommitArray)
-	}
+	holder.add(funcToExecuteAfterCommit)
 	return true
 }
 
@@ -132,5 +154,3 @@ func ProvideTransactionalManager(options TransactionalManagerOptions) *Transacti
 		transactionalStorage: options.TransactionalStorage,
 	}
 }
-
-var funcToExecuteAfterCommitMap sync.Map

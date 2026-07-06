@@ -1,6 +1,6 @@
 # Role Based Access Control Configuration 
 
-This document provides an overview of the role base access control of the signare REST API, JSON RPC API and its configuration.
+This document provides an overview of the role based access control of the signare REST API, JSON RPC API and its configuration.
 
 The target audience of this document are developers and system administrators interested in understanding and configuring authorization within the signare.
 
@@ -90,6 +90,7 @@ actions:
   - rpc.method.eth_removeAccount
   - rpc.method.eth_accounts
   - rpc.method.eth_signTransaction
+  - rpc.method.eth_signTypedData
 ```
 
 ### How to edit permissions
@@ -98,9 +99,10 @@ Move over to ``/app/include/rbac`` and by editing the file ``permissions.yaml`` 
 
 ```YAML
   - id: allow-user-transaction-sign-actions
-    description: Grants access to sign transactions
+    description: Grants access to sign transactions and EIP-712 typed data
     actions:
       - rpc.method.eth_signTransaction
+      - rpc.method.eth_signTypedData
 ```
 
 ### How to edit roles
@@ -135,10 +137,10 @@ The default RBAC configuration consists of the following roles and allowed actio
 |------------------------|-----------|-------------------------------------------------------|------------------------------------------------------|
 | **signer-admin**       | Admin     | Admins, Users, Accounts, Applications, Modules, Slots | ✗                                                    |
 | **application-admin**  | User      | Users, Accounts                                       | eth_generateAccount, eth_removeAccount, eth_accounts |
-| **transaction-signer** | User      | ✗                                                     | eth_signTransaction                                  |
+| **transaction-signer** | User      | ✗                                                     | eth_signTransaction, eth_signTypedData               |
 
 ### Transaction signing
 
-One special case in our RBAC model is the access model configured for the ``eth_signTransaction`` RPC method. 
-A request to sign a transaction has a `from` field that must be fulfilled with an ethereum address, this address must be enabled in the accounts' list of 
-the user defined in the HTTP header of the request.
+One special case in our RBAC model is the access model configured for the account signing RPC methods, ``eth_signTransaction`` and ``eth_signTypedData``. 
+Beyond the role-based permission to call the method, the signing account must be enabled in the accounts' list of the user defined in the HTTP header of the request. 
+The signing account is taken from the `from` field for ``eth_signTransaction`` and from the `address` field for ``eth_signTypedData``.

@@ -17,6 +17,8 @@ type Connection interface {
 	GetMigrator() Migrator
 	// GetDialectName returns the name of the SQL dialect used by the connection.
 	GetDialectName() string
+	// Close closes the underlying database connection pool, releasing any open connections.
+	Close() error
 }
 
 // ConnectionFwOptions defines the options to configure a Connection
@@ -97,6 +99,13 @@ func (c ConnectionFw) GetMigrator() Migrator {
 
 func (c ConnectionFw) GetDialectName() string {
 	return c.dialectName
+}
+
+func (c ConnectionFw) Close() error {
+	if c.db == nil {
+		return nil
+	}
+	return c.db.Close()
 }
 
 var _ Connection = (*ConnectionFw)(nil)

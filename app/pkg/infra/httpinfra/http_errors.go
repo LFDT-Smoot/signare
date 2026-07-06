@@ -14,6 +14,8 @@ import (
 const (
 	// defaultForbiddenHTTPMessage defines the generic message to not expose sensitive authorization information
 	defaultForbiddenHTTPMessage = "request not authorized"
+	// defaultNotFoundHTTPMessage defines the generic message returned when a request resolves to no route
+	defaultNotFoundHTTPMessage = "resource not found"
 	// defaultInternalErrorMessage defines the generic message to return in case an error cannot be directly fixed by the user by updating their request
 	defaultInternalErrorMessage = "internal error"
 )
@@ -134,6 +136,20 @@ func NewHTTPErrorFromError(ctx context.Context, originalErr error, status HTTPEr
 	}
 
 	return httpError
+}
+
+// NewForbiddenHTTPError builds a 403 PERMISSION_DENIED HTTPError that exposes only the constant
+// generic authorization message to the client. originalErr is retained as the original error so it
+// is recorded in the server-side logs keyed by a traceable id, never in the client response body.
+func NewForbiddenHTTPError(ctx context.Context, originalErr error) *HTTPError {
+	return NewHTTPErrorFromError(ctx, originalErr, StatusPermissionDenied).SetMessage(defaultForbiddenHTTPMessage)
+}
+
+// NewNotFoundHTTPError builds a 404 NOT_FOUND HTTPError that exposes only the constant generic
+// message to the client. originalErr is retained as the original error so it is recorded in the
+// server-side logs keyed by a traceable id, never in the client response body.
+func NewNotFoundHTTPError(ctx context.Context, originalErr error) *HTTPError {
+	return NewHTTPErrorFromError(ctx, originalErr, StatusNotFound).SetMessage(defaultNotFoundHTTPMessage)
 }
 
 // Error returns the message of the error

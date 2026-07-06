@@ -21,7 +21,7 @@ func TestRPCInfra_RegisterRPCHandlerFunc(t *testing.T) {
 	require.NotNil(t, rpcRouter)
 
 	err := rpcRouter.RegisterRPCHandlerFunc(method, FooFunc)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	out, rpcError := rpcRouter.RPCHandler(method)
 	require.Nil(t, rpcError)
 	require.NotNil(t, out)
@@ -33,7 +33,7 @@ func TestRPCInfra_StartRPCServerWithRegisteredRPCHandler(t *testing.T) {
 	require.NotNil(t, rpcRouter)
 
 	err := rpcRouter.RegisterRPCHandlerFunc(method, FooFunc)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	out, rpcError := rpcRouter.RPCHandler(method)
 	require.Nil(t, rpcError)
 	require.NotNil(t, out)

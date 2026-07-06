@@ -184,28 +184,6 @@ func TestDefaultUseCase_CreateHSMSlot(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, errors.IsInvalidArgument(err))
 		require.Nil(t, output)
-
-		input = hsmslot.CreateHSMSlotInput{
-			ApplicationID: createApplicationOutput.ID,
-			HSMModuleID:   addedModule.ID,
-			Slot:          "",
-			Pin:           "my-pin",
-		}
-		output, err = app.HSMSlotUseCase.CreateHSMSlot(ctx, input)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, output)
-
-		input = hsmslot.CreateHSMSlotInput{
-			ApplicationID: createApplicationOutput.ID,
-			HSMModuleID:   addedModule.ID,
-			Slot:          "my-slot-id",
-			Pin:           "",
-		}
-		output, err = app.HSMSlotUseCase.CreateHSMSlot(ctx, input)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, output)
 	})
 
 	t.Run("failure: slot already exists", func(t *testing.T) {

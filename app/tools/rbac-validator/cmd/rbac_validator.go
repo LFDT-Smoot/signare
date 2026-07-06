@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/hyperledger-labs/tools/rbac-validator/cmd/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+
+	"github.com/hyperledger-labs/tools/rbac-validator/cmd/types"
 )
 
 const (

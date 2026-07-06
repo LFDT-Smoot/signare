@@ -23,10 +23,17 @@ properties:
         x-required: mandatory
         description: |
           Slot number assigned by the HSM.
+      config:
+        type: array
+        x-required: mandatory
+        description: collection of configuration objects
+        items:
+          $ref: '../../_index.yaml#/schemas/SlotDetailConfig'
     required:
       - hardwareSecurityModuleId
       - applicationId
       - slot
+      - config
 
 example:
   meta:
@@ -38,6 +45,7 @@ example:
     hardwareSecurityModuleId: 'module-1'
     applicationId: 'application-1'
     slot: '342'
+    config: {}
 
 required:
   - meta

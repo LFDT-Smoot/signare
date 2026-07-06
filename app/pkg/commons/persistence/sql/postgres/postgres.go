@@ -138,7 +138,7 @@ func (p *Postgres) SetMigrationVersion(ctx context.Context, input sqlfw.SetVersi
 		return err
 	}
 
-	query := `TRUNCATE ` + p.migrationsTable
+	query := `TRUNCATE ` + p.migrationsTable //nolint:gosec // migrationsTable is a trusted startup-config identifier (prefix + constant), not request input; SQL identifiers cannot be bound parameters
 	if _, err = tx.Exec(query); err != nil {
 		if errRollback := tx.Rollback(); errRollback != nil {
 			err = errors.Join(err, errRollback)

@@ -13,10 +13,10 @@ func toInt32(src string, fieldName string) (int32, *httpinfra.HTTPError) {
     if src == "" {
 		return 0, nil
 	}
-    value, err := strconv.Atoi(src)
+    value, err := strconv.ParseInt(src, 10, 32)
     if err != nil {
         httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
-        httpError.SetMessage(fmt.Sprintf("%s field value is not a number. Received [%s]", fieldName, src))
+        httpError.SetMessage(fmt.Sprintf("%s field value is not a valid 32 bit number. Received [%s]", fieldName, src))
         return 0, httpError
     }
     return int32(value), nil

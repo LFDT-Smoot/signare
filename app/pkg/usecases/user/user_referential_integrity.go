@@ -20,7 +20,7 @@ func (u *DefaultUserUseCase) addUserToApplicationDependency(ctx context.Context,
 	if getApplicationErr != nil {
 		if errors.IsNotFound(getApplicationErr) {
 			msg := fmt.Sprintf("user can't be created because the application '%s' does not exist", data.ApplicationID)
-			return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+			return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		return getApplicationErr
 	}
@@ -61,14 +61,14 @@ func (u *DefaultUserUseCase) removeAllUserDependencies(ctx context.Context, appl
 			referencingResourcesString += fmt.Sprintf("[id=%s,thisKind=%s]", entry.ResourceID, entry.ResourceKind)
 		}
 		msg := fmt.Sprintf("user '%s:%s' can't be removed, there are elements depending on it", applicationStandardID.ApplicationID, applicationStandardID.ID)
-		return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	var deleteInput referentialintegrity.DeleteMyEntriesIfAnyInput
 	deleteInput.ResourceID = string(getUserOutput.InternalResourceID)
 	deleteInput.ResourceKind = referentialintegrity.KindUser
 	deleteMyEntriesIfAnyErr := u.referentialIntegrityUseCase.DeleteMyEntriesIfAny(ctx, deleteInput)
-	if listMyChildrenEntriesErr != nil {
+	if deleteMyEntriesIfAnyErr != nil {
 		return deleteMyEntriesIfAnyErr
 	}
 

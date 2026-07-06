@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/wire"
+
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
 

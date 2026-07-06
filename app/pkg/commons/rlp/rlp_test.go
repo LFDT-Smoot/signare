@@ -166,42 +166,42 @@ type DeserializeTestStruct struct {
 
 func Test_RLP_Encode_CorrectExecution(t *testing.T) {
 	output, err := rlp.Encode(testString)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, encodedTestString, output)
 
 	output, err = rlp.Encode(emptyString)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, encodedEmptyString, output)
 
 	output, err = rlp.Encode(testList)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, output, encodedTestList)
 
 	output, err = rlp.Encode([]string{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, output, encodedEmptyList)
 
 	output, err = rlp.Encode(nestedList)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, bytesToHexString(output), encodedNestedList)
 
 	output, err = rlp.Encode(loremIpsum)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, output, encodedLoremIPsum)
 
 	output, err = rlp.Encode(blockNumberAndBlockHash)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, bytesToHexString(output), encodedBlockNumberAndBlockHash)
 
 	output, err = rlp.Encode(testBytes)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, encodedTestBytes, output)
 }
@@ -235,57 +235,57 @@ func Test_RLP_Encode_Error_UnsupportedType(t *testing.T) {
 
 func Test_RLP_Decode_CorrectExecution(t *testing.T) {
 	output, err := rlp.Decode(encodedTestList)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, decodedTestList, output)
 
 	output, err = rlp.Decode(encodedTestBytes)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 
 	output, err = rlp.Decode(encodedLoremIPsum)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, loremIpsum, output)
 
 	output, err = rlp.Decode(encodedEmptyString)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, "", output)
 
 	output, err = rlp.Decode(encodedTestString)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, testString, output)
 
 	output, err = rlp.Decode(encodedTestBytes)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, decodedTestBytes, output)
 
 	output, err = rlp.Decode(encodedTestBytes)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, decodedTestBytes, output)
 
 	encodeNestedList, err := rlp.Encode(nestedList)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, encodedNestedList)
 	output, err = rlp.Decode(encodeNestedList)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 	require.Equal(t, nestedList, output)
 
 	receiptProofInBytes, decodeErr := hex.DecodeString(encodedBlockHeaderData)
-	require.Nil(t, decodeErr)
+	require.NoError(t, decodeErr)
 	output, err = rlp.Decode(receiptProofInBytes)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 
 	receiptProofInBytes, decodeErr = hex.DecodeString(encodedBlockHeaderData2)
-	require.Nil(t, decodeErr)
+	require.NoError(t, decodeErr)
 	output, err = rlp.Decode(receiptProofInBytes)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, output)
 }
 
@@ -303,41 +303,41 @@ func Test_RLP_DecodeAndDeserialize_CorrectExecution(t *testing.T) {
 	}
 	var decodedStruct foo
 	err := rlp.DecodeAndDeserialize(encodedData, &decodedStruct)
-	require.Nil(t, err)
-	require.Equal(t, decodedStruct, expectedStruct)
+	require.NoError(t, err)
+	require.Equal(t, expectedStruct, decodedStruct)
 
 	var nestedListStruct nestedListType
 	encodedNestedList, err := rlp.Encode(nestedList)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, encodedNestedList)
 	err = rlp.DecodeAndDeserialize(encodedNestedList, &nestedListStruct)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	var lorem loremIPsumStruct
 	err = rlp.DecodeAndDeserialize(encodedLoremIPsum, &lorem)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	var loremString string
 	err = rlp.DecodeAndDeserialize(encodedLoremIPsum, &loremString)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	var blockHeaderStruct blockHeader
 	encodedBlockHeaderDataInBytes, decodeErr := hex.DecodeString(encodedBlockHeaderData)
-	require.Nil(t, decodeErr)
+	require.NoError(t, decodeErr)
 	err = rlp.DecodeAndDeserialize(encodedBlockHeaderDataInBytes, &blockHeaderStruct)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	var ethProofReceiptOne ethProofReceipt
 	encodedEthProofReceipt, decodeErr := rlp.Encode(receipt)
-	require.Nil(t, decodeErr)
+	require.NoError(t, decodeErr)
 	err = rlp.DecodeAndDeserialize(encodedEthProofReceipt, &ethProofReceiptOne)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	var blockHeaderExtraDataStruct BlockHeaderExtraData
 	encodedBlockHeaderExtraDataInBytes, decodeErr := hex.DecodeString(encodedBlockHeaderExtraData)
-	require.Nil(t, decodeErr)
+	require.NoError(t, decodeErr)
 	err = rlp.DecodeAndDeserialize(encodedBlockHeaderExtraDataInBytes, &blockHeaderExtraDataStruct)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	var deserializeTestStruct interface{} = []interface{}{
 		[]byte{65, 66, 67},
@@ -351,16 +351,16 @@ func Test_RLP_DecodeAndDeserialize_CorrectExecution(t *testing.T) {
 	}
 	var deserializedStruct DeserializeTestStruct
 	encodedDeserializeTestStruct, decodeErr := rlp.Encode(deserializeTestStruct)
-	require.Nil(t, decodeErr)
+	require.NoError(t, decodeErr)
 	err = rlp.DecodeAndDeserialize(encodedDeserializeTestStruct, &deserializedStruct)
-	require.Nil(t, err)
-	require.Equal(t, deserializedStruct, expectedDeserialization)
+	require.NoError(t, err)
+	require.Equal(t, expectedDeserialization, deserializedStruct)
 }
 
 func Test_RLP_DecodeAndDeserialize_Error(t *testing.T) {
 	var wrongEthProof WrongEthProofNested
 	encodedEthProofReceipt, decodeErr := rlp.Encode(receipt)
-	require.Nil(t, decodeErr)
+	require.NoError(t, decodeErr)
 	err := rlp.DecodeAndDeserialize(encodedEthProofReceipt, &wrongEthProof)
 	require.Error(t, err)
 	require.Equal(t, err, rlp.ErrDeserializationMismatchedLength)
@@ -368,12 +368,12 @@ func Test_RLP_DecodeAndDeserialize_Error(t *testing.T) {
 
 func Test_RLP_EncodeAndDecode_Tx_Receipt_CorrectExecution(t *testing.T) {
 	encodedEthProof, err := rlp.Encode(receipt)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, encodedEthProof)
 	require.Equal(t, encodedEthProofInHexString, bytesToHexString(encodedEthProof))
 
 	decodedEthProof, err := rlp.Decode(encodedEthProof)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, decodedEthProof)
 }
 

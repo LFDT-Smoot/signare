@@ -14,6 +14,7 @@ actions:
 - "admin.slots.describe"
 - "admin.slots.list"
 - "admin.slots.remove"
+- "admin.slots.updateConfig"
 - "admin.slots.updatePin"
 - "admin.users.create"
 - "admin.users.describe"

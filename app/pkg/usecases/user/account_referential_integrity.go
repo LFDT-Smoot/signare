@@ -20,7 +20,7 @@ func (u *DefaultUserUseCase) addAccountToUserDependency(ctx context.Context, dat
 	if getUserErr != nil {
 		if errors.IsNotFound(getUserErr) {
 			msg := fmt.Sprintf("can't create account '%s' because user '%s' does not exist", data.Address, data.UserID)
-			return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+			return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		return getUserErr
 	}
@@ -60,7 +60,7 @@ func (u *DefaultUserUseCase) removeAllAccountDependencies(ctx context.Context, a
 			referencingResourcesString += fmt.Sprintf("[id=%s,thisKind=%s]", entry.ResourceID, entry.ResourceKind)
 		}
 		msg := fmt.Sprintf("acount '%s:%s:%s' can't be removed, there are elements depending on it", accountID.ApplicationID, accountID.UserID, accountID.Address)
-		return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	var deleteInput referentialintegrity.DeleteMyEntriesIfAnyInput

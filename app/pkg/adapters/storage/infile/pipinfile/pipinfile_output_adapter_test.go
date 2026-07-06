@@ -59,13 +59,13 @@ func TestDefaultRBACPolicyInformationPointYAMLOutputAdapter_ListActions_Success(
 		Roles: []string{defaultRoleTestAdmin},
 	}
 	adminActions, failure := adapter.ListActions(ctx, listActionsInputAdmin)
-	require.Nil(t, failure)
+	require.NoError(t, failure)
 	require.True(t, adminActions.Actions.Equal(*expectedTestAdminActions))
 
 	listActionsInputUser := pdp.ListActionsInput{
 		Roles: []string{defaultRoleTestUser},
 	}
 	userActions, failure := adapter.ListActions(ctx, listActionsInputUser)
-	require.Nil(t, failure)
+	require.NoError(t, failure)
 	require.True(t, userActions.Actions.Equal(*expectedTestUserActions))
 }

@@ -4,6 +4,7 @@ package graph
 
 import (
 	"github.com/google/wire"
+
 	embedded "github.com/hyperledger-labs/signare/app"
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/httpmiddlewarein/pepin"
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/infile/pipinfile"
@@ -19,6 +20,7 @@ import (
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization/pep"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/entrypoint/rpcbatchrequestsupport"
+	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/recovery"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/telemetry"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/telemetry/tracer"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
@@ -88,6 +90,9 @@ var httpMiddlewareSet = wire.NewSet(
 
 	authentication.ProvideAuthenticationMiddleware,
 	wire.Struct(new(authentication.AuthenticationMiddlewareOptions), "*"),
+
+	recovery.ProvideRecoveryMiddleware,
+	wire.Struct(new(recovery.RecoveryMiddlewareOptions), "*"),
 
 	middleware.ProvideHTTPMiddlewareFactory,
 	wire.Struct(new(middleware.HTTPMiddlewareFactoryOptions), "*"),
@@ -177,6 +182,9 @@ var rpcMiddlewareSet = wire.NewSet(
 
 	rpcbatchrequestsupport.ProvideRPCBatchRequestSupportMiddleware,
 	wire.Struct(new(rpcbatchrequestsupport.RPCBatchRequestSupportMiddlewareOptions), "*"),
+
+	recovery.ProvideRecoveryMiddleware,
+	wire.Struct(new(recovery.RecoveryMiddlewareOptions), "*"),
 
 	middleware.ProvideRPCMiddlewareFactory,
 	wire.Struct(new(middleware.RPCMiddlewareFactoryOptions), "*"),

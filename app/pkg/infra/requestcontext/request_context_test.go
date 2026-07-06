@@ -19,12 +19,12 @@ func TestRequestContext_ValidUserAndApplication(t *testing.T) {
 	ctx := context.WithValue(context.Background(), requestcontext.UserContextKey, testUser)
 	user, err := requestcontext.UserFromContext(ctx)
 	require.NoError(t, err)
-	require.Equal(t, *user, testUser)
+	require.Equal(t, testUser, *user)
 
 	ctx = context.WithValue(ctx, requestcontext.ApplicationContextKey, testApp)
 	app, err := requestcontext.ApplicationFromContext(ctx)
 	require.NoError(t, err)
-	require.Equal(t, *app, testApp)
+	require.Equal(t, testApp, *app)
 }
 
 func TestRequestContext_InValidUserAndApplication(t *testing.T) {

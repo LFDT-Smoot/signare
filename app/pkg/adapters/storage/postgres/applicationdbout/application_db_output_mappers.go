@@ -19,8 +19,8 @@ func mapToCreateDB(application application.Application) (*applicationdb.Applicat
 	db := applicationdb.ApplicationCreateDB{
 		ApplicationDB: applicationdb.ApplicationDB{
 			StandardID:         application.StandardID,
-			InternalResourceID: application.InternalResourceID.String(),
-			ChainID:            application.ChainID.String(),
+			InternalResourceID: application.String(),
+			DefaultChainID:     application.DefaultChainID.String(),
 			CreationDate:       application.CreationDate.ToInt64(),
 			LastUpdate:         application.LastUpdate.ToInt64(),
 		},
@@ -39,7 +39,7 @@ func mapToUpdateDB(application application.Application) (*applicationdb.Applicat
 	db := applicationdb.ApplicationUpdateDB{
 		ApplicationDB: applicationdb.ApplicationDB{
 			StandardID:      application.StandardID,
-			ChainID:         application.ChainID.String(),
+			DefaultChainID:  application.DefaultChainID.String(),
 			LastUpdate:      application.LastUpdate.ToInt64(),
 			ResourceVersion: application.ResourceVersion,
 		},
@@ -57,9 +57,9 @@ func mapFromDB(db applicationdb.ApplicationDB) (*application.Application, error)
 	if len(db.InternalResourceID) == 0 {
 		return nil, errors.Internal().WithMessage("'InternalResourceID' cannot be empty")
 	}
-	chainID, err := entities.NewInt256FromString(db.ChainID)
+	defaultChainID, err := entities.NewInt256FromString(db.DefaultChainID)
 	if err != nil {
-		return nil, errors.Internal().WithMessage("chainID [%s] can not be casted to Int256", db.ChainID)
+		return nil, errors.Internal().WithMessage("defaultChainID [%s] can not be casted to Int256", db.DefaultChainID)
 	}
 
 	description := ""
@@ -78,7 +78,7 @@ func mapFromDB(db applicationdb.ApplicationDB) (*application.Application, error)
 			},
 			ResourceVersion: db.ResourceVersion,
 		},
-		ChainID:            *chainID,
+		DefaultChainID:     *defaultChainID,
 		Description:        &description,
 		InternalResourceID: entities.InternalResourceID(db.InternalResourceID),
 	}

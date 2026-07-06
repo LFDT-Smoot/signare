@@ -172,13 +172,13 @@ func (filter *referentialIntegrityEntryDBFilter) FilterByResource(resourceID str
 
 // OrderByCreationDate orders resources in storage by creation date.
 func (filter *referentialIntegrityEntryDBFilter) OrderByCreationDate(orderDirection persistence.OrderDirection) referentialintegrity.ReferentialIntegrityFilters {
-	filter.ReferentialIntegrityEntryDBFilter = filter.ReferentialIntegrityEntryDBFilter.Sort("creation_date", orderDirection)
+	filter.ReferentialIntegrityEntryDBFilter = filter.Sort("creation_date", orderDirection)
 	return filter
 }
 
 // OrderByLastUpdateDate orders resources in storage by last update date.
 func (filter *referentialIntegrityEntryDBFilter) OrderByLastUpdateDate(orderDirection persistence.OrderDirection) referentialintegrity.ReferentialIntegrityFilters {
-	filter.ReferentialIntegrityEntryDBFilter = filter.ReferentialIntegrityEntryDBFilter.Sort("last_update", orderDirection)
+	filter.ReferentialIntegrityEntryDBFilter = filter.Sort("last_update", orderDirection)
 	return filter
 }
 

@@ -79,11 +79,11 @@ type DefaultUseCaseTransactionalDecoratorOptions struct {
 func ProvideDefaultUseCaseTransactionalDecorator(options DefaultUseCaseTransactionalDecoratorOptions) (*DefaultUseCaseTransactionalDecorator, error) {
 	if options.AccountUseCase == nil {
 		errorMessage := "'AccountUseCase' is mandatory"
-		return nil, errors.InvalidArgument().WithMessage(errorMessage)
+		return nil, errors.InvalidArgument().WithMessage("%s", errorMessage)
 	}
 	if options.TransactionalManager == nil {
 		errorMessage := "'TransactionalManager' is mandatory"
-		return nil, errors.InvalidArgument().WithMessage(errorMessage)
+		return nil, errors.InvalidArgument().WithMessage("%s", errorMessage)
 	}
 	return &DefaultUseCaseTransactionalDecorator{
 		AccountUseCase:       options.AccountUseCase,

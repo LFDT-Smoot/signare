@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type PositiveTestType struct {
@@ -44,7 +44,7 @@ func TestPositiveValidator(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			ok, _ := govalidator.ValidateStruct(tt.have)
-			assert.Equal(t, tt.want, ok)
+			require.Equal(t, tt.want, ok)
 		})
 	}
 }

@@ -12,10 +12,10 @@ Besides Golang (please, refer to `app/go.mod` to check the current Golang versio
 
 | Tool                                                                         | Version |
 |------------------------------------------------------------------------------|---------|
-| [swagger-cli](https://www.npmjs.com/package/swagger-cli){:target="_blank"}   | 4.0.4   |
+| [redocly](https://redocly.com/docs/cli/){:target="_blank"}                   | latest  |
 | [spectral](https://github.com/stoplightio/spectral){:target="_blank"}        | 6.11.1  |
 | [gotestsum](https://github.com/gotestyourself/gotestsum){:target="_blank"}   | 1.11.0  |
-| [golangci-lint](https://github.com/golangci/golangci-lint){:target="_blank"} | 1.54.2  |
+| [golangci-lint](https://github.com/golangci/golangci-lint){:target="_blank"} | 2.12.2  |
 
 ## Code structure
 
