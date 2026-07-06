@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
 )
 
 var errExternal = fmt.Errorf("third party error")
@@ -925,7 +926,7 @@ func TestCastAsSignerError(t *testing.T) {
 func TestStackTrace(t *testing.T) {
 	// This line corresponds to the location where the original error is created: inside errorParentFunc()
 	// If this test file has lines added or removed this value must change accordingly.
-	originalErrLine := 952
+	originalErrLine := 953
 	err := wrapperErrorFunc(t)
 	require.Error(t, err)
 	wrappedErr := errors.InternalFromErr(err)

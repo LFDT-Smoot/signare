@@ -5,9 +5,10 @@ import (
 	stderrors "errors"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/referentialintegrity"
-	"github.com/stretchr/testify/require"
 )
 
 // stubReferentialIntegrity is a minimal ReferentialIntegrityUseCase used to drive the

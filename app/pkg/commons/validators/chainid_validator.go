@@ -2,6 +2,7 @@ package validators
 
 import (
 	"github.com/asaskevich/govalidator"
+
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
 )
 

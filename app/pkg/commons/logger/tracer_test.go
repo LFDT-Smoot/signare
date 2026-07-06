@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
 )
 
 func TestTracer(t *testing.T) {

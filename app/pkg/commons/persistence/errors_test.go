@@ -3,8 +3,9 @@ package persistence_test
 import (
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
 )
 
 func TestError_IsError(t *testing.T) {

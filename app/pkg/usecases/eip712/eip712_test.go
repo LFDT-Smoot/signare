@@ -6,8 +6,9 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
 )
 
 // specTypes holds the canonical Ether Mail example from https://eips.ethereum.org/assets/eip-712/Example.js

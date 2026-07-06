@@ -137,9 +137,6 @@ linters:
       zap: false
       require-string-key: true
       no-printf-like: true
-      rules:
-        - (dc-stack.local/dc-app/features/core/pkg/framework/structuredlogger.LoggerEntry).WithFields
-        - (*dc-stack.local/dc-app/features/core/pkg/framework/structuredlogger.DefaultStructuredLoggerEntry).WithFields
     misspell:
       mode: ""
       locale: US
@@ -267,8 +264,7 @@ formatters:
       simplify: true
     goimports:
       local-prefixes:
-        - dc-stack.local
-        - github.com/Adhara-Tech
+        - github.com/hyperledger-labs
   exclusions:
     generated: lax
     paths:

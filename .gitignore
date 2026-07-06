@@ -3,8 +3,14 @@
 **/_artifacts/
 
 # IDEs
+**/.vscode/
 **/.idea/
 **/.claude/
+**/.copilot/
+**/.cursor/
+**/.continue/
+**/.aider/
+**/.aider*
 
 # Generated binaries
 **/bin/

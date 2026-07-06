@@ -3,8 +3,9 @@ package validators
 import (
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
 
 	"github.com/asaskevich/govalidator"
 )

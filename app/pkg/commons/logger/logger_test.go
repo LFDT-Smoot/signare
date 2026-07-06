@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/stretchr/testify/require"
 )
 
 var (

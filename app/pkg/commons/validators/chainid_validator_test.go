@@ -4,8 +4,9 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hyperledger-labs/signare/app/pkg/entities"
 
 	"github.com/asaskevich/govalidator"
 )

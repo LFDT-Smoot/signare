@@ -1,4 +1,4 @@
-<mapping id="io.adhara.persistencefw.itest.additional">
+<mapping id="signare.persistencefw.itest.additional">
     <statement id="insertUser">
         INSERT INTO te_user (
             project,

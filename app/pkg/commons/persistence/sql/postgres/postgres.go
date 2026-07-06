@@ -37,7 +37,7 @@ func init() {
 	sqlfw.RegisterDialect(DialectName, &db)
 }
 
-const defaultMigrationsTable = "adhara_migrations"
+const defaultMigrationsTable = "signare_migrations"
 
 type Postgres struct {
 	db              *sqlx.DB
@@ -117,7 +117,7 @@ func (p *Postgres) InitMigration(ctx context.Context, migrationsTablePrefix *str
 		p.migrationsTable = *migrationsTablePrefix + "_" + p.migrationsTable
 	}
 
-	err := p.ensureAdharaMigrationTables(ctx)
+	err := p.ensureMigrationTables(ctx)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (p *Postgres) RunMigration(ctx context.Context, migration string) error {
 	return nil
 }
 
-func (p *Postgres) ensureAdharaMigrationTables(ctx context.Context) (err error) {
+func (p *Postgres) ensureMigrationTables(ctx context.Context) (err error) {
 	query := `CREATE TABLE IF NOT EXISTS ` + p.migrationsTable + ` (version bigint not null primary key, dirty boolean not null, description text)`
 	if _, err = p.conn.ExecContext(ctx, query); err != nil {
 		return err

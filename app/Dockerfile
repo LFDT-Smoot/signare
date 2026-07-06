@@ -26,8 +26,8 @@ RUN ldd /usr/local/lib/softhsm/libsofthsm2.so | tr -s [:blank:] '\n' | grep ^/ |
 
 FROM $BUILD_BASE_IMAGE AS signare-builder
 
-ENV USER=adhara
-ENV GROUP=adhara
+ENV USER=signare
+ENV GROUP=signare
 ENV UID=1000
 ENV GID=1000
 
@@ -66,7 +66,7 @@ COPY --from=softhsm-builder /usr/local/lib/softhsm/libsofthsm2.so /usr/local/lib
 
 COPY --from=signare-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
-USER adhara:adhara
+USER signare:signare
 
 ENTRYPOINT [ "/signare/bin/signare" ]
 

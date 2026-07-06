@@ -3,8 +3,9 @@ package signaturemanager_test
 import (
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
 )
 
 func TestError_IsError(t *testing.T) {
