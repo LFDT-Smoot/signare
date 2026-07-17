@@ -86,7 +86,6 @@ This project is licensed under the [Apache License 2.0](LICENSE) license.
 
 ## :hammer: Initial Committers
 
-https://github.com/nano-adhara  
 https://github.com/chookly314  
 https://github.com/Jserrano27  
 https://github.com/gynura  
