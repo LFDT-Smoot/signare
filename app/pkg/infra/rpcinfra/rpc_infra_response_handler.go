@@ -65,19 +65,19 @@ func (d DefaultRPCInfraResponseHandler) HandleErrorResponse(ctx context.Context,
 }
 
 // logRPCError logs a RPCError with the correct log level.
-func logRPCError(ctx context.Context, error *rpcerrors.RPCError) {
-	if error.Code == rpcerrors.InternalErrorCode {
-		if error.WrappedErr != nil {
-			useCaseErr, ok := signererrors.CastAsUseCaseError(error.WrappedErr)
+func logRPCError(ctx context.Context, err *rpcerrors.RPCError) {
+	if err.Code == rpcerrors.InternalErrorCode {
+		if err.WrappedErr != nil {
+			useCaseErr, ok := signererrors.CastAsUseCaseError(err.WrappedErr)
 			if ok {
 				logger.LogEntry(ctx).Error(useCaseErr.GetStack())
 				return
 			}
 		}
-		logger.LogEntry(ctx).Errorf("%+v", error)
+		logger.LogEntry(ctx).Errorf("%+v", err)
 		return
 	}
-	logger.LogEntry(ctx).Debugf("%+v", error)
+	logger.LogEntry(ctx).Debugf("%+v", err)
 }
 
 // DefaultRPCInfraResponseHandler handles the RPC responses of the server

@@ -26,7 +26,7 @@ func mapToCreateDB(account user.Account) (*accountdb.AccountCreateDB, error) {
 
 	db := accountdb.AccountCreateDB{
 		AccountDB: accountdb.AccountDB{
-			InternalResourceID: account.InternalResourceID.String(),
+			InternalResourceID: account.String(),
 			Address:            account.Address.String(),
 			ApplicationID:      account.ApplicationID,
 			UserID:             account.UserID,

@@ -19,12 +19,12 @@ func TestNewStorageConfig_Success(t *testing.T) {
 		Driver:           "postgres",
 	}
 	storageConfig, err := persistence.NewStorageConfig(storageConfigOptions)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	_, ok := storageConfig.GetStatement("io.adhara.persistencefw.itest.insertUser")
+	_, ok := storageConfig.GetStatement("signare.persistencefw.itest.insertUser")
 	require.True(t, ok)
 
-	_, ok = storageConfig.GetStatement("io.adhara.persistencefw.itest.additional.insertUser")
+	_, ok = storageConfig.GetStatement("signare.persistencefw.itest.additional.insertUser")
 	require.False(t, ok)
 
 	additionalStorageConfigOptions := persistence.StorageConfigOptions{
@@ -33,10 +33,10 @@ func TestNewStorageConfig_Success(t *testing.T) {
 		Driver:           "postgres",
 	}
 	additionalConfig, err := persistence.NewStorageConfig(additionalStorageConfigOptions)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	err = storageConfig.AddConfig(*additionalConfig)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
-	_, ok = storageConfig.GetStatement("io.adhara.persistencefw.itest.additional.insertUser")
+	_, ok = storageConfig.GetStatement("signare.persistencefw.itest.additional.insertUser")
 	require.True(t, ok)
 }

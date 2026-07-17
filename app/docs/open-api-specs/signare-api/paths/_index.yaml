@@ -9,6 +9,8 @@
   $ref: admin/slots_id.yaml
 '/admin/modules/{moduleId}/slots/{slotId}:update-pin':
   $ref: admin/slots_id_update_pin.yaml
+'/admin/modules/{moduleId}/slots/{slotId}:update-config':
+  $ref: admin/slots_id_update_config.yaml
 '/admin/users':
   $ref: admin/users.yaml
 '/admin/users/{adminUserId}':

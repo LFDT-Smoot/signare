@@ -1,0 +1,22 @@
+type: object
+description: configuration objects
+properties:
+  keyName:
+    type: string
+    x-required: mandatory
+    description: |
+      Key name to use in AKV.
+  keyVersion:
+    type: string
+    x-required: mandatory
+    description: |
+      Key version to use in AKV.
+  keyPublicAddress:
+    type: string
+    x-required: mandatory
+    description: |
+      Key public address to use in AKV.
+required:
+  - keyName
+  - keyVersion
+  - keyPublicAddress

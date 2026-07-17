@@ -15,6 +15,7 @@ import (
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/role"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnection"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
+	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/referentialintegrity"
 	"github.com/hyperledger-labs/signare/app/pkg/utils"
 
@@ -69,29 +70,14 @@ func (u *DefaultUserUseCase) CreateUser(ctx context.Context, input CreateUserInp
 		Roles:       input.Roles,
 		Description: input.Description,
 	}
+	if validateErr := u.validateApplicationScopedRoles(ctx, input.Roles); validateErr != nil {
+		return nil, validateErr
+	}
+
 	user.InternalResourceID = entities.NewInternalResourceID()
 	addUserToApplicationDependencyErr := u.addUserToApplicationDependency(ctx, user)
 	if addUserToApplicationDependencyErr != nil {
 		return nil, addUserToApplicationDependencyErr
-	}
-
-	getSupportedRolesInput := role.GetSupportedRolesInput{}
-	getSupportedRolesOutput, getSupportedRolesErr := u.roleUseCase.GetSupportedRoles(ctx, getSupportedRolesInput)
-	if getSupportedRolesErr != nil {
-		return nil, getSupportedRolesErr
-	}
-
-	for _, role := range input.Roles {
-		isSupported := false
-		for _, supportedRole := range getSupportedRolesOutput.Roles {
-			isSupported = supportedRole.ID == role
-			if supportedRole.ID == role {
-				break
-			}
-		}
-		if !isSupported {
-			return nil, errors.InvalidArgument().WithMessage("the role '%s' is not supported", role)
-		}
 	}
 
 	addedUser, err := u.storage.Add(ctx, user)
@@ -108,6 +94,35 @@ func (u *DefaultUserUseCase) CreateUser(ctx context.Context, input CreateUserInp
 	}, nil
 }
 
+// validateApplicationScopedRoles ensures every requested role is supported and assignable to an
+// application user. Admin-scoped roles (e.g. signer-admin) are rejected so that an application-admin
+// cannot escalate an application user to a global administrator.
+func (u *DefaultUserUseCase) validateApplicationScopedRoles(ctx context.Context, roles []string) error {
+	getSupportedRolesOutput, err := u.roleUseCase.GetSupportedRoles(ctx, role.GetSupportedRolesInput{})
+	if err != nil {
+		return err
+	}
+
+	supportedRoles := make(map[string]role.Role, len(getSupportedRolesOutput.Roles))
+	for _, supportedRole := range getSupportedRolesOutput.Roles {
+		supportedRoles[supportedRole.ID] = supportedRole
+	}
+
+	for _, roleID := range roles {
+		supportedRole, ok := supportedRoles[roleID]
+		if !ok {
+			msg := fmt.Sprintf("the role '%s' is not supported", roleID)
+			return errors.InvalidArgument().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		if !supportedRole.IsApplicationScoped() {
+			msg := fmt.Sprintf("the role '%s' cannot be assigned to an application user", roleID)
+			return errors.InvalidArgument().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+	}
+
+	return nil
+}
+
 func (u *DefaultUserUseCase) ListUsers(ctx context.Context, input ListUsersInput) (*ListUsersOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
@@ -116,14 +131,16 @@ func (u *DefaultUserUseCase) ListUsers(ctx context.Context, input ListUsersInput
 
 	filters := u.storage.Filter(input.ApplicationID)
 	direction := utils.DefaultString(input.OrderDirection, defaultOrderDirection)
+	direction, validDirection := entities.NormalizeOrderDirection(direction)
+	if !validDirection {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("invalid order direction %q, expected one of [asc, desc]", input.OrderDirection)
+	}
 	filters.OrderByCreationDate(persistence.OrderDirection(direction))
 	if input.OrderBy == entities.OrderByLastUpdate {
 		filters.OrderByLastUpdateDate(persistence.OrderDirection(direction))
 	}
 
-	if input.PageLimit > 0 {
-		filters.Paged(input.PageLimit, input.PageOffset)
-	}
+	filters.Paged(persistence.ClampPageLimit(input.PageLimit), input.PageOffset)
 
 	userCollection, err := u.storage.All(ctx, filters)
 	if err != nil {
@@ -191,24 +208,8 @@ func (u *DefaultUserUseCase) EditUser(ctx context.Context, input EditUserInput) 
 		return nil, errors.InvalidArgument().WithMessage("the 'Role' cannot be empty")
 	}
 
-	getSupportedRolesInput := role.GetSupportedRolesInput{}
-	getSupportedRolesOutput, getSupportedRolesErr := u.roleUseCase.GetSupportedRoles(ctx, getSupportedRolesInput)
-	if getSupportedRolesErr != nil {
-		return nil, getSupportedRolesErr
-	}
-
-	for _, role := range input.Roles {
-		isSupported := false
-		for _, supportedRole := range getSupportedRolesOutput.Roles {
-			isSupported = supportedRole.ID == role
-			if supportedRole.ID == role {
-				break
-			}
-		}
-		if !isSupported {
-			msg := fmt.Sprintf("the role '%s' is not supported", role)
-			return nil, errors.InvalidArgument().WithMessage(msg).SetHumanReadableMessage(msg)
-		}
+	if validateErr := u.validateApplicationScopedRoles(ctx, input.Roles); validateErr != nil {
+		return nil, validateErr
 	}
 
 	user := User{
@@ -286,6 +287,9 @@ func (u *DefaultUserUseCase) EnableAccounts(ctx context.Context, input EnableAcc
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
+	if len(input.Addresses) == 0 {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("at least one address is required")
+	}
 
 	tracer := logger.NewTracer(ctx)
 	tracer.AddProperty("user", input.UserID)
@@ -314,22 +318,15 @@ func (u *DefaultUserUseCase) EnableAccounts(ctx context.Context, input EnableAcc
 		return nil, byApplicationErr
 	}
 
-	// Accounts need to be validated with the HSM manager to see if they exist in their slots.
-	listAddressesInput := hsmconnector.ListAddressesInput{
-		SlotConnectionData: hsmconnector.SlotConnectionData{
-			Slot:       hsmConnection.Slot,
-			Pin:        hsmConnection.Pin,
-			ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
-			ChainID:    hsmConnection.ChainID,
-		},
+	// Accounts must be backed by a key in the HSM module; validate the requested addresses against the
+	// set of addresses the module actually holds before creating any account.
+	knownAddresses, knownAddressesErr := u.addressesBackedByModule(ctx, hsmConnection)
+	if knownAddressesErr != nil {
+		return nil, knownAddressesErr
 	}
-	listAddressesOutput, err := u.hsmConnector.ListAddresses(ctx, listAddressesInput)
-	if err != nil {
-		return nil, errors.InternalFromErr(err)
-	}
-	if !areAddressesValid(listAddressesOutput.Items, input.Addresses) {
+	if !areAddressesValid(knownAddresses, input.Addresses) {
 		msg := fmt.Sprintf("one or more accounts '%s' do not exist in the HSM", input.Addresses)
-		return nil, errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	accountsToCreate := make([]CreateAccountInput, len(input.Addresses))
@@ -371,6 +368,53 @@ func (u *DefaultUserUseCase) EnableAccounts(ctx context.Context, input EnableAcc
 	return &EnableAccountsOutput{
 		User: *user,
 	}, nil
+}
+
+// addressesBackedByModule returns the addresses that have a backing key in the HSM module of the given
+// connection, resolved according to the module kind: SoftHSM does a live query of the manager, while LKV
+// and AKV trust the persisted slot configuration as the source of truth (so a KeyPublicAddress mistyped
+// at slot creation is taken at face value). EnableAccounts validates requested accounts against this set
+// so an account cannot be created for an address with no key behind it.
+func (u *DefaultUserUseCase) addressesBackedByModule(ctx context.Context, hsmConnection *hsmconnection.HSMConnection) ([]address.Address, error) {
+	switch hsmConnection.ModuleKind {
+	case hsmconnector.SoftHSMModuleKind:
+		listAddressesInput := hsmconnector.ListAddressesInput{
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       hsmConnection.Slot.Slot,
+				Pin:        hsmConnection.Slot.Pin,
+				ModuleKind: hsmConnection.ModuleKind,
+			},
+		}
+		listAddressesOutput, err := u.hsmConnector.ListAddresses(ctx, listAddressesInput)
+		if err != nil {
+			return nil, errors.InternalFromErr(err)
+		}
+		return listAddressesOutput.Items, nil
+	case hsmconnector.LKVModuleKind:
+		listLocalKeysInput := hsmslot.ListLocalKeysInput{
+			StandardID: entities.StandardID{
+				ID: hsmConnection.Slot.ID,
+			},
+		}
+		listAddressesOutput, err := u.slotUseCase.ListLocalKeys(ctx, listLocalKeysInput)
+		if err != nil {
+			return nil, errors.InternalFromErr(err)
+		}
+		return listAddressesOutput.Addresses, nil
+	case hsmconnector.AKVModuleKind:
+		// AKV addresses are the public addresses of the keys configured for the slot.
+		akvAddresses := make([]address.Address, 0, len(hsmConnection.Slot.Config.AKV))
+		for _, akvConfig := range hsmConnection.Slot.Config.AKV {
+			addr, err := address.NewFromHexString(akvConfig.KeyPublicAddress)
+			if err != nil {
+				return nil, errors.InternalFromErr(err)
+			}
+			akvAddresses = append(akvAddresses, addr)
+		}
+		return akvAddresses, nil
+	default:
+		return nil, errors.Internal().WithMessage("unsupported HSM module kind '%s'", hsmConnection.ModuleKind)
+	}
 }
 
 func (u *DefaultUserUseCase) DisableAccount(ctx context.Context, input DisableAccountInput) (*DisableAccountOutput, error) {
@@ -462,6 +506,8 @@ type DefaultUserUseCase struct {
 	hsmConnector hsmconnector.HSMConnector
 	// referentialIntegrityUseCase to manage dependencies between resources.
 	referentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// slotUseCase defines how to interact with Slot resources.
+	slotUseCase hsmslot.HSMSlotUseCase
 	// roleUseCase defines how to interact with Role resources.
 	roleUseCase role.RoleUseCase
 }
@@ -481,6 +527,8 @@ type DefaultUserUseCaseOptions struct {
 	HSMConnector hsmconnector.HSMConnector
 	// ReferentialIntegrityUseCase to manage dependencies between resources.
 	ReferentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// SlotUseCase defines how to interact with Slot resources.
+	SlotUseCase hsmslot.HSMSlotUseCase
 	// RoleUseCase defines how to interact with Role resources.
 	RoleUseCase role.RoleUseCase
 }
@@ -505,6 +553,9 @@ func ProvideDefaultUseCase(options DefaultUserUseCaseOptions) (*DefaultUserUseCa
 	if options.ReferentialIntegrityUseCase == nil {
 		return nil, errors.Internal().WithMessage("mandatory 'ReferentialIntegrityUseCase' was not provided")
 	}
+	if options.SlotUseCase == nil {
+		return nil, errors.Internal().WithMessage("mandatory 'SlotUseCase' was not provided")
+	}
 	if options.RoleUseCase == nil {
 		return nil, errors.Internal().WithMessage("mandatory 'RoleUseCase' was not provided")
 	}
@@ -512,6 +563,7 @@ func ProvideDefaultUseCase(options DefaultUserUseCaseOptions) (*DefaultUserUseCa
 		storage:                     options.Storage,
 		applicationUseCase:          options.ApplicationUseCase,
 		accountStorage:              options.AccountStorage,
+		slotUseCase:                 options.SlotUseCase,
 		roleUseCase:                 options.RoleUseCase,
 		hsmConnector:                options.HSMConnector,
 		hsmConnectionResolver:       options.HSMConnectionResolver,

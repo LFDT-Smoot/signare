@@ -6,6 +6,8 @@ type Role struct {
 	ID string `yaml:"id"`
 	// Description describes the role with a phrase
 	Description string `yaml:"description"`
+	// Scope defines the level at which the Role can be assigned
+	Scope string `yaml:"scope"`
 	// Permissions are the array of permissions associated to the Role
 	Permissions []string `yaml:"permissions"`
 }

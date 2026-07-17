@@ -1,0 +1,1 @@
+ALTER TABLE cfg_application RENAME COLUMN default_chain_id TO chain_id;

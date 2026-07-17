@@ -131,28 +131,6 @@ func (b *Int256) PaddedBytes(n int) []byte {
 	return ret
 }
 
-// BigEndianByteAt returns the byte at position n, in big-endian encoding, so that n==0 returns the least significant byte.
-func (b *Int256) BigEndianByteAt(n int) byte {
-	words := b.BigInt().Bits()
-	// Check word-bucket the byte will reside in
-	l := n / wordBytes
-	if l >= len(words) {
-		return byte(0)
-	}
-	word := words[l]
-	// Offset of the byte
-	shift := 8 * uint(n%wordBytes)
-	return byte(word >> shift)
-}
-
-// ByteAt returns the byte at position n, with the supplied pad length in little-endian encoding.
-func (b *Int256) ByteAt(padLength, n int) byte {
-	if n >= padLength {
-		return byte(0)
-	}
-	return b.BigEndianByteAt(padLength - 1 - n)
-}
-
 // ReadBits encodes the absolute value of bigint as big-endian bytes.
 func (b *Int256) ReadBits(buf []byte) {
 	l := len(buf)
@@ -562,13 +540,13 @@ func (b HexUInt64) String() string {
 // HexBytes marshals/unmarshals with 0x prefix. The empty slice marshals as 0x.
 type HexBytes []byte
 
-// NewHexBytesFromString decodes a hex string with 0x prefix.
+// NewHexBytesFromString decodes a hex string.
 func NewHexBytesFromString(input string) (HexBytes, error) {
 	if len(input) == 0 {
 		return nil, errorHexEncodingEmptyString
 	}
 	if !checkPrefixFromString(input) {
-		return nil, errorHexEncodingMissingPrefix
+		input = "0x" + input
 	}
 	b, err := hex.DecodeString(input[2:])
 	if err != nil {
@@ -834,11 +812,8 @@ func MinBigInt(x, y *big.Int) *big.Int {
 // HashKeccak256 returns the keccak256 hash of the input data
 func HashKeccak256(data []byte) (*HexBytes, error) {
 	d := sha3.NewLegacyKeccak256()
-	for i := range data {
-		_, err := d.Write(data[i : i+1])
-		if err != nil {
-			return nil, err
-		}
+	if _, err := d.Write(data); err != nil {
+		return nil, err
 	}
 	return NewHexBytes(d.Sum(nil)), nil
 }

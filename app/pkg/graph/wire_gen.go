@@ -47,6 +47,7 @@ import (
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization/pep"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/entrypoint/rpcbatchrequestsupport"
+	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/recovery"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/telemetry"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/telemetry/tracer"
 	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
@@ -136,6 +137,7 @@ func initializeHTTPAPI(useCases *useCasesGraph, infra *infraGraph) (*httpAPIGrap
 	hsmConnector := useCases.HSMConnector
 	defaultAPIAdapterOptions := rpcin.DefaultAPIAdapterOptions{
 		AccountUseCase:        accountUseCase,
+		SlotUseCase:           hsmSlotUseCase,
 		HSMConnectionResolver: resolver,
 		HSMConnector:          hsmConnector,
 	}
@@ -269,15 +271,16 @@ func InitializeDummyMetrics() (*dummyMetricsGraph, error) {
 
 func initializeHTTPMiddleware(infra *infraGraph, useCases *useCasesGraph, metricRecorder metricrecorder.MetricRecorder, configuration contextdefinition.AuthHeadersConfiguration) (*httpMiddlewareGraph, error) {
 	defaultHTTPRouter := infra.mainHTTPRouter
+	httpResponseHandler := infra.httpAPIResponseHandler
 	httpContextDefinitionOptions := httpcontextdefinition.HTTPContextDefinitionOptions{
 		AuthHeadersConfiguration: configuration,
 		HTTPRouter:               defaultHTTPRouter,
+		ResponseHandler:          httpResponseHandler,
 	}
 	httpContextDefinition, err := httpcontextdefinition.ProvideHTTPContextDefinition(httpContextDefinitionOptions)
 	if err != nil {
 		return nil, err
 	}
-	httpResponseHandler := infra.httpAPIResponseHandler
 	requestContextValidationOptions := contextvalidation.RequestContextValidationOptions{
 		ResponseHandler: httpResponseHandler,
 	}
@@ -368,6 +371,13 @@ func initializeHTTPMiddleware(infra *infraGraph, useCases *useCasesGraph, metric
 	if err != nil {
 		return nil, err
 	}
+	recoveryMiddlewareOptions := recovery.RecoveryMiddlewareOptions{
+		ResponseHandler: httpResponseHandler,
+	}
+	recoveryMiddleware, err := recovery.ProvideRecoveryMiddleware(recoveryMiddlewareOptions)
+	if err != nil {
+		return nil, err
+	}
 	httpContextTracerOptions := tracer.HTTPContextTracerOptions{}
 	httpContextTracer, err := tracer.ProvideHTTPContextTracer(httpContextTracerOptions)
 	if err != nil {
@@ -383,6 +393,7 @@ func initializeHTTPMiddleware(infra *infraGraph, useCases *useCasesGraph, metric
 	httpMiddlewareFactoryOptions := middleware.HTTPMiddlewareFactoryOptions{
 		AuthenticationMiddleware: authenticationMiddleware,
 		AuthorizationMiddleware:  authorizationMiddleware,
+		RecoveryMiddleware:       recoveryMiddleware,
 		TelemetryMiddleware:      telemetryMiddleware,
 	}
 	httpMiddlewareFactory, err := middleware.ProvideHTTPMiddlewareFactory(httpMiddlewareFactoryOptions)
@@ -497,6 +508,13 @@ func initializeRPCMiddleware(infra *infraGraph, useCases *useCasesGraph, metricR
 	if err != nil {
 		return nil, err
 	}
+	recoveryMiddlewareOptions := recovery.RecoveryMiddlewareOptions{
+		ResponseHandler: defaultRPCInfraResponseHandler,
+	}
+	recoveryMiddleware, err := recovery.ProvideRecoveryMiddleware(recoveryMiddlewareOptions)
+	if err != nil {
+		return nil, err
+	}
 	rpcBatchRequestSupportMiddlewareOptions := rpcbatchrequestsupport.RPCBatchRequestSupportMiddlewareOptions{
 		ResponseHandler: defaultRPCInfraResponseHandler,
 		RPCRouter:       defaultRPCRouter,
@@ -520,6 +538,7 @@ func initializeRPCMiddleware(infra *infraGraph, useCases *useCasesGraph, metricR
 	rpcMiddlewareFactoryOptions := middleware.RPCMiddlewareFactoryOptions{
 		AuthenticationMiddleware:         authenticationMiddleware,
 		AuthorizationMiddleware:          authorizationMiddleware,
+		RecoveryMiddleware:               recoveryMiddleware,
 		RPCBatchRequestSupportMiddleware: rpcBatchRequestSupportMiddleware,
 		TelemetryMiddleware:              telemetryMiddleware,
 	}
@@ -694,8 +713,10 @@ func initializeUseCases(repositories *repositoriesGraph, metricRecorder metricre
 	}
 	hsmSlotStorage := repositories.hsmSlotStorage
 	pkcs11Library := provideSoftHSMConfiguration(config)
+	string2 := provideAKVConfiguration(config)
 	defaultDigitalSignatureManagerFactoryOptions := hsmconnector.DefaultDigitalSignatureManagerFactoryOptions{
 		SoftHSMLibrary: pkcs11Library,
+		AKVVaultURL:    string2,
 	}
 	defaultDigitalSignatureManagerFactory, err := hsmconnector.ProvideDefaultDigitalSignatureManagerFactory(defaultDigitalSignatureManagerFactoryOptions)
 	if err != nil {
@@ -751,6 +772,7 @@ func initializeUseCases(repositories *repositoriesGraph, metricRecorder metricre
 		HSMConnectionResolver:       defaultHSMConnectionResolver,
 		HSMConnector:                hsmconnectorDefaultUseCase,
 		ReferentialIntegrityUseCase: defaultUseCase,
+		SlotUseCase:                 hsmslotDefaultUseCaseTransactionalDecorator,
 		RoleUseCase:                 defaultRoleUseCase,
 	}
 	defaultUserUseCase, err := user.ProvideDefaultUseCase(defaultUserUseCaseOptions)
@@ -987,13 +1009,13 @@ type httpMiddlewareGraph struct {
 	HTTPMiddlewareFactory *middleware.HTTPMiddlewareFactory
 }
 
-var httpMiddlewareSet = wire.NewSet(wire.Struct(new(httpMiddlewareGraph), "*"), httpcontextdefinition.ProvideHTTPContextDefinition, wire.Bind(new(contextdefinition.ContextDefinition), new(*httpcontextdefinition.HTTPContextDefinition)), wire.Struct(new(httpcontextdefinition.HTTPContextDefinitionOptions), "*"), contextvalidation.ProvideRequestContextValidation, wire.Struct(new(contextvalidation.RequestContextValidationOptions), "*"), pip.ProvideDefaultAccountsPIPAdapter, wire.Bind(new(pdp.AccountsPolicyInformationPort), new(*pip.DefaultAccountsPIPAdapter)), wire.Struct(new(pip.DefaultAccountsPIPAdapterOptions), "*"), pip.ProvideDefaultAdminsPIPAdapter, wire.Bind(new(pdp.AdminsPolicyInformationPort), new(*pip.DefaultAdminsPIPAdapter)), wire.Struct(new(pip.DefaultAdminsPIPAdapterOptions), "*"), ProvidePolicyInformationPointYAMLOutputAdapter, wire.Bind(new(pdp.ActionsPolicyInformationPointPort), new(*pipinfile.DefaultRBACActionsPolicyInformationPointYAMLOutputAdapter)), pip.ProvideDefaultUsersPIPAdapter, wire.Bind(new(pdp.UsersPolicyInformationPort), new(*pip.DefaultUsersPIPAdapter)), wire.Struct(new(pip.DefaultUsersPIPAdapterOptions), "*"), pdp.ProvideDefaultPolicyDecisionPointUseCase, wire.Bind(new(pdp.PolicyDecisionPointUseCase), new(*pdp.DefaultPolicyDecisionPointUseCase)), wire.Struct(new(pdp.DefaultPolicyDecisionPointUseCaseOptions), "*"), pepin.ProvideUserPolicyDecisionPointAdapter, wire.Bind(new(pep.UserPolicyDecisionPointPort), new(*pepin.DefaultUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultUserPolicyDecisionPointAdapterOptions), "*"), pepin.ProvideDefaultAccountUserPolicyDecisionPointAdapter, wire.Bind(new(pep.AccountUserPolicyDecisionPointPort), new(*pepin.DefaultAccountUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultAccountUserPolicyDecisionPointAdapterOptions), "*"), pep.ProvideHTTPPolicyEnforcementPoint, wire.Struct(new(pep.HTTPPolicyEnforcementPointOptions), "*"), pep.ProvideRPCPolicyEnforcementPoint, wire.Struct(new(pep.RPCPolicyEnforcementPointOptions), "*"), authorization.ProvideAuthorizationMiddleware, wire.Struct(new(authorization.AuthorizationMiddlewareOptions), "*"), authentication.ProvideAuthenticationMiddleware, wire.Struct(new(authentication.AuthenticationMiddlewareOptions), "*"), middleware.ProvideHTTPMiddlewareFactory, wire.Struct(new(middleware.HTTPMiddlewareFactoryOptions), "*"), telemetry.ProvideTelemetryMiddleware, wire.Struct(new(telemetry.TelemetryMiddlewareOptions), "*"), tracer.ProvideHTTPContextTracer, wire.Struct(new(tracer.HTTPContextTracerOptions), "*"))
+var httpMiddlewareSet = wire.NewSet(wire.Struct(new(httpMiddlewareGraph), "*"), httpcontextdefinition.ProvideHTTPContextDefinition, wire.Bind(new(contextdefinition.ContextDefinition), new(*httpcontextdefinition.HTTPContextDefinition)), wire.Struct(new(httpcontextdefinition.HTTPContextDefinitionOptions), "*"), contextvalidation.ProvideRequestContextValidation, wire.Struct(new(contextvalidation.RequestContextValidationOptions), "*"), pip.ProvideDefaultAccountsPIPAdapter, wire.Bind(new(pdp.AccountsPolicyInformationPort), new(*pip.DefaultAccountsPIPAdapter)), wire.Struct(new(pip.DefaultAccountsPIPAdapterOptions), "*"), pip.ProvideDefaultAdminsPIPAdapter, wire.Bind(new(pdp.AdminsPolicyInformationPort), new(*pip.DefaultAdminsPIPAdapter)), wire.Struct(new(pip.DefaultAdminsPIPAdapterOptions), "*"), ProvidePolicyInformationPointYAMLOutputAdapter, wire.Bind(new(pdp.ActionsPolicyInformationPointPort), new(*pipinfile.DefaultRBACActionsPolicyInformationPointYAMLOutputAdapter)), pip.ProvideDefaultUsersPIPAdapter, wire.Bind(new(pdp.UsersPolicyInformationPort), new(*pip.DefaultUsersPIPAdapter)), wire.Struct(new(pip.DefaultUsersPIPAdapterOptions), "*"), pdp.ProvideDefaultPolicyDecisionPointUseCase, wire.Bind(new(pdp.PolicyDecisionPointUseCase), new(*pdp.DefaultPolicyDecisionPointUseCase)), wire.Struct(new(pdp.DefaultPolicyDecisionPointUseCaseOptions), "*"), pepin.ProvideUserPolicyDecisionPointAdapter, wire.Bind(new(pep.UserPolicyDecisionPointPort), new(*pepin.DefaultUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultUserPolicyDecisionPointAdapterOptions), "*"), pepin.ProvideDefaultAccountUserPolicyDecisionPointAdapter, wire.Bind(new(pep.AccountUserPolicyDecisionPointPort), new(*pepin.DefaultAccountUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultAccountUserPolicyDecisionPointAdapterOptions), "*"), pep.ProvideHTTPPolicyEnforcementPoint, wire.Struct(new(pep.HTTPPolicyEnforcementPointOptions), "*"), pep.ProvideRPCPolicyEnforcementPoint, wire.Struct(new(pep.RPCPolicyEnforcementPointOptions), "*"), authorization.ProvideAuthorizationMiddleware, wire.Struct(new(authorization.AuthorizationMiddlewareOptions), "*"), authentication.ProvideAuthenticationMiddleware, wire.Struct(new(authentication.AuthenticationMiddlewareOptions), "*"), recovery.ProvideRecoveryMiddleware, wire.Struct(new(recovery.RecoveryMiddlewareOptions), "*"), middleware.ProvideHTTPMiddlewareFactory, wire.Struct(new(middleware.HTTPMiddlewareFactoryOptions), "*"), telemetry.ProvideTelemetryMiddleware, wire.Struct(new(telemetry.TelemetryMiddlewareOptions), "*"), tracer.ProvideHTTPContextTracer, wire.Struct(new(tracer.HTTPContextTracerOptions), "*"))
 
 type rpcMiddlewareGraph struct {
 	RPCMiddlewareFactory *middleware.RPCMiddlewareFactory
 }
 
-var rpcMiddlewareSet = wire.NewSet(wire.Struct(new(rpcMiddlewareGraph), "*"), contextvalidation.ProvideRequestContextValidation, wire.Struct(new(contextvalidation.RequestContextValidationOptions), "*"), rpccontextdefinition.ProvideRPCContextDefinitionFromHeaders, wire.Bind(new(contextdefinition.ContextDefinition), new(*rpccontextdefinition.RPCContextDefinition)), wire.Struct(new(rpccontextdefinition.RPCContextDefinitionOptions), "*"), pip.ProvideDefaultAccountsPIPAdapter, wire.Bind(new(pdp.AccountsPolicyInformationPort), new(*pip.DefaultAccountsPIPAdapter)), wire.Struct(new(pip.DefaultAccountsPIPAdapterOptions), "*"), pip.ProvideDefaultAdminsPIPAdapter, wire.Bind(new(pdp.AdminsPolicyInformationPort), new(*pip.DefaultAdminsPIPAdapter)), wire.Struct(new(pip.DefaultAdminsPIPAdapterOptions), "*"), ProvidePolicyInformationPointYAMLOutputAdapter, wire.Bind(new(pdp.ActionsPolicyInformationPointPort), new(*pipinfile.DefaultRBACActionsPolicyInformationPointYAMLOutputAdapter)), pip.ProvideDefaultUsersPIPAdapter, wire.Bind(new(pdp.UsersPolicyInformationPort), new(*pip.DefaultUsersPIPAdapter)), wire.Struct(new(pip.DefaultUsersPIPAdapterOptions), "*"), pdp.ProvideDefaultPolicyDecisionPointUseCase, wire.Bind(new(pdp.PolicyDecisionPointUseCase), new(*pdp.DefaultPolicyDecisionPointUseCase)), wire.Struct(new(pdp.DefaultPolicyDecisionPointUseCaseOptions), "*"), pepin.ProvideUserPolicyDecisionPointAdapter, wire.Bind(new(pep.UserPolicyDecisionPointPort), new(*pepin.DefaultUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultUserPolicyDecisionPointAdapterOptions), "*"), pepin.ProvideDefaultAccountUserPolicyDecisionPointAdapter, wire.Bind(new(pep.AccountUserPolicyDecisionPointPort), new(*pepin.DefaultAccountUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultAccountUserPolicyDecisionPointAdapterOptions), "*"), pep.ProvideHTTPPolicyEnforcementPoint, wire.Struct(new(pep.HTTPPolicyEnforcementPointOptions), "*"), pep.ProvideRPCPolicyEnforcementPoint, wire.Struct(new(pep.RPCPolicyEnforcementPointOptions), "*"), authorization.ProvideAuthorizationMiddleware, wire.Struct(new(authorization.AuthorizationMiddlewareOptions), "*"), authentication.ProvideAuthenticationMiddleware, wire.Struct(new(authentication.AuthenticationMiddlewareOptions), "*"), rpcbatchrequestsupport.ProvideRPCBatchRequestSupportMiddleware, wire.Struct(new(rpcbatchrequestsupport.RPCBatchRequestSupportMiddlewareOptions), "*"), middleware.ProvideRPCMiddlewareFactory, wire.Struct(new(middleware.RPCMiddlewareFactoryOptions), "*"), telemetry.ProvideTelemetryMiddleware, wire.Struct(new(telemetry.TelemetryMiddlewareOptions), "*"), tracer.ProvideHTTPContextTracer, wire.Struct(new(tracer.HTTPContextTracerOptions), "*"))
+var rpcMiddlewareSet = wire.NewSet(wire.Struct(new(rpcMiddlewareGraph), "*"), contextvalidation.ProvideRequestContextValidation, wire.Struct(new(contextvalidation.RequestContextValidationOptions), "*"), rpccontextdefinition.ProvideRPCContextDefinitionFromHeaders, wire.Bind(new(contextdefinition.ContextDefinition), new(*rpccontextdefinition.RPCContextDefinition)), wire.Struct(new(rpccontextdefinition.RPCContextDefinitionOptions), "*"), pip.ProvideDefaultAccountsPIPAdapter, wire.Bind(new(pdp.AccountsPolicyInformationPort), new(*pip.DefaultAccountsPIPAdapter)), wire.Struct(new(pip.DefaultAccountsPIPAdapterOptions), "*"), pip.ProvideDefaultAdminsPIPAdapter, wire.Bind(new(pdp.AdminsPolicyInformationPort), new(*pip.DefaultAdminsPIPAdapter)), wire.Struct(new(pip.DefaultAdminsPIPAdapterOptions), "*"), ProvidePolicyInformationPointYAMLOutputAdapter, wire.Bind(new(pdp.ActionsPolicyInformationPointPort), new(*pipinfile.DefaultRBACActionsPolicyInformationPointYAMLOutputAdapter)), pip.ProvideDefaultUsersPIPAdapter, wire.Bind(new(pdp.UsersPolicyInformationPort), new(*pip.DefaultUsersPIPAdapter)), wire.Struct(new(pip.DefaultUsersPIPAdapterOptions), "*"), pdp.ProvideDefaultPolicyDecisionPointUseCase, wire.Bind(new(pdp.PolicyDecisionPointUseCase), new(*pdp.DefaultPolicyDecisionPointUseCase)), wire.Struct(new(pdp.DefaultPolicyDecisionPointUseCaseOptions), "*"), pepin.ProvideUserPolicyDecisionPointAdapter, wire.Bind(new(pep.UserPolicyDecisionPointPort), new(*pepin.DefaultUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultUserPolicyDecisionPointAdapterOptions), "*"), pepin.ProvideDefaultAccountUserPolicyDecisionPointAdapter, wire.Bind(new(pep.AccountUserPolicyDecisionPointPort), new(*pepin.DefaultAccountUserPolicyDecisionPointAdapter)), wire.Struct(new(pepin.DefaultAccountUserPolicyDecisionPointAdapterOptions), "*"), pep.ProvideHTTPPolicyEnforcementPoint, wire.Struct(new(pep.HTTPPolicyEnforcementPointOptions), "*"), pep.ProvideRPCPolicyEnforcementPoint, wire.Struct(new(pep.RPCPolicyEnforcementPointOptions), "*"), authorization.ProvideAuthorizationMiddleware, wire.Struct(new(authorization.AuthorizationMiddlewareOptions), "*"), authentication.ProvideAuthenticationMiddleware, wire.Struct(new(authentication.AuthenticationMiddlewareOptions), "*"), rpcbatchrequestsupport.ProvideRPCBatchRequestSupportMiddleware, wire.Struct(new(rpcbatchrequestsupport.RPCBatchRequestSupportMiddlewareOptions), "*"), recovery.ProvideRecoveryMiddleware, wire.Struct(new(recovery.RecoveryMiddlewareOptions), "*"), middleware.ProvideRPCMiddlewareFactory, wire.Struct(new(middleware.RPCMiddlewareFactoryOptions), "*"), telemetry.ProvideTelemetryMiddleware, wire.Struct(new(telemetry.TelemetryMiddlewareOptions), "*"), tracer.ProvideHTTPContextTracer, wire.Struct(new(tracer.HTTPContextTracerOptions), "*"))
 
 // repositories_injector.go:
 
@@ -1028,12 +1050,21 @@ type useCasesGraph struct {
 	DigitalSignatureManagerFactory hsmconnector.DigitalSignatureManagerFactory
 }
 
-var useCasesSet = wire.NewSet(wire.Struct(new(useCasesGraph), "*"), transactionalmanager.ProvideTransactionalManager, wire.Bind(new(transactionalmanager.TransactionalManagerUseCase), new(*transactionalmanager.TransactionalManager)), wire.Struct(new(transactionalmanager.TransactionalManagerOptions), "*"), referentialintegrity.ProvideDefaultUseCase, wire.Bind(new(referentialintegrity.ReferentialIntegrityUseCase), new(*referentialintegrity.DefaultUseCase)), wire.Struct(new(referentialintegrity.DefaultUseCaseOptions), "*"), application.ProvideDefaultUseCase, wire.Bind(new(application.ApplicationUseCase), new(*application.DefaultUseCase)), wire.Struct(new(application.DefaultUseCaseOptions), "*"), user.ProvideDefaultUseCase, wire.Bind(new(user.UserUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUserUseCaseOptions), "*"), user.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(user.AccountUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUseCaseTransactionalDecoratorOptions), "*"), admin.ProvideDefaultUseCase, wire.Bind(new(admin.AdminUseCase), new(*admin.DefaultUseCase)), wire.Struct(new(admin.DefaultUseCaseOptions), "*"), hsmmodule.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmmodule.HSMModuleUseCase), new(*hsmmodule.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmmodule.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmmodule.ProvideDefaultHSMModuleUseCase, wire.Struct(new(hsmmodule.DefaultUseCaseOptions), "*"), hsmslot.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmslot.HSMSlotUseCase), new(*hsmslot.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmslot.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmslot.ProvideDefaultUseCase, wire.Struct(new(hsmslot.DefaultUseCaseOptions), "*"), hsmconnector.ProvideDefaultHSMConnector, wire.Bind(new(hsmconnector.HSMConnector), new(*hsmconnector.DefaultUseCase)), wire.Struct(new(hsmconnector.DefaultUseCaseOptions), "*"), provideDefaultRoleStorageInFile, role.ProvideDefaultRoleUseCase, wire.Bind(new(role.RoleUseCase), new(*role.DefaultRoleUseCase)), wire.Struct(new(role.DefaultRoleUseCaseOptions), "*"), provideSoftHSMConfiguration, hsmconnector.ProvideDefaultDigitalSignatureManagerFactory, wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)), wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"), hsmconnection.ProvideDefaultHSMConnectionResolver, wire.Bind(new(hsmconnection.Resolver), new(*hsmconnection.DefaultHSMConnectionResolver)), wire.Struct(new(hsmconnection.DefaultHSMConnectionResolverOptions), "*"))
+var useCasesSet = wire.NewSet(wire.Struct(new(useCasesGraph), "*"), transactionalmanager.ProvideTransactionalManager, wire.Bind(new(transactionalmanager.TransactionalManagerUseCase), new(*transactionalmanager.TransactionalManager)), wire.Struct(new(transactionalmanager.TransactionalManagerOptions), "*"), referentialintegrity.ProvideDefaultUseCase, wire.Bind(new(referentialintegrity.ReferentialIntegrityUseCase), new(*referentialintegrity.DefaultUseCase)), wire.Struct(new(referentialintegrity.DefaultUseCaseOptions), "*"), application.ProvideDefaultUseCase, wire.Bind(new(application.ApplicationUseCase), new(*application.DefaultUseCase)), wire.Struct(new(application.DefaultUseCaseOptions), "*"), user.ProvideDefaultUseCase, wire.Bind(new(user.UserUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUserUseCaseOptions), "*"), user.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(user.AccountUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUseCaseTransactionalDecoratorOptions), "*"), admin.ProvideDefaultUseCase, wire.Bind(new(admin.AdminUseCase), new(*admin.DefaultUseCase)), wire.Struct(new(admin.DefaultUseCaseOptions), "*"), hsmmodule.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmmodule.HSMModuleUseCase), new(*hsmmodule.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmmodule.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmmodule.ProvideDefaultHSMModuleUseCase, wire.Struct(new(hsmmodule.DefaultUseCaseOptions), "*"), hsmslot.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmslot.HSMSlotUseCase), new(*hsmslot.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmslot.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmslot.ProvideDefaultUseCase, wire.Struct(new(hsmslot.DefaultUseCaseOptions), "*"), hsmconnector.ProvideDefaultHSMConnector, wire.Bind(new(hsmconnector.HSMConnector), new(*hsmconnector.DefaultUseCase)), wire.Struct(new(hsmconnector.DefaultUseCaseOptions), "*"), provideDefaultRoleStorageInFile, role.ProvideDefaultRoleUseCase, wire.Bind(new(role.RoleUseCase), new(*role.DefaultRoleUseCase)), wire.Struct(new(role.DefaultRoleUseCaseOptions), "*"), provideSoftHSMConfiguration,
+	provideAKVConfiguration, hsmconnector.ProvideDefaultDigitalSignatureManagerFactory, wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)), wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"), hsmconnection.ProvideDefaultHSMConnectionResolver, wire.Bind(new(hsmconnection.Resolver), new(*hsmconnection.DefaultHSMConnectionResolver)), wire.Struct(new(hsmconnection.DefaultHSMConnectionResolverOptions), "*"),
+)
 
 func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {
-	if config.Libraries.HSMModules.SoftHSM != nil {
+	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.SoftHSM != nil {
 		softHSMConfig := hsmconnector.PKCS11Library(config.Libraries.HSMModules.SoftHSM.Library)
 		return &softHSMConfig
+	}
+	return nil
+}
+
+func provideAKVConfiguration(config Config) *string {
+	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.AKV != nil {
+		return &config.Libraries.HSMModules.AKV.URL
 	}
 	return nil
 }

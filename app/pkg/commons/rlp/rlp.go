@@ -3,7 +3,6 @@ package rlp
 
 import (
 	"errors"
-	"math"
 	"math/big"
 	"reflect"
 )
@@ -22,7 +21,6 @@ const (
 
 var (
 	ErrEncodingUnhandledInputType = errors.New("unhandled input type for RLP encoding")
-	ErrEncodingInputSizeTooLong   = errors.New("input size is too long for RLP encoding")
 
 	ErrDecodingUnhandledInputType  = errors.New("unhandled input type for RLP decoding")
 	ErrDecodingLengthFieldTooShort = errors.New("cannot read data, incomplete length field")
@@ -229,9 +227,7 @@ func encodeLength(length int, offset int) ([]byte, error) {
 	if length < 56 {
 		return []byte{byte(length + offset)}, nil
 	}
-	if length < int(math.Pow(256, 8)) {
-		return nil, ErrEncodingInputSizeTooLong
-	}
+	// The specification of the RLP algorithm limits the maximum input size to 2^64. However, as this implementation uses slices and therefore int for their lengths, it is limited to the max int value.
 	bl := toBinary(length)
 	return append([]byte{byte(len(bl) + offset + 55)}, bl...), nil
 }
@@ -299,7 +295,7 @@ func DecodeAndDeserialize(b []byte, output interface{}) error {
 	}
 
 	outputValue := reflect.ValueOf(output)
-	if outputValue.Kind() != reflect.Ptr {
+	if outputValue.Kind() != reflect.Pointer {
 		return errors.New("output must be a pointer")
 	}
 
@@ -544,11 +540,15 @@ func decodeLength(input []byte) (offset int, dataLength int, dataType string, er
 
 func toInt(b []byte) int {
 	length := len(b)
+
 	if length == 0 {
 		return 0
-	} else if length == 1 {
+	}
+
+	if length == 1 {
 		return int(b[0])
 	}
+
 	return int(b[length-1]) + toInt(b[:length-1])*256
 }
 

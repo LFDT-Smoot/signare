@@ -92,7 +92,7 @@ func (repository *Repository) Remove(ctx context.Context, id user.AccountID) (*u
 	removeInput := mapToAccountID(id)
 	_, errRemove := repository.infra.Remove(ctx, removeInput)
 	if errRemove != nil {
-		return nil, mapPersistenceErrorToSignerError(err)
+		return nil, mapPersistenceErrorToSignerError(errRemove)
 	}
 
 	return storageData, nil
@@ -110,7 +110,7 @@ func (repository *Repository) RemoveAllForAddress(ctx context.Context, applicati
 	removeAllInput := mapToAccountApplicationAddresses(applicationID, address)
 	_, errRemove := repository.infra.RemoveAllForAddress(ctx, removeAllInput)
 	if errRemove != nil {
-		return nil, mapPersistenceErrorToSignerError(err)
+		return nil, mapPersistenceErrorToSignerError(errRemove)
 	}
 
 	return accounts, nil

@@ -1,0 +1,274 @@
+version: "2"
+run:
+  concurrency: 4
+  go: 1.25.11
+  modules-download-mode: readonly
+  issues-exit-code: 1
+  tests: true
+  allow-parallel-runners: false
+  allow-serial-runners: false
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: false
+  sort-order:
+    - linter
+    - severity
+    - file
+  path-prefix: ""
+linters:
+  enable:
+    - asciicheck
+    - bidichk
+    - gocheckcompilerdirectives
+    - gocyclo
+    - gosec
+    - loggercheck
+    - revive
+  disable:
+    - testifylint
+  settings:
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          allow:
+            - $gostd
+            - github.com/OpenPeeDeeP
+          deny:
+            - pkg: github.com/davecgh/go-spew/spew
+              desc: not allowed
+    errcheck:
+      disable-default-exclusions: false
+      check-type-assertions: false
+      check-blank: false
+    goconst:
+      match-constant: true
+      min-len: 3
+      min-occurrences: 3
+      numbers: false
+      min: 3
+      max: 3
+      ignore-calls: true
+    gocritic:
+      disable-all: false
+      enable-all: false
+      disabled-checks:
+        - regexpMust
+      disabled-tags:
+        - performance
+      settings:
+        captLocal:
+          paramsOnly: true
+        commentedOutCode:
+          minLength: 15
+        elseif:
+          skipBalanced: true
+        hugeParam:
+          sizeThreshold: 80
+        ifElseChain:
+          minThreshold: 2
+        nestingReduce:
+          bodyWidth: 5
+        rangeExprCopy:
+          sizeThreshold: 32
+          skipTestFuncs: true
+        rangeValCopy:
+          sizeThreshold: 128
+          skipTestFuncs: true
+        ruleguard:
+          debug: ""
+          disable: ""
+          enable: <all>
+          failOn: ""
+          rules: ""
+        tooManyResultsChecker:
+          maxResults: 5
+        truncateCmp:
+          skipArchDependent: true
+        underef:
+          skipRecvDeref: true
+        unnamedResult:
+          checkExported: false
+    gocyclo:
+      min-complexity: 30
+    gosec:
+      excludes:
+        - G115
+      severity: low
+      confidence: low
+      config:
+        G101:
+          entropy_threshold: "80.0"
+          ignore_entropy: false
+          pattern: (?i)passwd|pass|password|pwd|secret|token|pw|apiKey|bearer|cred
+          per_char_threshold: "3.0"
+          truncate: "16"
+        G104:
+          fmt:
+            - Fscanf
+        G111:
+          pattern: http\.Dir\("\/"\)|http\.Dir\('\/'\)
+        G301: "0750"
+        G302: "0600"
+        G306: "0600"
+        global:
+          '#nosec': ""
+          audit: false
+          nosec: false
+          show-ignored: false
+    govet:
+      enable:
+        - shadow
+      enable-all: false
+      disable-all: false
+      settings:
+        shadow:
+          strict: false
+    lll:
+      line-length: 120
+      tab-width: 1
+    loggercheck:
+      kitlog: false
+      klog: false
+      logr: false
+      zap: false
+      require-string-key: true
+      no-printf-like: true
+    misspell:
+      mode: ""
+      locale: US
+    nakedret:
+      max-func-lines: 30
+    revive:
+      confidence: 0.8
+      severity: warning
+      enable-all-rules: false
+      rules:
+        - name: blank-imports
+          severity: warning
+          disabled: false
+        - name: context-as-argument
+          arguments:
+            - allowTypesBefore: '*testing.T,*github.com/user/repo/testing.Harness'
+          severity: warning
+          disabled: false
+        - name: context-keys-type
+          severity: warning
+          disabled: false
+        - name: dot-imports
+          severity: warning
+          disabled: false
+        - name: empty-block
+          severity: warning
+          disabled: false
+        - name: error-naming
+          severity: warning
+          disabled: false
+        - name: error-return
+          severity: warning
+          disabled: false
+        - name: error-strings
+          severity: warning
+          disabled: false
+        - name: errorf
+          severity: warning
+          disabled: false
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+            - disableStutteringCheck
+          severity: warning
+          disabled: false
+        - name: if-return
+          severity: warning
+          disabled: false
+        - name: increment-decrement
+          severity: warning
+          disabled: false
+        - name: indent-error-flow
+          severity: warning
+          disabled: false
+        - name: package-comments
+          severity: warning
+          disabled: false
+        - name: range
+          severity: warning
+          disabled: false
+        - name: receiver-naming
+          severity: warning
+          disabled: false
+        - name: redefines-builtin-id
+          severity: warning
+          disabled: false
+        - name: superfluous-else
+          severity: warning
+          disabled: false
+        - name: time-naming
+          severity: warning
+          disabled: false
+        - name: var-naming
+          arguments:
+            - - ID
+            - - VM
+          severity: warning
+          disabled: false
+        - name: var-declaration
+          severity: warning
+          disabled: false
+        - name: unexported-return
+          severity: warning
+          disabled: false
+        - name: unreachable-code
+          severity: warning
+          disabled: false
+        - name: unused-parameter
+          severity: warning
+          disabled: false
+    unused:
+      field-writes-are-uses: true
+      post-statements-are-reads: false
+      exported-fields-are-used: true
+      parameters-are-used: true
+      local-variables-are-used: true
+      generated-is-used: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - graph
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 50
+  uniq-by-line: true
+  new-from-rev: ""
+  new-from-patch: ""
+  whole-files: false
+  new: false
+  fix: false
+formatters:
+  enable:
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/hyperledger-labs
+  exclusions:
+    generated: lax
+    paths:
+      - graph
+      - third_party$
+      - builtin$
+      - examples$

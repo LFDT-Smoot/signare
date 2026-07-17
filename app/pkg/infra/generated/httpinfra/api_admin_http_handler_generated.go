@@ -62,6 +62,9 @@ type AdminAPIHTTPHandler interface {
 	// HandleHTTPAdminSlotsRemove handles an AdminSlotsRemove request
 	HandleHTTPAdminSlotsRemove(responseWriter http.ResponseWriter, request *http.Request)
 
+	// HandleHTTPAdminSlotsUpdateConfig handles an AdminSlotsUpdateConfig request
+	HandleHTTPAdminSlotsUpdateConfig(responseWriter http.ResponseWriter, request *http.Request)
+
 	// HandleHTTPAdminSlotsUpdatePin handles an AdminSlotsUpdatePin request
 	HandleHTTPAdminSlotsUpdatePin(responseWriter http.ResponseWriter, request *http.Request)
 
@@ -109,6 +112,8 @@ type AdminAPIAdapter interface {
 	AdaptAdminSlotsList(ctx context.Context, data AdminSlotsListRequest) (*AdminSlotsListResponseWrapper, *httpinfra.HTTPError)
 
 	AdaptAdminSlotsRemove(ctx context.Context, data AdminSlotsRemoveRequest) (*AdminSlotsRemoveResponseWrapper, *httpinfra.HTTPError)
+
+	AdaptAdminSlotsUpdateConfig(ctx context.Context, data AdminSlotsUpdateConfigRequest) (*AdminSlotsUpdateConfigResponseWrapper, *httpinfra.HTTPError)
 
 	AdaptAdminSlotsUpdatePin(ctx context.Context, data AdminSlotsUpdatePinRequest) (*AdminSlotsUpdatePinResponseWrapper, *httpinfra.HTTPError)
 
@@ -1385,6 +1390,111 @@ func (handler DefaultAdminAPIHTTPHandler) HandleHTTPAdminSlotsRemove(w http.Resp
 	reqData.SlotId = slotIdValue
 
 	response, adaptError := handler.adapter.AdaptAdminSlotsRemove(ctx, reqData)
+	if adaptError != nil {
+		handler.responseHandler.HandleErrorResponse(ctx, w, adaptError)
+		return
+	}
+
+	responseValidationResult, responseValidationErr := response.SlotDetail.ValidateWith()
+
+	if responseValidationErr != nil || !responseValidationResult.Valid {
+		logger.LogEntry(ctx).Errorf("error validating response [%+v]", response)
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+		httpError.SetMessage("the response was not successfully validated")
+		handler.responseHandler.HandleErrorResponse(ctx, w, httpError)
+		return
+	}
+
+	handler.responseHandler.HandleSuccessResponse(ctx, w, response.ResponseInfo, response.SlotDetail)
+}
+
+// AdminSlotsUpdateConfigSupportedParams AdminSlotsUpdateConfig supported parameters
+type AdminSlotsUpdateConfigSupportedParams struct {
+	params map[string]bool
+}
+
+// NewAdminSlotsUpdateConfigSupportedParams returns a new AdminSlotsUpdateConfigSupportedParams
+func NewAdminSlotsUpdateConfigSupportedParams() AdminSlotsUpdateConfigSupportedParams {
+	params := make(map[string]bool)
+	params["moduleId"] = true
+	params["slotId"] = true
+	params["SlotUpdateConfig"] = true
+	return AdminSlotsUpdateConfigSupportedParams{
+		params: params,
+	}
+}
+
+func (sp *AdminSlotsUpdateConfigSupportedParams) check(r *http.Request) *httpinfra.HTTPError {
+	unsupportedParams := make([]string, 0)
+	queryParams := r.URL.Query()
+	for param := range queryParams {
+		if !sp.params[param] {
+			unsupportedParams = append(unsupportedParams, param)
+		}
+	}
+	if len(unsupportedParams) > 0 {
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+		httpError.SetMessage(fmt.Sprintf("Unsupported parameters in request [%s]", strings.Join(unsupportedParams, ",")))
+		return httpError
+	}
+	return nil
+}
+
+// HandleHTTPAdminSlotsUpdateConfig handles AdminSlotsUpdateConfig request
+func (handler DefaultAdminAPIHTTPHandler) HandleHTTPAdminSlotsUpdateConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	params := mux.Vars(r)
+
+	// Parameters supported check
+	supportedParams := NewAdminSlotsUpdateConfigSupportedParams()
+	supportedParamsErr := supportedParams.check(r)
+	if supportedParamsErr != nil {
+		handler.responseHandler.HandleErrorResponse(ctx, w, supportedParamsErr)
+		return
+	}
+
+	// Data retrieval
+	moduleIdRawValue := params["moduleId"]
+	// Conversions
+
+	moduleIdValue := moduleIdRawValue
+	// Data retrieval
+	slotIdRawValue := params["slotId"]
+	// Conversions
+
+	slotIdValue := slotIdRawValue
+	// Data retrieval
+	// Conversions
+	// Request body processing
+	slotUpdateConfigValue := SlotUpdateConfig{}
+	errDecoder := json.NewDecoder(r.Body).Decode(&slotUpdateConfigValue)
+	if errDecoder != nil {
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+		httpError.SetMessage(fmt.Sprintf("an error occurred when parsing the JSON request data [%s]: [%s]", r.Body, errDecoder.Error()))
+		handler.responseHandler.HandleErrorResponse(ctx, w, httpError)
+		return
+	}
+	slotUpdateConfigValidationResult, slotUpdateConfigValidationErr := slotUpdateConfigValue.ValidateWith()
+
+	if slotUpdateConfigValidationErr != nil {
+		handler.responseHandler.HandleErrorResponse(ctx, w, slotUpdateConfigValidationErr)
+		return
+	}
+
+	if !slotUpdateConfigValidationResult.Valid {
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+		httpError.SetMessage(fmt.Sprintf("an error occurred when validating the JSON request data [%s]: [%s]", r.Body, slotUpdateConfigValidationResult.NotValidReason))
+		handler.responseHandler.HandleErrorResponse(ctx, w, httpError)
+		return
+	}
+
+	slotUpdateConfigValue.SetDefaults()
+	reqData := AdminSlotsUpdateConfigRequest{}
+	reqData.ModuleId = moduleIdValue
+	reqData.SlotId = slotIdValue
+	reqData.SlotUpdateConfig = slotUpdateConfigValue
+
+	response, adaptError := handler.adapter.AdaptAdminSlotsUpdateConfig(ctx, reqData)
 	if adaptError != nil {
 		handler.responseHandler.HandleErrorResponse(ctx, w, adaptError)
 		return

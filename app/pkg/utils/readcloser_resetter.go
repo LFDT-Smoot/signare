@@ -1,3 +1,4 @@
+//nolint:revive
 package utils
 
 import (
@@ -7,6 +8,10 @@ import (
 	"io"
 )
 
+// ReadAndResetCloser reads the entire reader, unmarshals it into pointer, and resets the reader so it
+// can be read again. The io.ReadAll is intentionally unbounded here: callers on the request path rely
+// on the entrypoint http.MaxBytesReader (see httpinfra.MaxBytesMiddleware) to cap the body upstream.
+// A caller reading an untrusted body without that wrapper must bound it themselves.
 func ReadAndResetCloser(reader *io.ReadCloser, pointer any) error {
 	body, err := io.ReadAll(*reader)
 	if err != nil {

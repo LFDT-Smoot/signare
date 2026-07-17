@@ -66,7 +66,10 @@ func (rpcRouter *DefaultRPCRouter) RegisterMiddleware(middlewares ...func(handle
 	return nil
 }
 
-// HandleRPCRequest handles incoming JSON-RPC requests.
+// HandleRPCRequest handles incoming JSON-RPC requests. The io.ReadAll below is unbounded by design:
+// the RPC entrypoint wraps r.Body with http.MaxBytesReader (see httpinfra.MaxBytesMiddleware), so the
+// body is already capped before this handler runs. A router serving this handler without that wrapper
+// would be unbounded.
 func (rpcRouter *DefaultRPCRouter) HandleRPCRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	body, err := io.ReadAll(r.Body)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	embedded "github.com/hyperledger-labs/signare/app"
+	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
 	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence/dbmigrator"
 	_ "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql/init" // Used to register sql dialects
 	upgrade "github.com/hyperledger-labs/signare/app/pkg/graph/ugprade"
@@ -32,6 +33,10 @@ func executeUpgrade(_ *cobra.Command, _ []string) error {
 	staticConfig, err := config.GetStaticConfiguration(configFilePath)
 	if err != nil {
 		panic(fmt.Sprintf("error reading static configuration: [%v]", err))
+	}
+
+	for _, warning := range staticConfig.InsecureSettingsWarnings() {
+		logger.LogEntry(ctx).Warn(warning)
 	}
 
 	appConfig := toGraphConfiguration(staticConfig)

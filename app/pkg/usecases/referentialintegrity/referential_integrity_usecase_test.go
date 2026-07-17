@@ -199,7 +199,7 @@ func TestDefaultUseCase_ListEntries(t *testing.T) {
 		output, err := app.ReferentialIntegrityUseCase.ListEntries(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, output)
-		require.Len(t, output.Items, 0)
+		require.Empty(t, output.Items)
 	})
 
 	t.Run("success: no elements for non existing parent resource", func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestDefaultUseCase_ListEntries(t *testing.T) {
 		output, err := app.ReferentialIntegrityUseCase.ListEntries(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, output)
-		require.Len(t, output.Items, 0)
+		require.Empty(t, output.Items)
 	})
 
 	t.Run("success: filter by resource", func(t *testing.T) {
@@ -348,7 +348,7 @@ func TestDefaultUseCase_ListMyChildrenEntries(t *testing.T) {
 		output, err := app.ReferentialIntegrityUseCase.ListMyChildrenEntries(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, output)
-		require.Len(t, output.Items, 0)
+		require.Empty(t, output.Items)
 	})
 
 	t.Run("success: found children", func(t *testing.T) {
@@ -359,7 +359,7 @@ func TestDefaultUseCase_ListMyChildrenEntries(t *testing.T) {
 		output, err := app.ReferentialIntegrityUseCase.ListMyChildrenEntries(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, output)
-		require.True(t, len(output.Items) >= entriesToCreate)
+		require.GreaterOrEqual(t, len(output.Items), entriesToCreate)
 	})
 
 	t.Run("error: invalid parent resource ID", func(t *testing.T) {

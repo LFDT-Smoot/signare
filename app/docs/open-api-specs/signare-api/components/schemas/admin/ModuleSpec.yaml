@@ -6,9 +6,13 @@ properties:
     discriminator:
       propertyName: hsmKind
       mapping:
-        softHSM: '#/components/schemas/SoftHSM'
+        softHSM: '../../_index.yaml#/schemas/SoftHSM'
+        AKV: '../../_index.yaml#/schemas/AKV'
+        LocalKeyVault: '../../_index.yaml#/schemas/LocalKeyVault'
     oneOf:
+      - $ref: '../../_index.yaml#/schemas/AKV'
       - $ref: '../../_index.yaml#/schemas/SoftHSM'
+      - $ref: '../../_index.yaml#/schemas/LocalKeyVault'
     x-required: optional
     nullable: true
     additionalProperties: false

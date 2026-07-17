@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
-
-	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -52,10 +52,10 @@ func TestProvideDefaultLogger(t *testing.T) {
 		logger.LogEntry(ctx).Info(logMessage)
 		logOutput := logEntry{}
 		err := json.Unmarshal(buffer.Bytes(), &logOutput)
-		assert.NoError(t, err)
-		assert.Equal(t, logMessage, logOutput.Message)
-		assert.Equal(t, logger.LevelInfo, logOutput.Level)
-		assert.NotZero(t, logOutput.Time)
+		require.NoError(t, err)
+		require.Equal(t, logMessage, logOutput.Message)
+		require.Equal(t, logger.LevelInfo, logOutput.Level)
+		require.NotZero(t, logOutput.Time)
 	})
 
 	t.Run("Text Handler is enabled in local mode", func(t *testing.T) {
@@ -73,8 +73,8 @@ func TestProvideDefaultLogger(t *testing.T) {
 
 		expectedOutput := `level=INFO message="This is the log message"`
 		err := json.Unmarshal(buffer.Bytes(), &logOutput)
-		assert.Error(t, err)
-		assert.Contains(t, buffer.String(), expectedOutput)
+		require.Error(t, err)
+		require.Contains(t, buffer.String(), expectedOutput)
 	})
 
 	t.Run("Lower levels than the configured one are not printed", func(t *testing.T) {
@@ -88,7 +88,7 @@ func TestProvideDefaultLogger(t *testing.T) {
 		logger.LogEntry(ctx).Debug(logMessage)
 		logOutput := logEntry{}
 		err := json.Unmarshal(buffer.Bytes(), &logOutput)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -101,13 +101,13 @@ func TestLogger_withoutArguments(t *testing.T) {
 		expected := `{"level":"INFO","message":"this is important"}`
 
 		logger.LogEntry(ctx).Info(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 
 		expected = `{"level":"INFO","message":"this is an important message"}`
 
 		logger.LogEntry(ctx).Infof("this is an %s message", important)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 
@@ -116,13 +116,13 @@ func TestLogger_withoutArguments(t *testing.T) {
 		expected := `{"level":"WARN","message":"this is important"}`
 
 		logger.LogEntry(ctx).Warn(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 
 		expected = `{"level":"WARN","message":"this is an important message"}`
 
 		logger.LogEntry(ctx).Warnf("this is an %s message", important)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 
@@ -131,13 +131,13 @@ func TestLogger_withoutArguments(t *testing.T) {
 		expected := `{"level":"DEBUG","message":"this is important"}`
 
 		logger.LogEntry(ctx).Debug(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 
 		expected = `{"level":"DEBUG","message":"this is an important message"}`
 
 		logger.LogEntry(ctx).Debugf("this is an %s message", important)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 
@@ -146,7 +146,7 @@ func TestLogger_withoutArguments(t *testing.T) {
 		expected := `{"level":"ERROR","message":"this is important"}`
 
 		logger.LogEntry(ctx).Error(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 }
@@ -160,13 +160,13 @@ func TestLogger_withArguments(t *testing.T) {
 		expected := `{"level":"INFO","message":"this is important","threadID":10}`
 
 		logger.LogEntry(ctx).WithArguments("threadID", 10).Info(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 
 		expected = `{"level":"INFO","message":"this is an important message","threadID":10}`
 
 		logger.LogEntry(ctx).WithArguments("threadID", 10).Infof("this is an %s message", important)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 
@@ -175,13 +175,13 @@ func TestLogger_withArguments(t *testing.T) {
 		expected := `{"level":"WARN","message":"this is important","threadID":10}`
 
 		logger.LogEntry(ctx).WithArguments("threadID", 10).Warn(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 
 		expected = `{"level":"WARN","message":"this is an important message","threadID":10}`
 
 		logger.LogEntry(ctx).WithArguments("threadID", 10).Warnf("this is an %s message", important)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 
@@ -190,13 +190,13 @@ func TestLogger_withArguments(t *testing.T) {
 		expected := `{"level":"DEBUG","message":"this is important","threadID":10}`
 
 		logger.LogEntry(ctx).WithArguments("threadID", 10).Debug(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 
 		expected = `{"level":"DEBUG","message":"this is an important message","threadID":10}`
 
 		logger.LogEntry(ctx).WithArguments("threadID", 10).Debugf("this is an %s message", important)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 
@@ -205,7 +205,7 @@ func TestLogger_withArguments(t *testing.T) {
 		expected := `{"level":"ERROR","message":"this is important","threadID":10}`
 
 		logger.LogEntry(ctx).WithArguments("threadID", 10).Error(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 }
@@ -220,13 +220,13 @@ func TestLogger_withContextKeyValues(t *testing.T) {
 		expected := `{"level":"INFO","message":"this is important","threadID":10,"contextKey":"test-value"}`
 
 		logger.LogEntry(ctxWithValue).WithArguments("threadID", 10).Info(msg)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 
 		expected = `{"level":"INFO","message":"this is an important message","threadID":10,"contextKey":"test-value"}`
 
 		logger.LogEntry(ctxWithValue).WithArguments("threadID", 10).Infof("this is an %s message", important)
-		assert.Equal(t, expected, logWithoutTimeAttr(buffer))
+		require.Equal(t, expected, logWithoutTimeAttr(buffer))
 		buffer.Reset()
 	})
 }

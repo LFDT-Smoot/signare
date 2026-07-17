@@ -17,7 +17,7 @@ func InitializeApp() (*graph.GraphShared, error) {
 			PersistenceFw: graph.PersistenceFwConfig{
 				SQLite: &graph.SQLiteConfig{},
 			},
-			HSMModules: graph.HSMModules{
+			HSMModules: &graph.HSMModules{
 				SoftHSM: &graph.SoftHSMConfig{
 					Library: signaturemanagertesthelper.SoftHSMLib,
 				},

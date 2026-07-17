@@ -2,14 +2,15 @@ package hsmconnector
 
 import (
 	"context"
-	"fmt"
 	"os"
-
-	"github.com/miekg/pkcs11"
 
 	signererrors "github.com/hyperledger-labs/signare/app/pkg/internal/errors"
 	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
+	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager/akv"
+	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager/localkeyvault"
 	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager/pkcs11hsm"
+
+	"github.com/miekg/pkcs11"
 )
 
 // DigitalSignatureManagerFactory defines the factory to create DigitalSignatureManager connections.
@@ -41,11 +42,6 @@ func (u *DefaultDigitalSignatureManagerFactory) Reset(ctx context.Context, kind 
 }
 
 func (u *DefaultDigitalSignatureManagerFactory) Create(ctx context.Context, input CreateInput) (signaturemanager.DigitalSignatureManager, error) {
-	if input.ModuleKind != SoftHSMModuleKind {
-		errMsg := fmt.Sprintf("the provided module kind '%s' is not supported", input.ModuleKind)
-		return nil, signererrors.InvalidArgument().SetHumanReadableMessage(errMsg).WithMessage(errMsg)
-	}
-
 	digitalSignatureManager, ok := u.digitalSignatureManagerMap[input.ModuleKind]
 	if !ok {
 		return nil, signererrors.InvalidArgument().WithMessage("the provided module kind '%s' is not supported", input.ModuleKind)
@@ -82,6 +78,7 @@ type DefaultDigitalSignatureManagerFactory struct {
 type DefaultDigitalSignatureManagerFactoryOptions struct {
 	// SoftHSMLibrary path to the library to connect to a PKCS11 compatible HSM.
 	SoftHSMLibrary *PKCS11Library
+	AKVVaultURL    *string
 }
 
 // ProvideDefaultDigitalSignatureManagerFactory creates a new DigitalSignatureManagerFactory with the given options.
@@ -109,6 +106,18 @@ func ProvideDefaultDigitalSignatureManagerFactory(options DefaultDigitalSignatur
 		}
 		digitalSignatureManagerMap[SoftHSMModuleKind] = signatureManager
 	}
+	if options.AKVVaultURL != nil {
+		signatureManager, err := akv.ProvideAKVSignatureManager(akv.AVSignatureManagerOptions{
+			AKVVaultURL: *options.AKVVaultURL,
+		})
+		if err != nil {
+			return nil, signererrors.InternalFromErr(err)
+		}
+		digitalSignatureManagerMap[AKVModuleKind] = signatureManager
+	}
+
+	lkvSignatureManager := localkeyvault.ProvideLKVSignatureManager(localkeyvault.LKVSignatureManagerOptions{})
+	digitalSignatureManagerMap[LKVModuleKind] = lkvSignatureManager
 
 	if len(digitalSignatureManagerMap) == 0 {
 		return nil, signererrors.InvalidArgument().WithMessage("no HSM libraries were provided. At least one is required")

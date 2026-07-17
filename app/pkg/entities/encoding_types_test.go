@@ -289,67 +289,6 @@ func TestInt256U256Bytes(t *testing.T) {
 	}
 }
 
-func TestInt256BigEndianByteAt(t *testing.T) {
-	tests := []struct {
-		x   string
-		y   int
-		exp byte
-	}{
-		{"00", 0, 0x00},
-		{"01", 1, 0x00},
-		{"00", 1, 0x00},
-		{"01", 0, 0x01},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 0, 0x30},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 1, 0x20},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 31, 0xAB},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 32, 0x00},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 500, 0x00},
-	}
-	for _, test := range tests {
-		hexBytes, _ := entities.HexToBytes(test.x)
-		v := new(big.Int).SetBytes(hexBytes)
-		actual := entities.NewInt256(v).BigEndianByteAt(test.y)
-		if actual != test.exp {
-			t.Fatalf("Int256(%s).BigEndianByteAt(%v) = %v, want %v", test.x, test.y, actual, test.exp)
-		}
-	}
-}
-
-func TestInt256LittleEndianByteAt(t *testing.T) {
-	tests := []struct {
-		x   string
-		y   int
-		exp byte
-	}{
-		{"00", 0, 0x00},
-		{"01", 1, 0x00},
-		{"00", 1, 0x00},
-		{"01", 0, 0x00},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 0, 0x00},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 1, 0x00},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 31, 0x00},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 32, 0x00},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 0, 0xAB},
-		{"ABCDEF0908070605040302010000000000000000000000000000000000000000", 1, 0xCD},
-		{"00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff", 0, 0x00},
-		{"00CDEF090807060504030201ffffffffffffffffffffffffffffffffffffffff", 1, 0xCD},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 31, 0x30},
-		{"0000000000000000000000000000000000000000000000000000000000102030", 30, 0x20},
-		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 32, 0x0},
-		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 31, 0xFF},
-		{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 0xFFFF, 0x0},
-	}
-	for _, test := range tests {
-		hexBytes, _ := entities.HexToBytes(test.x)
-		v := entities.NewInt256(new(big.Int).SetBytes(hexBytes))
-		actual := v.ByteAt(32, test.y)
-		if actual != test.exp {
-			t.Fatalf("Int256(%s).LittleEndianByteAt(%v) = %v, want %v", test.x, test.y, test.exp, actual)
-		}
-
-	}
-}
-
 func TestInt256S256(t *testing.T) {
 	tests := []struct{ x, y *big.Int }{
 		{x: big.NewInt(0), y: big.NewInt(0)},

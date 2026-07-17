@@ -17,6 +17,8 @@ type HSMSlotStorage interface {
 	GetByApplication(ctx context.Context, applicationID entities.StandardID) (*HSMSlot, error)
 	// EditPin of an HSMSlot in storage.
 	EditPin(ctx context.Context, data HSMSlot) (*HSMSlot, error)
+	// EditConfig of an HSMSlot in storage.
+	EditConfig(ctx context.Context, data HSMSlot) (*HSMSlot, error)
 	// Remove an HSMSlot in storage.
 	Remove(ctx context.Context, id entities.StandardID) (*HSMSlot, error)
 	// All HSMSlot in storage.

@@ -37,7 +37,7 @@ func (u *DefaultHSMConnectionResolver) ByApplication(ctx context.Context, input 
 
 	getHSMSlotInput := hsmslot.GetHSMSlotByApplicationInput{
 		ApplicationID: entities.StandardID{
-			ID: app.Application.ID,
+			ID: app.ID,
 		},
 	}
 	slot, err := u.slotUseCase.GetHSMSlotByApplication(ctx, getHSMSlotInput)
@@ -59,12 +59,13 @@ func (u *DefaultHSMConnectionResolver) ByApplication(ctx context.Context, input 
 		return nil, errors.InternalFromErr(err)
 	}
 
-	return &HSMConnection{
-		Slot:       slot.Slot,
-		Pin:        slot.Pin,
-		ChainID:    app.ChainID,
-		ModuleKind: string(*moduleKind),
-	}, nil
+	conn := &HSMConnection{
+		Slot:                      slot.HSMSlot,
+		ApplicationDefaultChainID: app.DefaultChainID,
+		ModuleKind:                moduleKind,
+	}
+
+	return conn, nil
 }
 
 var _ Resolver = new(DefaultHSMConnectionResolver)
@@ -108,13 +109,15 @@ func ProvideDefaultHSMConnectionResolver(options DefaultHSMConnectionResolverOpt
 	}, nil
 }
 
-func getModuleKind(kind hsmmodule.ModuleKind) (*hsmconnector.ModuleKind, error) {
-	var result hsmconnector.ModuleKind
+func getModuleKind(kind hsmmodule.ModuleKind) (hsmconnector.ModuleKind, error) {
 	switch kind {
 	case hsmmodule.SoftHSMModuleKind:
-		result = hsmconnector.SoftHSMModuleKind
-		return &result, nil
+		return hsmconnector.SoftHSMModuleKind, nil
+	case hsmmodule.AKVModuleKind:
+		return hsmconnector.AKVModuleKind, nil
+	case hsmmodule.LKVModuleKind:
+		return hsmconnector.LKVModuleKind, nil
 	default:
-		return nil, errors.InvalidArgument().WithMessage("module kind '%s' not found", kind)
+		return "", errors.InvalidArgument().WithMessage("module kind '%s' not found", kind)
 	}
 }

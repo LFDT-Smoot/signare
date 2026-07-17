@@ -1,0 +1,15 @@
+# gitleaks configuration for signare.
+#
+# Extends the upstream default ruleset and allowlists test-only fixtures that
+# are not real secrets, so secret scanners (gitleaks, Scorecard) do not flag
+# them.
+title = "signare"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test-only SoftHSM fixtures: a throwaway signing key and fixed PINs that control no real funds and are used only by the test suite."
+paths = [
+    '''app/test/signaturemanagertesthelper/pkcs11_helper\.go''',
+]

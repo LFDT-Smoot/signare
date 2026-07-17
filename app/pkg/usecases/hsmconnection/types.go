@@ -2,6 +2,9 @@ package hsmconnection
 
 import (
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
+	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
+	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
 )
 
 // ByApplicationInput input to get an HSMConnector given an application.
@@ -12,12 +15,31 @@ type ByApplicationInput struct {
 
 // HSMConnection HSM connection details.
 type HSMConnection struct {
-	// Slot the HSM slot.
-	Slot string
-	// Pin the pin of the slot.
-	Pin string
+	Slot hsmslot.HSMSlot
 	// ModuleKind type of the HSM module.
-	ModuleKind string
-	// ChainID application's chain ID.
-	ChainID entities.Int256
+	ModuleKind hsmconnector.ModuleKind
+	// ApplicationDefaultChainID application's chain ID.
+	ApplicationDefaultChainID entities.Int256
+}
+
+// SlotConfig defines the configuration for a particular slot.
+type SlotConfig struct {
+	AKV           []AKVConfig
+	LocalKeyVault *LocalKeyVaultConfig
+}
+
+// AKVConfig defines possible configurations for Azure Key Vault.
+type AKVConfig struct {
+	// KeyName is the name for the key to use in AKV
+	KeyName string
+	// KeyVersion is the version for the key to use in AKV
+	KeyVersion string
+	// KeyPublicAddress is the public address for the key to use in AKV
+	KeyPublicAddress string
+}
+
+// LocalKeyVaultConfig defines possible configurations for Local Key Vault.
+type LocalKeyVaultConfig struct {
+	// KeyStore holds the stored addresses and its private keys
+	KeyStore map[address.Address]string
 }

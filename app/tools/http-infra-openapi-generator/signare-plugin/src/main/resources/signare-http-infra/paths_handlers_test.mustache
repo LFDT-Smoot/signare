@@ -266,7 +266,7 @@ func Test_HandleHttp{{operationId}}(t *testing.T) {
                 require.True(t, errors.As(err, &httpinfra.HTTPError{}))
                 return
             }
-            require.Nil(t, err)
+            require.NoError(t, err)
             require.NotNil(t, handler)
 
             req := httptest.NewRequest(http.Method{{httpMethod}}, currentTest.Path, bytes.NewBuffer([]byte(currentTest.Body)))

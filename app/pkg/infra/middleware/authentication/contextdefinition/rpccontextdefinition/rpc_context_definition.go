@@ -60,6 +60,8 @@ func (middleware *RPCContextDefinition) DefineAction(next http.Handler) http.Han
 		var match mux.RouteMatch
 		matches := middleware.router.Router().Match(r, &match)
 		if !matches || match.MatchErr != nil {
+			noMatchErr := errors.NotFound().WithMessage("no route matched while defining the request action")
+			middleware.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewNotFoundHTTPError(ctx, noMatchErr))
 			return
 		}
 
@@ -68,17 +70,24 @@ func (middleware *RPCContextDefinition) DefineAction(next http.Handler) http.Han
 		var rpcRequest RPCRequest
 		err := utils.ReadAndResetCloser(&r.Body, &rpcRequest)
 		if err != nil {
-			middleware.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusPermissionDenied))
+			middleware.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewForbiddenHTTPError(ctx, err))
 			return
 		}
 
 		if rpcRequest.RPCVersion != supportedRPCVersion {
+			//TODO should this log be here? since this error will be logged in the HandleErrorResponse
 			logger.LogEntry(r.Context()).Errorf("request parameter [jsonrpc] must be exactly '%s'", supportedRPCVersion)
-			middleware.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPError(httpinfra.StatusPermissionDenied))
+			middleware.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPError(httpinfra.StatusPermissionDenied).SetMessage(fmt.Sprintf("request parameter [jsonrpc] must be exactly '%s'", supportedRPCVersion)))
 			return
 		}
 
-		composedActionID := fmt.Sprintf("%s.%s", actionID, rpcRequest.Method)
+		// Only fold the client-supplied method into the action when it matches a registered RPC
+		// method. An unregistered method keeps the bounded route name as the action while legitimate
+		// per-method observability is preserved.
+		composedActionID := actionID
+		if _, rpcErr := middleware.router.RPCHandler(rpcRequest.Method); rpcErr == nil {
+			composedActionID = fmt.Sprintf("%s.%s", actionID, rpcRequest.Method)
+		}
 		ctx = context.WithValue(ctx, requestcontext.ActionContextKey, composedActionID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))

@@ -16,7 +16,7 @@ import (
 func Test_Publish{{operationId}}_Success(t *testing.T)  {
     http := httpinfra.ProvideHttpRouter()
     err := generatedHttpInfra.Publish{{operationId}}(http, generatedHttpInfra.Default{{classname}}HttpHandler{})
-    require.Nil(t, err)
+    require.NoError(t, err)
 }
 
 {{/vendorExtensions.signare-skip-code-generation}}{{/operation}}{{/operations}}

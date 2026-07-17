@@ -107,7 +107,7 @@ func (repository *Repository) Edit(ctx context.Context, data hsmmodule.HSMModule
 
 	rowsAffected, errRowsAffected := result.Result.RowsAffected()
 	if errRowsAffected != nil {
-		return nil, errors.InternalFromErr(err)
+		return nil, errors.InternalFromErr(errRowsAffected)
 	}
 
 	if rowsAffected == 0 {
@@ -185,13 +185,13 @@ func (filter *hardwareSecurityModuleDBFilter) Paged(limit int, offset int) hsmmo
 
 // OrderByCreationDate orders resources in storage by creation date
 func (filter *hardwareSecurityModuleDBFilter) OrderByCreationDate(orderDirection persistence.OrderDirection) hsmmodule.HSMModuleFilters {
-	filter.HardwareSecurityModuleDBFilter = filter.HardwareSecurityModuleDBFilter.Sort("creation_date", orderDirection)
+	filter.HardwareSecurityModuleDBFilter = filter.Sort("creation_date", orderDirection)
 	return filter
 }
 
 // OrderByLastUpdateDate orders resources in storage by last update date
 func (filter *hardwareSecurityModuleDBFilter) OrderByLastUpdateDate(orderDirection persistence.OrderDirection) hsmmodule.HSMModuleFilters {
-	filter.HardwareSecurityModuleDBFilter = filter.HardwareSecurityModuleDBFilter.Sort("last_update", orderDirection)
+	filter.HardwareSecurityModuleDBFilter = filter.Sort("last_update", orderDirection)
 	return filter
 }
 

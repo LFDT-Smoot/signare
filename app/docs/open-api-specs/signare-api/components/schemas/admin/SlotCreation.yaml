@@ -17,20 +17,25 @@ properties:
           Identifier of the application that owns the slot.
       slot:
         type: string
-        x-required: mandatory
-        nullable: false
+        x-required: optional
+        nullable: true
         description: |
           Slot number assigned by the HSM.
       pin:
         type: string
-        x-required: mandatory
-        nullable: false
+        x-required: optional
+        nullable: true
         description: |
           PIN that provides access to the slot number inside the HSM.
+      config:
+        type: array
+        x-required: optional
+        nullable: true
+        description: collection of config
+        items:
+          $ref: '../../_index.yaml#/schemas/SlotDetailConfig'
     required:
     - applicationId
-    - slot
-    - pin
 
 example:
   meta:
@@ -39,6 +44,7 @@ example:
     applicationId: 'application-1'
     slot: '342'
     pin: '123'
+    configMap: {}
 
 required:
   - spec

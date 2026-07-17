@@ -7,6 +7,12 @@ site_description: >-
 repo_name: hyperledger-labs/signare
 repo_url: https://github.com/hyperledger-labs/signare
 
+# Fail the build on any docs warning instead of emitting it and continuing. In
+# particular, the Changelog page is generated and gitignored (see
+# tools.sync_changelog); strict turns a missing changelog from a silently dropped
+# page into a hard build failure.
+strict: true
+
 # Navigation definition
 nav:
   - Home: index.md
@@ -14,6 +20,7 @@ nav:
   - Reference:
      - reference/index.md
      - Configuration reference: reference/configuration.md
+     - Supported Signing Modules: reference/supported-modules.md
      - OpenAPI Specification: reference/openapi-spec.md
      - JSON RPC API Specification: reference/json-rpc-api.md
      - Role base access control: reference/rbac.md
@@ -25,6 +32,8 @@ nav:
      - How to configure users: user-guides/how-to-configure-users.md
      - How to create an account: user-guides/how-to-create-an-account.md
      - How to sign a transaction: user-guides/how-to-sign-a-tx.md
+     - How to configure AKV: user-guides/how-to-configure-akv.md
+     - How to configure a Local Key Vault: user-guides/how-to-configure-lkv.md
   - Glossary: glossary/glossary.md
   - Observability:
      - observability/index.md
@@ -38,6 +47,7 @@ nav:
       - Documentation standards: contribute/documentation-standards.md
       - Integrating with a new HSM: contribute/integrating-new-hsm.md
       - PR guidelines: contribute/pr-guidelines.md
+  # Generated from the root CHANGELOG.md by `make tools.sync_changelog` (run before any docs build).
   - Changelog: CHANGELOG.md
 
 # Theme configuration

@@ -1,6 +1,6 @@
 module github.com/hyperledger-labs/tools/rbac-validator
 
-go 1.22
+go 1.25.11
 
 require (
 	github.com/getkin/kin-openapi v0.116.0

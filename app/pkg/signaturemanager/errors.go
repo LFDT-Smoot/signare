@@ -12,6 +12,7 @@ type Error struct {
 }
 
 var (
+	errNotImplemented      = errors.New("not implemented")
 	errLibFailed           = errors.New("unable to initialize library")
 	errInvalidSlot         = errors.New("invalid slot")
 	errPinIncorrect        = errors.New("the pin is incorrect")
@@ -32,6 +33,12 @@ func (e *Error) Error() string {
 func (e *Error) WithMessage(message string) *Error {
 	e.description = message
 	return e
+}
+
+func NewNotImplementedError() *Error {
+	return &Error{
+		err: errNotImplemented,
+	}
 }
 
 func NewLibFailedError() *Error {
@@ -82,7 +89,15 @@ func NewInvalidArgumentError() *Error {
 	}
 }
 
-func IsLibFailedFailedError(err error) bool {
+func IsNotImplementedError(err error) bool {
+	var pkcsErr *Error
+	if errors.As(err, &pkcsErr) {
+		return errors.Is(pkcsErr.err, errNotImplemented)
+	}
+	return false
+}
+
+func IsLibFailedError(err error) bool {
 	var pkcsErr *Error
 	if errors.As(err, &pkcsErr) {
 		return errors.Is(pkcsErr.err, errLibFailed)

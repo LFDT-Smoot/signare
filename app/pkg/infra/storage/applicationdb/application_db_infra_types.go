@@ -8,8 +8,8 @@ type ApplicationDB struct {
 	entities.StandardID
 	// InternalResourceID is the ID used to reference a resource internally in the application
 	InternalResourceID string `storage:"internal_resource_id"`
-	// ChainID is the id of the Ethereum network in which the application operates
-	ChainID string `storage:"chain_id"`
+	// DefaultChainID is the id of the Ethereum network in which the application operates
+	DefaultChainID string `storage:"default_chain_id"`
 	// CreationDate is the timestamp of the moment of the creation of the resource
 	CreationDate int64 `storage:"creation_date"`
 	// LastUpdate is the timestamp of the moment of the last edition of the resource

@@ -13,20 +13,40 @@ import (
 type ModuleSpecConfigurationHsmKind string
 
 const (
-	HsmKindSofthsm ModuleSpecConfigurationHsmKind = "softHSM"
+	HsmKindAkv           ModuleSpecConfigurationHsmKind = "AKV"
+	HsmKindLocalkeyvault ModuleSpecConfigurationHsmKind = "LocalKeyVault"
+	HsmKindSofthsm       ModuleSpecConfigurationHsmKind = "softHSM"
 )
 
 // ModuleSpecConfiguration - struct for ModuleSpecConfiguration
 type ModuleSpecConfiguration struct {
-	HsmKind ModuleSpecConfigurationHsmKind `json:"hsmkind"`
-	SoftHsm *SoftHsm                       `json:"softhsm,omitempty"`
+	HsmKind                 ModuleSpecConfigurationHsmKind `json:"hsmkind"`
+	ModuleKindAkv           *ModuleKindAkv                 `json:"modulekindakv,omitempty"`
+	ModuleKindLocalKeyVault *ModuleKindLocalKeyVault       `json:"modulekindlocalkeyvault,omitempty"`
+	ModuleKindSoftHsm       *ModuleKindSoftHsm             `json:"modulekindsofthsm,omitempty"`
 }
 
 // AsOneOf return as one of
-func (oneOf *SoftHsm) AsOneOfModuleSpecConfiguration() ModuleSpecConfiguration {
+func (oneOf *ModuleKindAkv) AsOneOfModuleSpecConfiguration() ModuleSpecConfiguration {
 	return ModuleSpecConfiguration{
-		HsmKind: HsmKindSofthsm,
-		SoftHsm: oneOf,
+		HsmKind:       HsmKindAkv,
+		ModuleKindAkv: oneOf,
+	}
+}
+
+// AsOneOf return as one of
+func (oneOf *ModuleKindLocalKeyVault) AsOneOfModuleSpecConfiguration() ModuleSpecConfiguration {
+	return ModuleSpecConfiguration{
+		HsmKind:                 HsmKindLocalkeyvault,
+		ModuleKindLocalKeyVault: oneOf,
+	}
+}
+
+// AsOneOf return as one of
+func (oneOf *ModuleKindSoftHsm) AsOneOfModuleSpecConfiguration() ModuleSpecConfiguration {
+	return ModuleSpecConfiguration{
+		HsmKind:           HsmKindSofthsm,
+		ModuleKindSoftHsm: oneOf,
 	}
 }
 
@@ -49,17 +69,47 @@ func (dst *ModuleSpecConfiguration) UnmarshalJSON(data []byte) *httpinfra.HTTPEr
 		return httpError
 	}
 
+	// check if the discriminator value is 'AKV'
+	if jsonDict["hsmKind"] == string(HsmKindAkv) {
+		dst.HsmKind = HsmKindAkv
+		// try to unmarshal JSON data into ModuleKindAkv
+		err = json.Unmarshal(data, &dst.ModuleKindAkv)
+		if err == nil {
+			return nil // data stored in dst.ModuleKindAkv, return on the first match
+		} else {
+			dst.ModuleKindAkv = nil
+			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+			httpError.SetMessage("error unmarshalling ModuleSpecConfiguration as ModuleKindAkv")
+			return httpError
+		}
+	}
+
+	// check if the discriminator value is 'LocalKeyVault'
+	if jsonDict["hsmKind"] == string(HsmKindLocalkeyvault) {
+		dst.HsmKind = HsmKindLocalkeyvault
+		// try to unmarshal JSON data into ModuleKindLocalKeyVault
+		err = json.Unmarshal(data, &dst.ModuleKindLocalKeyVault)
+		if err == nil {
+			return nil // data stored in dst.ModuleKindLocalKeyVault, return on the first match
+		} else {
+			dst.ModuleKindLocalKeyVault = nil
+			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+			httpError.SetMessage("error unmarshalling ModuleSpecConfiguration as ModuleKindLocalKeyVault")
+			return httpError
+		}
+	}
+
 	// check if the discriminator value is 'softHSM'
 	if jsonDict["hsmKind"] == string(HsmKindSofthsm) {
 		dst.HsmKind = HsmKindSofthsm
-		// try to unmarshal JSON data into SoftHsm
-		err = json.Unmarshal(data, &dst.SoftHsm)
+		// try to unmarshal JSON data into ModuleKindSoftHsm
+		err = json.Unmarshal(data, &dst.ModuleKindSoftHsm)
 		if err == nil {
-			return nil // data stored in dst.SoftHsm, return on the first match
+			return nil // data stored in dst.ModuleKindSoftHsm, return on the first match
 		} else {
-			dst.SoftHsm = nil
+			dst.ModuleKindSoftHsm = nil
 			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
-			httpError.SetMessage("error unmarshalling ModuleSpecConfiguration as SoftHsm")
+			httpError.SetMessage("error unmarshalling ModuleSpecConfiguration as ModuleKindSoftHsm")
 			return httpError
 		}
 	}
@@ -69,8 +119,16 @@ func (dst *ModuleSpecConfiguration) UnmarshalJSON(data []byte) *httpinfra.HTTPEr
 
 // MarshalJSON data from the first non-nil pointers in the struct to JSON
 func (src ModuleSpecConfiguration) MarshalJSON() ([]byte, error) {
-	if src.SoftHsm != nil {
-		return json.Marshal(&src.SoftHsm)
+	if src.ModuleKindAkv != nil {
+		return json.Marshal(&src.ModuleKindAkv)
+	}
+
+	if src.ModuleKindLocalKeyVault != nil {
+		return json.Marshal(&src.ModuleKindLocalKeyVault)
+	}
+
+	if src.ModuleKindSoftHsm != nil {
+		return json.Marshal(&src.ModuleKindSoftHsm)
 	}
 
 	return nil, nil // no data in oneOf schemas
@@ -82,8 +140,16 @@ func (obj *ModuleSpecConfiguration) GetActualInstance() interface{} {
 		return nil
 	}
 
-	if obj.SoftHsm != nil {
-		return obj.SoftHsm
+	if obj.ModuleKindAkv != nil {
+		return obj.ModuleKindAkv
+	}
+
+	if obj.ModuleKindLocalKeyVault != nil {
+		return obj.ModuleKindLocalKeyVault
+	}
+
+	if obj.ModuleKindSoftHsm != nil {
+		return obj.ModuleKindSoftHsm
 	}
 
 	// all schemas are nil
@@ -91,15 +157,37 @@ func (obj *ModuleSpecConfiguration) GetActualInstance() interface{} {
 }
 
 func (data *ModuleSpecConfiguration) ValidateWith() (*httpinfra.ValidationResult, error) {
-	if data.SoftHsm != nil {
-		validatedSoftHsm, validateWithFailure := data.SoftHsm.ValidateWith()
+	if data.ModuleKindAkv != nil {
+		validatedModuleKindAkv, validateWithFailure := data.ModuleKindAkv.ValidateWith()
 		if validateWithFailure != nil {
 			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
-			httpError.SetMessage(fmt.Sprintf("error validating field [%v]", data.SoftHsm))
+			httpError.SetMessage(fmt.Sprintf("error validating field [%v]", data.ModuleKindAkv))
 			return nil, httpError
 		}
-		if !validatedSoftHsm.Valid {
-			return validatedSoftHsm, nil
+		if !validatedModuleKindAkv.Valid {
+			return validatedModuleKindAkv, nil
+		}
+	}
+	if data.ModuleKindLocalKeyVault != nil {
+		validatedModuleKindLocalKeyVault, validateWithFailure := data.ModuleKindLocalKeyVault.ValidateWith()
+		if validateWithFailure != nil {
+			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+			httpError.SetMessage(fmt.Sprintf("error validating field [%v]", data.ModuleKindLocalKeyVault))
+			return nil, httpError
+		}
+		if !validatedModuleKindLocalKeyVault.Valid {
+			return validatedModuleKindLocalKeyVault, nil
+		}
+	}
+	if data.ModuleKindSoftHsm != nil {
+		validatedModuleKindSoftHsm, validateWithFailure := data.ModuleKindSoftHsm.ValidateWith()
+		if validateWithFailure != nil {
+			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+			httpError.SetMessage(fmt.Sprintf("error validating field [%v]", data.ModuleKindSoftHsm))
+			return nil, httpError
+		}
+		if !validatedModuleKindSoftHsm.Valid {
+			return validatedModuleKindSoftHsm, nil
 		}
 	}
 
@@ -111,7 +199,13 @@ func (data *ModuleSpecConfiguration) ValidateWith() (*httpinfra.ValidationResult
 func (data *ModuleSpecConfiguration) SetDefaults() {
 	instance := data.GetActualInstance()
 
-	if i, ok := instance.(*SoftHsm); ok {
+	if i, ok := instance.(*ModuleKindAkv); ok {
+		i.SetDefaults()
+	}
+	if i, ok := instance.(*ModuleKindLocalKeyVault); ok {
+		i.SetDefaults()
+	}
+	if i, ok := instance.(*ModuleKindSoftHsm); ok {
 		i.SetDefaults()
 	}
 }

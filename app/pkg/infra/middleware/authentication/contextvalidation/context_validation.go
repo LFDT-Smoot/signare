@@ -2,6 +2,7 @@ package contextvalidation
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
@@ -19,7 +20,7 @@ func (m *RequestContextValidation) ValidateUser(next http.Handler) http.Handler 
 
 		user, err := requestcontext.UserFromContext(ctx)
 		if err != nil {
-			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusPermissionDenied))
+			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewForbiddenHTTPError(ctx, err))
 			return
 		}
 		if user != nil && len(*user) > 0 {
@@ -27,7 +28,7 @@ func (m *RequestContextValidation) ValidateUser(next http.Handler) http.Handler 
 		}
 
 		if !validated {
-			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPError(httpinfra.StatusPermissionDenied))
+			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPError(httpinfra.StatusPermissionDenied).SetMessage("the user can't be empty"))
 			return
 		}
 
@@ -59,7 +60,9 @@ func (m *RequestContextValidation) ValidateApplication(next http.Handler) http.H
 
 		applicationValidated := application != nil && *application == applicationPathParam
 		if !applicationValidated {
-			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPError(httpinfra.StatusPermissionDenied))
+			// Keep the identifiers in the server-side log only; the client receives the generic message.
+			mismatchErr := fmt.Errorf("application mismatch between path's application '%s' and header application '%s'", *application, applicationPathParam)
+			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewForbiddenHTTPError(ctx, mismatchErr))
 			return
 		}
 
@@ -75,7 +78,7 @@ func (m *RequestContextValidation) ValidateAction(next http.Handler) http.Handle
 
 		action, err := requestcontext.ActionFromContext(ctx)
 		if err != nil {
-			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusPermissionDenied))
+			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewForbiddenHTTPError(ctx, err))
 			return
 		}
 		if action != nil && len(*action) > 0 {
@@ -83,7 +86,7 @@ func (m *RequestContextValidation) ValidateAction(next http.Handler) http.Handle
 		}
 
 		if !validated {
-			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPError(httpinfra.StatusPermissionDenied))
+			m.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPError(httpinfra.StatusPermissionDenied).SetMessage("the action can't be empty"))
 			return
 		}
 

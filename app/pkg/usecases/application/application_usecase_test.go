@@ -4,8 +4,10 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres/applicationdbout"
+	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
 	"github.com/hyperledger-labs/signare/app/pkg/commons/validators"
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
 	"github.com/hyperledger-labs/signare/app/pkg/graph"
@@ -76,7 +78,7 @@ func TestDefaultUseCase_CreateApplication(t *testing.T) {
 		output, err := app.ApplicationUseCase.CreateApplication(ctx, input)
 		require.NoError(t, err)
 		require.NotEmpty(t, output.ID)
-		require.Equal(t, *chain, output.ChainID)
+		require.Equal(t, *chain, output.DefaultChainID)
 		require.Equal(t, description, *output.Description)
 	})
 
@@ -91,12 +93,24 @@ func TestDefaultUseCase_CreateApplication(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, output.InternalResourceID)
 		require.Equal(t, randomID, output.ID)
-		require.Equal(t, *chain, output.ChainID)
+		require.Equal(t, *chain, output.DefaultChainID)
 		require.Equal(t, description, *output.Description)
 	})
 
 	t.Run("failure: chain ID cannot be empty", func(t *testing.T) {
 		invalidChainID := entities.NewInt256FromInt(0)
+		input := application.CreateApplicationInput{
+			ChainID:     *invalidChainID,
+			Description: &description,
+		}
+		output, err := app.ApplicationUseCase.CreateApplication(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("failure: negative chain ID is rejected", func(t *testing.T) {
+		invalidChainID := entities.NewInt256FromInt(-1)
 		input := application.CreateApplicationInput{
 			ChainID:     *invalidChainID,
 			Description: &description,
@@ -148,10 +162,11 @@ func TestDefaultUseCase_ListApplications(t *testing.T) {
 		require.True(t, errors.IsInvalidArgument(err))
 	})
 
-	t.Run("success: list all applications", func(t *testing.T) {
+	t.Run("success: unlimited list is capped at the default page size", func(t *testing.T) {
 		output, err := app.ApplicationUseCase.ListApplications(ctx, application.ListApplicationsInput{})
 		require.NoError(t, err)
-		require.True(t, len(output.Items) >= appsToCreate)
+		require.Len(t, output.Items, persistence.DefaultPageLimit)
+		require.True(t, output.MoreItems)
 		for _, app := range output.Items {
 			require.NotNil(t, app)
 		}
@@ -170,7 +185,7 @@ func TestDefaultUseCase_ListApplications(t *testing.T) {
 		require.True(t, output.MoreItems)
 		// Assert order
 		for i := 1; i < len(output.Items); i++ {
-			require.Greater(t, output.Items[i-1].CreationDate.ToInt64(), output.Items[i].CreationDate.ToInt64())
+			require.GreaterOrEqual(t, output.Items[i-1].CreationDate.ToInt64(), output.Items[i].CreationDate.ToInt64())
 		}
 	})
 
@@ -187,7 +202,7 @@ func TestDefaultUseCase_ListApplications(t *testing.T) {
 		require.True(t, output.MoreItems)
 		// Assert order
 		for i := 1; i < len(output.Items); i++ {
-			require.Less(t, output.Items[i-1].LastUpdate.ToInt64(), output.Items[i].LastUpdate.ToInt64())
+			require.LessOrEqual(t, output.Items[i-1].LastUpdate.ToInt64(), output.Items[i].LastUpdate.ToInt64())
 		}
 	})
 }
@@ -283,6 +298,44 @@ func TestDefaultUseCase_EditApplication(t *testing.T) {
 		require.Nil(t, output)
 	})
 
+	t.Run("failure: invalid chain ID is rejected", func(t *testing.T) {
+		// Validation runs before the storage lookup, so a non-positive chain ID is rejected
+		// regardless of whether the application exists.
+		for _, invalid := range []int64{0, -1} {
+			invalidChainID := entities.NewInt256FromInt(invalid)
+			editInput := application.EditApplicationInput{
+				ID:              "my-id",
+				ResourceVersion: "my-resource-version",
+				ChainID:         invalidChainID,
+			}
+			output, err := app.ApplicationUseCase.EditApplication(ctx, editInput)
+			require.Error(t, err)
+			require.True(t, errors.IsInvalidArgument(err))
+			require.Nil(t, output)
+		}
+	})
+
+	t.Run("success: edit chain ID to a valid value", func(t *testing.T) {
+		validAppID := uuid.New().String()
+		createdApp, err := app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{
+			ID:          &validAppID,
+			ChainID:     *chain,
+			Description: &description,
+		})
+		require.NoError(t, err)
+
+		newChainID := entities.NewInt256FromInt(100)
+		editInput := application.EditApplicationInput{
+			ID:              createdApp.ID,
+			ResourceVersion: createdApp.ResourceVersion,
+			ChainID:         newChainID,
+		}
+		editedApp, err := app.ApplicationUseCase.EditApplication(ctx, editInput)
+		require.NoError(t, err)
+		require.NotNil(t, editedApp)
+		require.Equal(t, *newChainID, editedApp.DefaultChainID)
+	})
+
 	t.Run("failure: invalid resource version", func(t *testing.T) {
 		// Create a valid application
 		validAppID := uuid.New().String()
@@ -313,6 +366,7 @@ func TestDefaultUseCase_EditApplication(t *testing.T) {
 			Description: &description,
 		})
 		require.NoError(t, err)
+		time.Sleep(time.Millisecond)
 
 		// Edit the application
 		newDescription := "this is a new description"

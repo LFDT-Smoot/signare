@@ -153,7 +153,7 @@ func (p *Fw) QueryAll(ctx context.Context, stmtID string, args interface{}, dst 
 	dstType := reflect.TypeOf(dst)
 	dstTypeKind := dstType.Kind()
 
-	if dstTypeKind != reflect.Ptr {
+	if dstTypeKind != reflect.Pointer {
 		return persistence.NewStatementCouldNotBePreparedError().WithMessage(fmt.Sprintf("destination variable of type [%s] must be a pointer", dstTypeKind))
 	}
 
@@ -194,15 +194,22 @@ func (p *Fw) QueryAll(ctx context.Context, stmtID string, args interface{}, dst 
 	if err != nil {
 		return persistence.NewStatementCouldNotBePreparedError().WithMessage(fmt.Sprintf("statement id '%s' (%s) error: %s", stmtID, newStmt, err))
 	}
-	defer query.Close()
+	defer func() {
+		if query != nil {
+			query.Close()
+		}
+	}()
 
 	rows, err := query.QueryxContext(ctx, args)
 	if err != nil {
 		defaultError := persistence.NewStatementExecutionFailedError().WithMessage(fmt.Sprintf("statement id '%s' (%s) error: %s", stmtID, newStmt, err))
 		return p.errorTranslator.TranslateError(ctx, err, defaultError)
 	}
-
-	defer rows.Close()
+	defer func() {
+		if rows != nil {
+			rows.Close()
+		}
+	}()
 
 	elementPtr := reflect.New(sliceElementType)
 
@@ -212,6 +219,10 @@ func (p *Fw) QueryAll(ctx context.Context, stmtID string, args interface{}, dst 
 			return persistence.NewDBResponseCanNotBeProcessedError().WithMessage(fmt.Sprintf("row could not be processed. Statement id '%s' (%s) error: %v", stmtID, newStmt, err))
 		}
 		sliceValue.Set(reflect.Append(sliceValue, reflect.Indirect(elementPtr)))
+	}
+
+	if err = rows.Err(); err != nil {
+		return persistence.NewDBResponseCanNotBeProcessedError().WithMessage(fmt.Sprintf("rows could not be iterated. Statement id '%s' (%s) error: %v", stmtID, newStmt, err))
 	}
 
 	return nil

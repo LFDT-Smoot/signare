@@ -2,6 +2,7 @@ package hsmconnector
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 
@@ -10,14 +11,18 @@ import (
 
 	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
 	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
 	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
+	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
 )
 
 // HSMConnector connects with the HSM and operates with it.
 type HSMConnector interface {
 	// GenerateAddress generates a key pair in the underlying signature manager and returns the Ethereum address or an error if it fails.
 	GenerateAddress(ctx context.Context, input GenerateAddressInput) (*GenerateAddressOutput, error)
+	// DeriveAddressFromPrivateKey generates an address from an ethereum private key and returns an Ethereum address or an error if it fails.
+	DeriveAddressFromPrivateKey(ctx context.Context, input DeriveAddressFromPrivateKeyInput) (*DeriveAddressFromPrivateKeyOutput, error)
 	// RemoveAddress removes the key pair associated with the given Ethereum address.
 	RemoveAddress(ctx context.Context, input RemoveAddressInput) (*RemoveAddressOutput, error)
 	// ListAddresses lists the addresses associated with their corresponding key pairs that exist in all the slots of an application.
@@ -30,15 +35,21 @@ type HSMConnector interface {
 	IsAlive(ctx context.Context, input IsAliveInput) (*IsAliveOutput, error)
 	// Reset updates the state of the snapshot taken by the HSM library.
 	Reset(ctx context.Context, input ResetInput) (*ResetOutput, error)
+	// SignTypedData signs EIP-712 structured typed data and returns the signature.
+	SignTypedData(ctx context.Context, input SignTypedDataInput) (*SignTypedDataOutput, error)
 }
 
 const (
-	signatureLength           = 65
-	minSignatureOffsetBitcoin = 27
-	maxSignatureOffsetBitcoin = 35
+	signatureLength        = 65
+	backendSignatureLength = 64 // raw r||s returned by the signing backend, before the recovery V byte is prepended
+	// signatureVMin and signatureVMax are the two valid Ethereum recovery V bytes: the secp256k1
+	// recovery ID (0 or 1) encoded as 27 or 28. They bound the recoverV search; they are unrelated
+	// to the EIP-155 v = recoveryID + 35 + 2*chainID transform applied later.
+	signatureVMin = 27
+	signatureVMax = 28
 )
 
-func (d DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddressInput) (*GenerateAddressOutput, error) {
+func (d *DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddressInput) (*GenerateAddressOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
@@ -52,9 +63,9 @@ func (d DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddre
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
-	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
-	if createErr != nil {
-		return nil, createErr
+	digitalSignatureManager, err := d.digitalSignatureManagerFactory.Create(ctx, createInput)
+	if err != nil {
+		return nil, err
 	}
 
 	generateKeyInput := signaturemanager.GenerateKeyInput{
@@ -62,11 +73,11 @@ func (d DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddre
 		Pin:    input.Pin,
 		Tracer: tracer,
 	}
-	generateKeyOutput, generateKeyErr := digitalSignatureManager.GenerateKey(ctx, generateKeyInput)
-	if generateKeyErr != nil {
-		if signaturemanager.IsInvalidSlotError(generateKeyErr) {
+	generateKeyOutput, err := digitalSignatureManager.GenerateKey(ctx, generateKeyInput)
+	if err != nil {
+		if signaturemanager.IsInvalidSlotError(err) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
-			return nil, errors.PreconditionFailedFromErr(generateKeyErr).WithMessage(msg).SetHumanReadableMessage(msg)
+			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		return nil, errors.InternalFromErr(err)
 	}
@@ -78,7 +89,44 @@ func (d DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddre
 	}, nil
 }
 
-func (d DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressInput) (*RemoveAddressOutput, error) {
+func (d *DefaultUseCase) DeriveAddressFromPrivateKey(ctx context.Context, input DeriveAddressFromPrivateKeyInput) (*DeriveAddressFromPrivateKeyOutput, error) {
+	_, err := govalidator.ValidateStruct(input)
+	if err != nil {
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
+	}
+
+	tracer := logger.NewTracer(ctx)
+	tracer.AddProperty("moduleKind", input.ModuleKind)
+	tracer.AddProperty("operation", "DeriveAddressFromPrivateKey")
+
+	createInput := CreateInput{
+		ModuleKind: input.ModuleKind,
+	}
+	digitalSignatureManager, err := d.digitalSignatureManagerFactory.Create(ctx, createInput)
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("error creating digital signature manager")
+	}
+
+	deriveAddressInput := signaturemanager.DeriveAddressFromPrivateKeyInput{
+		PrivateKey: input.PrivateKey,
+		Tracer:     tracer,
+	}
+	deriveAddressOutput, err := digitalSignatureManager.DeriveAddressFromPrivateKey(ctx, deriveAddressInput)
+	if err != nil {
+		if signaturemanager.IsInvalidArgumentError(err) {
+			return nil, errors.InvalidArgumentFromErr(err).WithMessage("error generating address from private key")
+		}
+		return nil, errors.InternalFromErr(err).WithMessage("error generating address from private key")
+	}
+
+	tracer.Trace(fmt.Sprintf("generated address from private key: '%s'", deriveAddressOutput.Address.String()))
+
+	return &DeriveAddressFromPrivateKeyOutput{
+		Address: deriveAddressOutput.Address,
+	}, nil
+}
+
+func (d *DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressInput) (*RemoveAddressOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
@@ -92,9 +140,9 @@ func (d DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressIn
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
-	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
-	if createErr != nil {
-		return nil, errors.InternalFromErr(createErr).WithMessage("error removing address: %s", err.Error())
+	digitalSignatureManager, err := d.digitalSignatureManagerFactory.Create(ctx, createInput)
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("error removing address: %v", err)
 	}
 
 	removeKeyInput := signaturemanager.RemoveKeyInput{
@@ -107,13 +155,13 @@ func (d DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressIn
 	if err != nil {
 		if signaturemanager.IsInvalidSlotError(err) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
-			return nil, errors.PreconditionFailedFromErr(err).WithMessage(msg).SetHumanReadableMessage(msg)
+			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		if signaturemanager.IsNotFoundError(err) {
 			msg := fmt.Sprintf("key for address [%s] not found", input.Address.String())
-			return nil, errors.NotFoundFromErr(err).WithMessage(msg).SetHumanReadableMessage(msg)
+			return nil, errors.NotFoundFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
-		return nil, errors.InternalFromErr(err).WithMessage("error removing address: %s", err.Error())
+		return nil, errors.InternalFromErr(err).WithMessage("error removing address: %v", err)
 	}
 
 	tracer.Trace(fmt.Sprintf("removed address: '%s'", removeKeyInput.Address.String()))
@@ -123,7 +171,7 @@ func (d DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressIn
 	}, nil
 }
 
-func (d DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesInput) (*ListAddressesOutput, error) {
+func (d *DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesInput) (*ListAddressesOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
@@ -137,9 +185,9 @@ func (d DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesIn
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
-	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
-	if createErr != nil {
-		return nil, errors.InternalFromErr(createErr).WithMessage("error connecting to the digital signature manager: %s", createErr.Error())
+	digitalSignatureManager, err := d.digitalSignatureManagerFactory.Create(ctx, createInput)
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("error connecting to the digital signature manager: %v", err)
 	}
 
 	listKeysInput := signaturemanager.ListKeysInput{
@@ -147,12 +195,12 @@ func (d DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesIn
 		Pin:    input.Pin,
 		Tracer: tracer,
 	}
-	keys, listKeysErr := digitalSignatureManager.ListKeys(ctx, listKeysInput)
-	if listKeysErr != nil {
-		if signaturemanager.IsInvalidSlotError(listKeysErr) {
+	keys, err := digitalSignatureManager.ListKeys(ctx, listKeysInput)
+	if err != nil {
+		if signaturemanager.IsInvalidSlotError(err) {
 			logger.LogEntry(ctx).Warnf("could not obtain keys from the configured HSM slot '%s' because it does not exist in the HSM of type '%s'", input.Slot, input.ModuleKind)
 		}
-		return nil, errors.InternalFromErr(listKeysErr).WithMessage("error listing addresses: %s", listKeysErr.Error())
+		return nil, errors.InternalFromErr(err).WithMessage("error listing addresses: %v", err)
 	}
 
 	return &ListAddressesOutput{
@@ -160,7 +208,7 @@ func (d DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesIn
 	}, nil
 }
 
-func (d DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTxOutput, error) {
+func (d *DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTxOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
@@ -170,11 +218,36 @@ func (d DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTxO
 		return nil, errors.InvalidArgument().SetHumanReadableMessage("field 'from' cannot be empty")
 	}
 
+	// chainID must be a valid EIP-155 value. A non-positive chainID makes a legacy transaction's
+	// signed hash (which always includes the EIP-155 suffix) inconsistent with its emitted v, so the
+	// recovered sender is wrong. Reject it here for every transaction type and signing-chainID source.
+	if input.ChainID.Sign() < 1 {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("field 'chainId' must be a positive EIP-155 value (>= 1)")
+	}
+
+	txType, err := identifyTxType(input)
+
+	if err != nil {
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("Could not determine transaction type")
+	}
+
 	tracer := logger.NewTracer(ctx)
 	tracer.AddProperty("slot", input.Slot)
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "SignTx")
 
+	switch txType {
+	case entities.TransactionType0Legacy:
+		return d.signLegacyTx(ctx, input, tracer)
+	case entities.TransactionType2EIP1559:
+		return d.signEIP1559Tx(ctx, input, tracer)
+	default:
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("Not supported transaction type")
+	}
+
+}
+
+func (d *DefaultUseCase) signLegacyTx(ctx context.Context, input SignTxInput, tracer logger.Tracer) (*SignTxOutput, error) {
 	gas := entities.NewHexUInt64(90000) // as defined in https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_signtransaction
 	if input.Gas != nil {
 		gas = *input.Gas
@@ -188,13 +261,6 @@ func (d DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTxO
 
 	chainID := entities.NewHexInt256(input.ChainID.BigInt())
 
-	createInput := CreateInput{
-		ModuleKind: input.ModuleKind,
-	}
-	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
-	if createErr != nil {
-		return nil, errors.InternalFromErr(createErr).WithMessage("error signing transaction: %s", createErr.Error())
-	}
 	if input.To == nil {
 		tracer.AddProperty("to", "null")
 	} else {
@@ -209,67 +275,22 @@ func (d DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTxO
 		Value:    input.Value,
 		Data:     input.Data,
 		Nonce:    input.Nonce,
-		ChainID:  *chainID,
+		ChainID:  input.ChainID,
 	}
 	payload, err := transaction.Hash()
 	if err != nil {
 		return nil, err
 	}
 
-	signInput := signaturemanager.SignInput{
-		Slot:   input.Slot,
-		Pin:    input.Pin,
-		Tracer: tracer,
-		From:   input.From,
-		Data:   *payload,
-	}
-	signOutput, signErr := digitalSignatureManager.Sign(ctx, signInput)
-	if signErr != nil {
-		if signaturemanager.IsInvalidSlotError(signErr) {
-			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
-			return nil, errors.PreconditionFailedFromErr(signErr).WithMessage(msg).SetHumanReadableMessage(msg)
-		}
-		return nil, errors.InternalFromErr(signErr)
+	signatureWithV, err := d.signAndRecover(ctx, input, tracer, payload)
+	if err != nil {
+		return nil, err
 	}
 
-	signature := signatureToLowS(signOutput.Signature)
-	// As Ethereum requires it, determining the V value for the signature so that the public key can be recovered from the signature.
-	// The V value is used to discriminate between the two possible x-axis value for the elliptic curve equation.
-	signatureWithV := make([]byte, signatureLength)
-	copy(signatureWithV[1:], signature)
-	recovered := false
-	for i := minSignatureOffsetBitcoin; i < maxSignatureOffsetBitcoin; i++ { // iterate over the possible solutions for the elliptic curve equation
-		// btcec lib format with the recovery ID (v) at the beginning
-		signatureWithV[0] = byte(i)
-		recoveredPublicKey, _, recoverCompactErr := btcececdsa.RecoverCompact(signatureWithV, *payload)
-		if recoverCompactErr != nil {
-			tracer.Errorf("EC Recover failed. Error: %v", recoverCompactErr)
-			continue
-		}
-		if recoveredPublicKey != nil {
-			pubKey, unmarshalECDSAKeyErr := unmarshalECDSAKey(recoveredPublicKey.SerializeUncompressed())
-			if unmarshalECDSAKeyErr != nil {
-				tracer.Errorf("unable to unmarshal public key after signing for address '%s'. Error: %v", input.From.String(), unmarshalECDSAKeyErr)
-				continue
-			}
-			recoveredAddr, deriveAddressFromPublicKeyErr := signaturemanager.DeriveAddressFromPublicKey(pubKey.SerializeUncompressed())
-			if deriveAddressFromPublicKeyErr != nil {
-				return nil, deriveAddressFromPublicKeyErr
-			}
-			if recoveredAddr.String() == input.From.String() {
-				recovered = true
-				break
-			}
-		}
-	}
-	if !recovered {
-		return nil, errors.Internal().WithMessage("error signing transaction: unable to find EC recovery value for address '%s'", input.From.String())
-	}
-
-	transactionSignature := generateEthereumTransactionSignature(signatureWithV, *chainID)
+	transactionSignature := generateEthereumSignature(signatureWithV, *chainID)
 	transaction.Signature = transactionSignature
 
-	tracer.Debug("generated transaction signature")
+	tracer.Debug("generated legacy transaction signature")
 
 	transactionRLPEncode, err := transaction.RLPEncode()
 	if err != nil {
@@ -283,7 +304,262 @@ func (d DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTxO
 	}, nil
 }
 
-func (d DefaultUseCase) CloseAll(ctx context.Context, _ CloseAllInput) (*CloseAllOutput, error) {
+func (d *DefaultUseCase) signEIP1559Tx(ctx context.Context, input SignTxInput, tracer logger.Tracer) (*SignTxOutput, error) {
+
+	gas := entities.NewHexUInt64(90000)
+	if input.Gas != nil {
+		gas = *input.Gas
+	}
+
+	maxPriorityFeePerGas := *input.MaxPriorityFeePerGas
+
+	chainID := entities.NewHexInt256(input.ChainID.BigInt())
+
+	accessList := input.AccessList
+
+	if input.To == nil {
+		tracer.AddProperty("to", "null")
+	} else {
+		tracer.AddProperty("to", input.To.String())
+	}
+
+	transaction := EIP1559Transaction{
+		From:                 input.From,
+		To:                   input.To,
+		Gas:                  gas,
+		MaxFeePerGas:         *input.MaxFeePerGas,
+		MaxPriorityFeePerGas: maxPriorityFeePerGas,
+		Value:                input.Value,
+		Data:                 input.Data,
+		Nonce:                input.Nonce,
+		ChainID:              *chainID,
+		AccessList:           accessList,
+	}
+
+	payload, err := transaction.Hash()
+	if err != nil {
+		return nil, err
+	}
+
+	signatureWithV, err := d.signAndRecover(ctx, input, tracer, payload)
+	if err != nil {
+		return nil, err
+	}
+
+	txSignature := generateEIP1559TransactionSignature(signatureWithV)
+	transaction.Signature = txSignature
+
+	tracer.Debug("generated EIP-1559 transaction signature")
+
+	transactionRLPEncode, err := transaction.RLPEncode()
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("error signing EIP-1559 transaction: failed to RLP encode transaction with '%v'", err.Error())
+	}
+	result := transactionRLPEncode.Encode()
+
+	return &SignTxOutput{
+		SignedTx:  result,
+		EIP1559Tx: &transaction,
+	}, nil
+}
+
+// recoverV iterates over the two possible secp256k1 recovery IDs (27, 28) and sets
+// signatureWithV[0] to the value that recovers the expected address. Returns an error
+// if neither value matches.
+func recoverV(signatureWithV []byte, from address.Address, data []byte, tracer logger.Tracer) error {
+	for i := signatureVMin; i <= signatureVMax; i++ {
+		signatureWithV[0] = byte(i)
+		recoveredPublicKey, _, recoverCompactErr := btcececdsa.RecoverCompact(signatureWithV, data)
+		if recoverCompactErr != nil {
+			tracer.Errorf("EC Recover failed. Error: %v", recoverCompactErr)
+			continue
+		}
+		if recoveredPublicKey != nil {
+			pubKey, unmarshalECDSAKeyErr := unmarshalECDSAKey(recoveredPublicKey.SerializeUncompressed())
+			if unmarshalECDSAKeyErr != nil {
+				tracer.Errorf("unable to unmarshal public key after signing for address '%s'. Error: %v", from.String(), unmarshalECDSAKeyErr)
+				continue
+			}
+			recoveredAddr, deriveAddressFromPublicKeyErr := signaturemanager.DeriveAddressFromPublicKey(pubKey.SerializeUncompressed())
+			if deriveAddressFromPublicKeyErr != nil {
+				return deriveAddressFromPublicKeyErr
+			}
+			if recoveredAddr.String() == from.String() {
+				return nil
+			}
+		}
+	}
+	return errors.Internal().WithMessage("unable to find EC recovery value for address '%s'", from.String())
+}
+
+// assembleRecoverableSignature validates the raw signature returned by the backend, normalises S to
+// low-S form, and builds the 65-byte [V||R||S] buffer with the V value that recovers `from`.
+func assembleRecoverableSignature(rawSig []byte, from address.Address, data []byte, tracer logger.Tracer) ([]byte, error) {
+	if err := validateBackendSignature(rawSig); err != nil {
+		return nil, err
+	}
+	signatureWithV := make([]byte, signatureLength)
+	copy(signatureWithV[1:], signatureToLowS(rawSig))
+	if err := recoverV(signatureWithV, from, data, tracer); err != nil {
+		return nil, err
+	}
+	return signatureWithV, nil
+}
+
+// signAndRecover signs the payload via HSM and performs EC recovery to determine the V value.
+func (d DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, tracer logger.Tracer, payload *entities.HexBytes) ([]byte, error) {
+	createInput := CreateInput{
+		ModuleKind: input.ModuleKind,
+	}
+	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
+	if createErr != nil {
+		return nil, errors.InternalFromErr(createErr).WithMessage("error signing transaction: %s", createErr.Error())
+	}
+
+	signInput := signaturemanager.SignInput{
+		Slot:   input.Slot,
+		Pin:    input.Pin,
+		Tracer: tracer,
+		From:   input.From,
+		Data:   *payload,
+	}
+
+	signInput.Config.AKV = make([]signaturemanager.AKVConfig, len(input.Config.AKV))
+	for i, configItem := range input.Config.AKV {
+		signInput.Config.AKV[i] = signaturemanager.AKVConfig{
+			KeyName:          configItem.KeyName,
+			KeyVersion:       configItem.KeyVersion,
+			KeyPublicAddress: configItem.KeyPublicAddress,
+		}
+	}
+
+	if input.Config.LocalKeyVault != nil {
+		signInput.Config.LocalKeyVault = &signaturemanager.LocalKeyVaultConfig{
+			KeyStore: make(map[address.Address]string),
+		}
+		for addr, privateKey := range input.Config.LocalKeyVault.KeyStore {
+			signInput.Config.LocalKeyVault.KeyStore[addr] = privateKey
+		}
+	}
+
+	signOutput, err := digitalSignatureManager.Sign(ctx, signInput)
+	if err != nil {
+		if signaturemanager.IsInvalidSlotError(err) {
+			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
+			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		return nil, errors.InternalFromErr(err)
+	}
+
+	signatureWithV, err := assembleRecoverableSignature(signOutput.Signature, input.From, *payload, tracer)
+	if err != nil {
+		return nil, err
+	}
+	return signatureWithV, nil
+}
+
+func (d DefaultUseCase) SignTypedData(ctx context.Context, input SignTypedDataInput) (*SignTypedDataOutput, error) {
+	_, err := govalidator.ValidateStruct(input)
+	if err != nil {
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
+	}
+
+	if input.Address.IsEmpty() {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("field 'address' cannot be empty")
+	}
+
+	tracer := logger.NewTracer(ctx)
+	tracer.AddProperty("slot", input.Slot)
+	tracer.AddProperty("moduleKind", input.ModuleKind)
+	tracer.AddProperty("operation", "SignTypedData")
+
+	if input.TypedData.Domain.ChainId != nil &&
+		input.TypedData.Domain.ChainId.Cmp(input.ChainID.BigInt()) != 0 {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage(
+			"chainId mismatch: domain specifies %s but request has %s",
+			input.TypedData.Domain.ChainId.String(),
+			input.ChainID.BigInt().String())
+	}
+
+	if validateErr := input.TypedData.Validate(); validateErr != nil {
+		return nil, errors.InvalidArgumentFromErr(validateErr).SetHumanReadableMessage("invalid typed data")
+	}
+
+	typedDataHash, prefixedDataHash, err := eip712.HashTypedData(input.TypedData)
+	if err != nil {
+		return nil, err
+	}
+	ethereumSignature, signErr := d.sign(ctx, input.SlotConnectionData, input.Address, prefixedDataHash, tracer)
+	if signErr != nil {
+		// Return sign's error as-is: it already carries the right type (bad gateway for a malformed
+		// backend signature, precondition-failed for an unreachable slot) and message. Re-wrapping
+		// as Internal here would flatten that classification.
+		return nil, signErr
+	}
+	return &SignTypedDataOutput{
+		SignedData: ethereumSignature.ToHex(),
+		TypedHash:  hex.EncodeToString(typedDataHash),
+	}, nil
+}
+
+func (d DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, from address.Address, data []byte, tracer logger.Tracer) (*EthereumSignature, error) {
+	createInput := CreateInput{
+		ModuleKind: slotData.ModuleKind,
+	}
+	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
+	if createErr != nil {
+		return nil, errors.InternalFromErr(createErr).WithMessage("error signing typed data: %s", createErr.Error())
+	}
+
+	signInput := signaturemanager.SignInput{
+		Slot:   slotData.Slot,
+		Pin:    slotData.Pin,
+		Tracer: tracer,
+		From:   from,
+		Data:   data,
+	}
+
+	signInput.Config.AKV = make([]signaturemanager.AKVConfig, len(slotData.Config.AKV))
+	for i, configItem := range slotData.Config.AKV {
+		signInput.Config.AKV[i] = signaturemanager.AKVConfig{
+			KeyName:          configItem.KeyName,
+			KeyVersion:       configItem.KeyVersion,
+			KeyPublicAddress: configItem.KeyPublicAddress,
+		}
+	}
+	if slotData.Config.LocalKeyVault != nil {
+		signInput.Config.LocalKeyVault = &signaturemanager.LocalKeyVaultConfig{
+			KeyStore: make(map[address.Address]string),
+		}
+		for addr, privateKey := range slotData.Config.LocalKeyVault.KeyStore {
+			signInput.Config.LocalKeyVault.KeyStore[addr] = privateKey
+		}
+	}
+
+	signOutput, signErr := digitalSignatureManager.Sign(ctx, signInput)
+	if signErr != nil {
+		if signaturemanager.IsInvalidSlotError(signErr) {
+			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", slotData.Slot)
+			return nil, errors.BadGatewayFromErr(signErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		return nil, errors.InternalFromErr(signErr)
+	}
+
+	signatureWithV, err := assembleRecoverableSignature(signOutput.Signature, from, data, tracer)
+	if err != nil {
+		return nil, err
+	}
+
+	// EIP-712 off-chain signatures use V=27 or V=28, not the EIP-155 transaction formula.
+	tracer.Debug("generated typed data signature")
+	return &EthereumSignature{
+		V: entities.Int256{Int: *new(big.Int).SetBytes(signatureWithV[0:1])},
+		R: entities.Int256{Int: *new(big.Int).SetBytes(signatureWithV[1:33])},
+		S: entities.Int256{Int: *new(big.Int).SetBytes(signatureWithV[33:signatureLength])},
+	}, nil
+}
+
+func (d *DefaultUseCase) CloseAll(ctx context.Context, _ CloseAllInput) (*CloseAllOutput, error) {
 	_, err := d.digitalSignatureManagerFactory.Close(ctx, CloseInput{})
 	if err != nil {
 		return nil, errors.InternalFromErr(err).WithMessage("error closing digital signature manager: %v", err)
@@ -294,7 +570,7 @@ func (d DefaultUseCase) CloseAll(ctx context.Context, _ CloseAllInput) (*CloseAl
 	return &CloseAllOutput{}, nil
 }
 
-func (d DefaultUseCase) IsAlive(ctx context.Context, input IsAliveInput) (*IsAliveOutput, error) {
+func (d *DefaultUseCase) IsAlive(ctx context.Context, input IsAliveInput) (*IsAliveOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
@@ -308,9 +584,9 @@ func (d DefaultUseCase) IsAlive(ctx context.Context, input IsAliveInput) (*IsAli
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
-	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
-	if createErr != nil {
-		return nil, errors.InternalFromErr(createErr).WithMessage("error checking if digital signature manager is alive: %v", createErr.Error())
+	digitalSignatureManager, err := d.digitalSignatureManagerFactory.Create(ctx, createInput)
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("error checking if digital signature manager is alive: %v", err)
 	}
 
 	isAliveInput := signaturemanager.IsAliveInput{
@@ -318,17 +594,17 @@ func (d DefaultUseCase) IsAlive(ctx context.Context, input IsAliveInput) (*IsAli
 		Pin:    input.Pin,
 		Tracer: tracer,
 	}
-	isAliveOutput, isAliveOutputErr := digitalSignatureManager.IsAlive(ctx, isAliveInput)
-	if isAliveOutputErr != nil {
-		if signaturemanager.IsInvalidSlotError(isAliveOutputErr) {
+	isAliveOutput, err := digitalSignatureManager.IsAlive(ctx, isAliveInput)
+	if err != nil {
+		if signaturemanager.IsInvalidSlotError(err) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
-			return nil, errors.PreconditionFailedFromErr(isAliveOutputErr).WithMessage(msg).SetHumanReadableMessage(msg)
+			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
-		if signaturemanager.IsPinIncorrectError(isAliveOutputErr) {
+		if signaturemanager.IsPinIncorrectError(err) {
 			msg := fmt.Sprintf("the pin provided for the slot '%s' is not correct", input.Slot)
-			return nil, errors.PreconditionFailedFromErr(isAliveOutputErr).WithMessage(msg).SetHumanReadableMessage(msg)
+			return nil, errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
-		return nil, errors.InternalFromErr(isAliveOutputErr)
+		return nil, errors.InternalFromErr(err)
 	}
 
 	tracer.Debugf("checked if slot '%s' is alive, with result: '%t'", input.Slot, isAliveOutput.IsAlive)
@@ -338,15 +614,15 @@ func (d DefaultUseCase) IsAlive(ctx context.Context, input IsAliveInput) (*IsAli
 	}, nil
 }
 
-func (d DefaultUseCase) Reset(ctx context.Context, input ResetInput) (*ResetOutput, error) {
+func (d *DefaultUseCase) Reset(ctx context.Context, input ResetInput) (*ResetOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
 
-	resetErr := d.digitalSignatureManagerFactory.Reset(ctx, input.ModuleKind)
-	if resetErr != nil {
-		return nil, errors.InternalFromErr(resetErr).WithMessage("failed to reset digital signature manager: %v", resetErr.Error())
+	err = d.digitalSignatureManagerFactory.Reset(ctx, input.ModuleKind)
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("failed to reset digital signature manager: %v", err)
 	}
 
 	logger.LogEntry(ctx).Debug("reset digital signature manager")
@@ -375,4 +651,37 @@ func ProvideDefaultHSMConnector(options DefaultUseCaseOptions) (*DefaultUseCase,
 	return &DefaultUseCase{
 		digitalSignatureManagerFactory: options.DigitalSignatureManagerFactory,
 	}, nil
+}
+
+func identifyTxType(input SignTxInput) (string, error) {
+
+	if input.GasPrice != nil {
+
+		if input.MaxFeePerGas != nil || input.MaxPriorityFeePerGas != nil || input.MaxFeePerBlobGas != nil || input.BlobVersionedHashes != nil || input.AuthorizationList != nil {
+			return "Unknown", errors.InvalidArgument().WithMessage("Ambiguous transaction type")
+		}
+
+		if input.AccessList != nil {
+			// Not supported transaction type
+			return entities.TransactionType1EIP2930, nil
+		}
+
+		return entities.TransactionType0Legacy, nil
+
+	}
+
+	if input.MaxFeePerGas != nil || input.MaxPriorityFeePerGas != nil {
+		if input.MaxFeePerGas != nil && input.MaxPriorityFeePerGas != nil && input.AccessList != nil {
+			if input.MaxFeePerBlobGas != nil || input.BlobVersionedHashes != nil || input.AuthorizationList != nil {
+				// Not supported transaction type
+				return entities.TransactionType3EIP4844, nil
+			}
+			return entities.TransactionType2EIP1559, nil
+		}
+		return "Unknown", errors.InvalidArgument().WithMessage("Missing mandatory field")
+
+	}
+
+	return entities.TransactionType0Legacy, nil
+
 }

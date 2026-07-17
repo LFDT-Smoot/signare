@@ -2,23 +2,27 @@
 
 ### Requirements
 
-- [swagger-cli](https://www.npmjs.com/package/swagger-cli)
+- [redocly](https://redocly.com/docs/cli/)
 - [spectral](https://meta.stoplight.io/docs/spectral/)
 
 ### Bundle & lint the API spec
 
 From **signare/app** repository, run:
 ```bash
-make tools.generate 
+make tools.generate
 ```
 
-### Build and serve documentation locally 
+### Build and serve documentation locally
 
-From **signare/app** repository, run: 
+From **signare/app** repository, run:
 ```bash
-make tools.serve_docs 
+make tools.start_docs
 ```
-You can also run the following command to stop and delete the created container: 
+You can also run the following command to stop and delete the created container:
 ```bash
-make tools.close_docs 
+make tools.stop_docs
 ```
+
+> Note: the Changelog page is generated from the canonical root `CHANGELOG.md` by
+> `make tools.sync_changelog` (a prerequisite of `tools.start_docs`). Any other docs
+> build path must run it first, or the Changelog page is dropped from the site.

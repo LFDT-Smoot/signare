@@ -16,6 +16,8 @@ type HSMSlotDB struct {
 	Slot string `storage:"slot"`
 	// Pin the password of the HSM Slot in the HSM
 	Pin string `storage:"pin"`
+	// Config the config of the HSM Slot
+	Config string `storage:"configuration"`
 	// CreationDate is the timestamp of the moment of the creation of the resource
 	CreationDate int64 `storage:"creation_date"`
 	// LastUpdate is the timestamp of the moment of the last edition of the resource
@@ -38,6 +40,20 @@ type HSMSlotUpdatePinDB struct {
 	ResourceVersion string `storage:"resource_version"`
 	// Pin the password of the HSM Slot in the HSM
 	Pin string `storage:"pin"`
+	// LastUpdate is the timestamp of the moment of the last edition of the resource
+	LastUpdate int64 `storage:"last_update"`
+	// NewResourceVersion is the new resource version after the edition
+	NewResourceVersion string `storage:"new_resource_version"`
+}
+
+// HSMSlotUpdateConfigDB is the data struct of the update of a resource in the database
+type HSMSlotUpdateConfigDB struct {
+	// StandardID is the ID of the resource
+	entities.StandardID
+	// ResourceVersion is the identifier of the current version of the resource
+	ResourceVersion string `storage:"resource_version"`
+	// Config the config of the HSM Slot
+	Config string `storage:"configuration"`
 	// LastUpdate is the timestamp of the moment of the last edition of the resource
 	LastUpdate int64 `storage:"last_update"`
 	// NewResourceVersion is the new resource version after the edition

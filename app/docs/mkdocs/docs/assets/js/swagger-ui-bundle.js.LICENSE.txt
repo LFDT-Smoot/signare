@@ -1,0 +1,68 @@
+Third-party vendored asset: Swagger UI
+======================================
+
+This directory vendors a pinned copy of Swagger UI, used by the
+mkdocs `render_swagger` plugin (see app/docs/mkdocs/mkdocs.yml) to render the
+OpenAPI specification in the documentation site.
+
+Provenance
+----------
+
+  Component : Swagger UI (swagger-api/swagger-ui)
+  Version   : 5.15.2  (PACKAGE_VERSION "5.15.2", GIT_COMMIT g8d94b55e,
+                       BUILD_TIME "Mon, 15 Apr 2024 08:14:49 GMT")
+  Source    : https://github.com/swagger-api/swagger-ui/tree/v5.15.2/dist
+  Retrieved : 2026-06-29
+
+  Vendored files and their SHA-256 checksums (canonical upstream dist):
+    assets/js/swagger-ui-bundle.js
+      8795ffef78de8aea8bd92d2be827f6def4f45d939330204a75c6a8d3b08cedb1
+    assets/css/swagger-ui.css
+      40170f0ee859d17f92131ba707329a88a070e4f66874d11365e9a77d232f6117
+
+Refresh / verify
+----------------
+
+To verify the vendored files against upstream (replace VER with the pinned tag):
+
+    VER=v5.15.2
+    base=https://raw.githubusercontent.com/swagger-api/swagger-ui/$VER/dist
+    curl -sSL $base/swagger-ui-bundle.js | sha256sum
+    curl -sSL $base/swagger-ui.css       | sha256sum
+
+To bump the version, fetch the new dist files, update the version and both
+SHA-256 values above, and confirm the new release post-dates the historical
+Swagger UI DOM-XSS fixes (the core Swagger UI DOM-XSS issues were fixed well
+before the 5.x line; see Known issues below for transitive dependency advisories).
+
+Known issues
+------------
+
+swagger-ui-dist 5.15.2's dependency tree includes a prismjs version < 1.30.0,
+affected by CVE-2024-53382 (DOM clobbering, medium). Prism highlighting here is
+provided via refractor, and the site renders only our own static OpenAPI spec at
+build time with no user-supplied input, so exposure is low. Bump the pin when a
+newer Swagger UI ships the fixed prismjs.
+
+License
+-------
+
+Swagger UI is licensed under the Apache License, Version 2.0.
+
+  Copyright 2024 SmartBear Software Inc.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+The minified bundle also embeds third-party components (e.g. React, licensed
+under the MIT License). Their notices are carried within the bundle itself;
+see https://github.com/swagger-api/swagger-ui for the full dependency set.

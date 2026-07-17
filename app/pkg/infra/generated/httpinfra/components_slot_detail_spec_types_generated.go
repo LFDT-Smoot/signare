@@ -13,6 +13,8 @@ type SlotDetailSpec struct {
 	ApplicationId *string `json:"applicationId"`
 	// Slot number assigned by the HSM.
 	Slot *string `json:"slot"`
+	// collection of configuration objects
+	Config *[]SlotDetailConfig `json:"config"`
 }
 
 // ValidateWith check whether SlotDetailSpec is valid
@@ -31,6 +33,23 @@ func (data SlotDetailSpec) ValidateWith() (*httpinfra.ValidationResult, *httpinf
 		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
 		httpError.SetMessage("error validating field [slot]")
 		return nil, httpError
+	}
+	if data.Config == nil {
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+		httpError.SetMessage("error validating field [config]")
+		return nil, httpError
+	}
+	for _, item := range *data.Config {
+		item = item
+		itemValidated, err := item.ValidateWith()
+		if err != nil {
+			httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+			httpError.SetMessage("error validating field [Config]")
+			return nil, httpError
+		}
+		if !itemValidated.Valid {
+			return itemValidated, nil
+		}
 	}
 	return &httpinfra.ValidationResult{
 		Valid: true,

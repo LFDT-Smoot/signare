@@ -1,11 +1,12 @@
 package address_test
 
 import (
+	"strings"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
+	"github.com/stretchr/testify/require"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
 )
 
 var (
@@ -21,37 +22,75 @@ func TestNewFromHexString(t *testing.T) {
 
 	t.Run("invalid addresses", func(t *testing.T) {
 		got, err = address.NewFromHexString("invalid address format")
-		assert.Error(t, err)
-		assert.Equal(t, address.ZeroAddress, got)
-		assert.Equal(t, zeroAddressString, got.String())
+		require.Error(t, err)
+		require.Equal(t, address.ZeroAddress, got)
+		require.Equal(t, zeroAddressString, got.String())
 
 		// valid length, invalid hex characters
 		got, err = address.NewFromHexString("0xz70z8128zb834e8enc17az8e3812k010678zf791")
-		assert.Error(t, err)
-		assert.Equal(t, address.ZeroAddress, got)
-		assert.Equal(t, zeroAddressString, got.String())
+		require.Error(t, err)
+		require.Equal(t, address.ZeroAddress, got)
+		require.Equal(t, zeroAddressString, got.String())
 		got, err = address.NewFromHexString("z70z8128zb834e8enc17az8e3812k010678zf791")
-		assert.Error(t, err)
-		assert.Equal(t, address.ZeroAddress, got)
-		assert.Equal(t, zeroAddressString, got.String())
+		require.Error(t, err)
+		require.Equal(t, address.ZeroAddress, got)
+		require.Equal(t, zeroAddressString, got.String())
 
 		got, err = address.NewFromHexString("")
-		assert.Error(t, err)
-		assert.Equal(t, address.ZeroAddress, got)
-		assert.Equal(t, zeroAddressString, got.String())
+		require.Error(t, err)
+		require.Equal(t, address.ZeroAddress, got)
+		require.Equal(t, zeroAddressString, got.String())
 	})
 
 	t.Run("valid addresses", func(t *testing.T) {
 		got, err = address.NewFromHexString(validAddrString)
-		assert.NoError(t, err)
-		assert.Equal(t, expectedAddressEIP55, got.String())
+		require.NoError(t, err)
+		require.Equal(t, expectedAddressEIP55, got.String())
 
 		got, err = address.NewFromHexString("0x" + validAddrString)
-		assert.NoError(t, err)
-		assert.Equal(t, expectedAddressEIP55, got.String())
+		require.NoError(t, err)
+		require.Equal(t, expectedAddressEIP55, got.String())
 
 		got, err = address.NewFromHexString("0X" + validAddrString)
-		assert.NoError(t, err)
-		assert.Equal(t, expectedAddressEIP55, got.String())
+		require.NoError(t, err)
+		require.Equal(t, expectedAddressEIP55, got.String())
+	})
+}
+
+func TestNewFromHexStringChecksum(t *testing.T) {
+	t.Run("accepts non-checksummed addresses", func(t *testing.T) {
+		// All-lowercase and all-uppercase carry no checksum information and are accepted as-is.
+		for _, in := range []string{
+			validAddrString,
+			"0x" + validAddrString,
+			"0X" + validAddrString,
+			strings.ToUpper(validAddrString),
+			"0x" + strings.ToUpper(validAddrString),
+		} {
+			got, err := address.NewFromHexStringChecksum(in)
+			require.NoError(t, err, "input %q", in)
+			require.Equal(t, expectedAddressEIP55, got.String())
+		}
+	})
+
+	t.Run("accepts a correctly checksummed mixed-case address", func(t *testing.T) {
+		got, err := address.NewFromHexStringChecksum(expectedAddressEIP55)
+		require.NoError(t, err)
+		require.Equal(t, expectedAddressEIP55, got.String())
+	})
+
+	t.Run("rejects a mixed-case address with a bad checksum", func(t *testing.T) {
+		// expectedAddressEIP55 has '970E...'; flipping that 'E' to lowercase breaks the checksum while
+		// keeping the string mixed-case, so the checksum is verified and must fail.
+		badChecksum := "0x970e8128AB834E8EAC17Ab8E3812F010678CF791"
+		got, err := address.NewFromHexStringChecksum(badChecksum)
+		require.Error(t, err)
+		require.Equal(t, address.ZeroAddress, got)
+	})
+
+	t.Run("rejects invalid hex", func(t *testing.T) {
+		got, err := address.NewFromHexStringChecksum("invalid address format")
+		require.Error(t, err)
+		require.Equal(t, address.ZeroAddress, got)
 	})
 }

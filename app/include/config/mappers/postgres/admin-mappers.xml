@@ -40,10 +40,10 @@
                 {{end}}
             {{ end }}
         {{ if .Order }}
-            ORDER BY {{ .Order.By }} {{ if eq .Order.Direction "asc" }}ASC{{ else }}DESC{{end}}
-            {{ if .Pagination}}
-                LIMIT {{.Pagination.Limit}} OFFSET {{.Pagination.Offset}}
-            {{ end }}
+            ORDER BY {{ .Order.ToSQLStmt }}
+        {{ end }}
+        {{ if .Pagination}}
+            LIMIT {{.Pagination.Limit}} OFFSET {{.Pagination.Offset}}
         {{ end }}
     </statement>
     <statement id="getById">

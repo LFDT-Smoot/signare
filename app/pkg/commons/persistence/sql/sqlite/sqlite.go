@@ -31,7 +31,7 @@ func init() {
 
 var _ sqlfw.Dialect = new(SQLite)
 
-const defaultMigrationsTable = "adhara_migrations"
+const defaultMigrationsTable = "signare_migrations"
 
 type SQLite struct {
 	db              *sqlx.DB
@@ -91,7 +91,7 @@ func (s *SQLite) InitMigration(ctx context.Context, migrationsTablePrefix *strin
 		s.migrationsTable = *migrationsTablePrefix + "_" + s.migrationsTable
 	}
 
-	err := s.ensureAdharaMigrationTables(ctx)
+	err := s.ensureMigrationTables(ctx)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func (s *SQLite) InitMigration(ctx context.Context, migrationsTablePrefix *strin
 	return nil
 }
 
-func (s *SQLite) ensureAdharaMigrationTables(ctx context.Context) (err error) {
+func (s *SQLite) ensureMigrationTables(ctx context.Context) (err error) {
 	query := `CREATE TABLE IF NOT EXISTS ` + s.migrationsTable + ` (version bigint not null primary key, dirty boolean not null, description text)`
 	if _, err = s.conn.ExecContext(ctx, query); err != nil {
 		return err

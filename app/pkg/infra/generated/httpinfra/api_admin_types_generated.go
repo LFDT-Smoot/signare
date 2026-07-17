@@ -176,6 +176,19 @@ type AdminSlotsRemoveRequest struct {
 	SlotId   string
 }
 
+// AdminSlotsUpdateConfigResponseWrapper response definition
+type AdminSlotsUpdateConfigResponseWrapper struct {
+	SlotDetail   SlotDetail
+	ResponseInfo httpinfra.ResponseInfo
+}
+
+// AdminSlotsUpdateConfigRequest request definition
+type AdminSlotsUpdateConfigRequest struct {
+	ModuleId         string
+	SlotId           string
+	SlotUpdateConfig SlotUpdateConfig
+}
+
 // AdminSlotsUpdatePinResponseWrapper response definition
 type AdminSlotsUpdatePinResponseWrapper struct {
 	SlotDetail   SlotDetail

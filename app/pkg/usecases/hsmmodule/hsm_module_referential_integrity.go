@@ -32,14 +32,14 @@ func (u *DefaultUseCase) removeAllDependencies(ctx context.Context, hsmModuleSta
 			referencingResourcesString += fmt.Sprintf("[id=%s,thisKind=%s]", entry.ResourceID, entry.ResourceKind)
 		}
 		msg := fmt.Sprintf("HSM '%s' can't be removed, there are elements depending on it", hsmModuleStandardID.ID)
-		return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	var deleteInput referentialintegrity.DeleteMyEntriesIfAnyInput
 	deleteInput.ResourceID = string(getHSMModuleOutput.InternalResourceID)
 	deleteInput.ResourceKind = referentialintegrity.KindHSMModule
 	deleteMyEntriesIfAnyErr := u.referentialIntegrityUseCase.DeleteMyEntriesIfAny(ctx, deleteInput)
-	if listMyChildrenEntriesErr != nil {
+	if deleteMyEntriesIfAnyErr != nil {
 		return deleteMyEntriesIfAnyErr
 	}
 

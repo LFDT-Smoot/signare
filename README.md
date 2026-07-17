@@ -28,7 +28,7 @@ The purpose of Hyperledger Signare is to provide a FIPS 140-2 Level 2 compliant 
 ## :globe_with_meridians: Useful Links
 
 - [Documentation](app/docs/mkdocs/docs/index.md): Discover the signare functionality and learn to configure it properly.
-- [Changelog](app/docs/mkdocs/docs/CHANGELOG.md): Take a look at the record of changes.
+- [Changelog](CHANGELOG.md): Take a look at the record of changes.
 - Feedback: Your help is key to develop the signare.
     - Found a bug? Need help fixing a problem? You can submit your issues [here](https://github.com/hyperledger-labs/signare/issues).
 
@@ -39,6 +39,9 @@ signare comes with a range of features tailored for web3 integration purposes:
 - **Different HSMs support**: signare support different types of HSM.
 - **Ethereum accounts management**: generate new accounts, store and assign them to users.
 - **Ethereum's transaction signing**: sign Ethereum transactions on the fly using managed accounts.
+
+> [!WARNING]
+> Right now Signare can sign type 0, 1 and 2 transactions (legacy, [EIP-2930](https://eips.ethereum.org/EIPS/eip-2930) and [EIP-1559](https://eips.ethereum.org/EIPS/eip-1559) transactions). Types 3 ([EIP-4844](https://eips.ethereum.org/EIPS/eip-4844)) and 4 ([EIP-7702](https://eips.ethereum.org/EIPS/eip-7702)) transactions are not supported right now.
 
 ## :wrench: Installation
 
@@ -90,6 +93,11 @@ https://github.com/gynura
 https://github.com/ArturoGarciaRegueiro  
 https://github.com/mkrielza  
 https://github.com/coeniebeyers  
+
+**Other committers**
+
+https://github.com/MateoGlzAlon
+https://github.com/AndresMPE
 
 ## :email: Sponsor
 

@@ -55,6 +55,8 @@ func (m *HTTPContextDefinition) DefineAction(next http.Handler) http.Handler {
 		var match mux.RouteMatch
 		matches := m.httpRouter.Router().Match(r, &match)
 		if !matches || match.MatchErr != nil {
+			noMatchErr := errors.New("no route matched while defining the request action")
+			m.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewNotFoundHTTPError(r.Context(), noMatchErr))
 			return
 		}
 
@@ -71,12 +73,15 @@ type HTTPContextDefinitionOptions struct {
 	AuthHeadersConfiguration contextdefinition.AuthHeadersConfiguration
 	// HTTPRouter are a set of methods to set up an HTTP HTTPRouter
 	HTTPRouter httpinfra.HTTPRouter
+	// ResponseHandler exposes functionality to handle HTTP responses
+	ResponseHandler httpinfra.HTTPResponseHandler
 }
 
 // HTTPContextDefinition defines authorization configuration for an application and a user
 type HTTPContextDefinition struct {
 	authHeadersConfiguration contextdefinition.AuthHeadersConfiguration
 	httpRouter               httpinfra.HTTPRouter
+	responseHandler          httpinfra.HTTPResponseHandler
 }
 
 // ProvideHTTPContextDefinition returns HTTPContextDefinition with the given options
@@ -84,8 +89,12 @@ func ProvideHTTPContextDefinition(options HTTPContextDefinitionOptions) (*HTTPCo
 	if options.HTTPRouter == nil {
 		return nil, errors.New("'HTTPRouter' field is mandatory")
 	}
+	if options.ResponseHandler == nil {
+		return nil, errors.New("'ResponseHandler' field is mandatory")
+	}
 	return &HTTPContextDefinition{
 		authHeadersConfiguration: options.AuthHeadersConfiguration,
 		httpRouter:               options.HTTPRouter,
+		responseHandler:          options.ResponseHandler,
 	}, nil
 }

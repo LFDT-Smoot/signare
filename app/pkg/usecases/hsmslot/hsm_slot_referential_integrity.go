@@ -21,7 +21,7 @@ func (u *DefaultUseCase) addApplicationDependency(ctx context.Context, data HSMS
 	if getApplicationErr != nil {
 		if errors.IsNotFound(getApplicationErr) {
 			msg := fmt.Sprintf("can't create HSM slot becauase application '%s' does not exist", data.ApplicationID)
-			return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+			return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		return getApplicationErr
 	}
@@ -49,7 +49,7 @@ func (u *DefaultUseCase) addHSMModuleDependency(ctx context.Context, data HSMSlo
 	if getHSMModuleErr != nil {
 		if errors.IsNotFound(getHSMModuleErr) {
 			msg := fmt.Sprintf("can't create HSM slot becauase HSM module '%s' does not exist", data.HSMModuleID)
-			return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+			return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		return getHSMModuleErr
 	}
@@ -90,14 +90,14 @@ func (u *DefaultUseCase) removeAllDependencies(ctx context.Context, hsmSlotStand
 			referencingResourcesString += fmt.Sprintf("[id=%s,thisKind=%s]", entry.ResourceID, entry.ResourceKind)
 		}
 		msg := fmt.Sprintf("HSM slot '%s' can't be removed, there are elements depending on it", hsmSlotStandardID.ID)
-		return errors.PreconditionFailed().WithMessage(msg).SetHumanReadableMessage(msg)
+		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	var deleteInput referentialintegrity.DeleteMyEntriesIfAnyInput
 	deleteInput.ResourceID = string(getHSMSlotOutput.InternalResourceID)
 	deleteInput.ResourceKind = referentialintegrity.KindHSMSlot
 	deleteMyEntriesIfAnyErr := u.referentialIntegrityUseCase.DeleteMyEntriesIfAny(ctx, deleteInput)
-	if listMyChildrenEntriesErr != nil {
+	if deleteMyEntriesIfAnyErr != nil {
 		return deleteMyEntriesIfAnyErr
 	}
 

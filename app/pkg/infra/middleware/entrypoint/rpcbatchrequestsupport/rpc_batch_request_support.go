@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -15,6 +16,15 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// maxBatchElements caps the number of elements accepted in a single JSON-RPC batch request.
+// Each element is fanned out into a full request, so an unbounded batch is a work-amplification
+// vector independent of the body byte size.
+const maxBatchElements = 100
+
+// bodyTooLargeMessage is the client-facing message returned when the request body exceeds the
+// entrypoint size limit (see httpinfra.MaxBytesMiddleware).
+const bodyTooLargeMessage = "request body too large"
 
 // FanOutRPCBatchRequest is a middleware function to fan-out RPC requests if a batch request is identified.
 // Each of the requests is processed as if it were a single request.
@@ -32,7 +42,24 @@ func (m *RPCBatchRequestSupportMiddleware) FanOutRPCBatchRequest(next http.Handl
 		var batchRPCRequest []RPCRequest
 		err = utils.ReadAndResetCloser(&r.Body, &batchRPCRequest)
 		if err != nil {
-			m.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(r.Context(), err, httpinfra.StatusInvalidArgument))
+			httpErr := httpinfra.NewHTTPErrorFromError(r.Context(), err, httpinfra.StatusInvalidArgument)
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				httpErr = httpErr.SetMessage(bodyTooLargeMessage)
+			}
+			m.responseHandler.HandleErrorResponse(r.Context(), w, httpErr)
+			return
+		}
+
+		if len(batchRPCRequest) == 0 {
+			emptyBatchErr := errors.New("batch request must contain at least one element")
+			m.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(r.Context(), emptyBatchErr, httpinfra.StatusInvalidArgument).SetMessage(emptyBatchErr.Error()))
+			return
+		}
+
+		if len(batchRPCRequest) > maxBatchElements {
+			tooManyElementsErr := fmt.Errorf("batch request exceeds the maximum of %d elements", maxBatchElements)
+			m.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(r.Context(), tooManyElementsErr, httpinfra.StatusInvalidArgument).SetMessage(tooManyElementsErr.Error()))
 			return
 		}
 

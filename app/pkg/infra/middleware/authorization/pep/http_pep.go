@@ -16,12 +16,12 @@ func (policyEnforcementPoint *HTTPPolicyEnforcementPoint) AuthorizeUser(next htt
 
 		user, err := requestcontext.UserFromContext(ctx)
 		if err != nil {
-			policyEnforcementPoint.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusPermissionDenied))
+			policyEnforcementPoint.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewForbiddenHTTPError(ctx, err))
 			return
 		}
 		actionID, err := requestcontext.ActionFromContext(ctx)
 		if err != nil {
-			policyEnforcementPoint.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusPermissionDenied))
+			policyEnforcementPoint.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewForbiddenHTTPError(ctx, err))
 			return
 		}
 		// We ignore the error since signer-admins won't use the application header.
@@ -35,7 +35,7 @@ func (policyEnforcementPoint *HTTPPolicyEnforcementPoint) AuthorizeUser(next htt
 
 		_, err = policyEnforcementPoint.userPolicyDecisionPointAdapter.AuthorizeUser(ctx, authorizeUserInput)
 		if err != nil {
-			policyEnforcementPoint.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusPermissionDenied))
+			policyEnforcementPoint.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewForbiddenHTTPError(ctx, err))
 			return
 		}
 

@@ -1,14 +1,19 @@
 logger:
-  logLevel: 'debug'
+  logLevel: 'info'
 database:
   postgresql:
     host: 'localhost'
     port: 5432
     scheme: 'postgres'
     database: 'db_signare'
-    username: 'postgres'
-    password: 'postgres'
-    sslmode: 'disable'
+    # Use a dedicated low-privilege role that owns db_signare, not the postgres superuser.
+    username: 'signare'
+    # Do not store the password here. Supply it via the SIGNARE_DATABASE_POSTGRESQL_PASSWORD
+    # environment variable. This placeholder is intentionally invalid so a copy-paste deployment that
+    # forgets to set the variable fails to connect instead of silently using a known value.
+    password: '__CHANGE_ME__'
+    # 'require' encrypts the connection; use 'verify-full' to also validate the server certificate.
+    sslmode: 'require'
 requestContext:
   userRequestHeader: 'X-Auth-RpcUserId'
   applicationRequestHeader: 'X-Auth-RpcApplicationId'
@@ -22,3 +27,6 @@ metrics:
 hsmmodules:
   softhsm:
     lib: '/usr/local/lib/softhsm/libsofthsm2.so'
+server:
+  maxRequestBodyBytes: 1048576
+  maxHeaderBytes: 1048576

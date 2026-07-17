@@ -15,47 +15,47 @@ import (
 func Test_PublishApplicationAccountsCreate_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
 	err := generatedHTTPInfra.PublishApplicationAccountsCreate(http, generatedHTTPInfra.DefaultApplicationAPIHTTPHandler{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 // Test_PublishApplicationAccountsRemove_Success test the PublishApplicationAccountsRemove happy path
 func Test_PublishApplicationAccountsRemove_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
 	err := generatedHTTPInfra.PublishApplicationAccountsRemove(http, generatedHTTPInfra.DefaultApplicationAPIHTTPHandler{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 // Test_PublishApplicationUsersCreate_Success test the PublishApplicationUsersCreate happy path
 func Test_PublishApplicationUsersCreate_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
 	err := generatedHTTPInfra.PublishApplicationUsersCreate(http, generatedHTTPInfra.DefaultApplicationAPIHTTPHandler{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 // Test_PublishApplicationUsersDescribe_Success test the PublishApplicationUsersDescribe happy path
 func Test_PublishApplicationUsersDescribe_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
 	err := generatedHTTPInfra.PublishApplicationUsersDescribe(http, generatedHTTPInfra.DefaultApplicationAPIHTTPHandler{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 // Test_PublishApplicationUsersEdit_Success test the PublishApplicationUsersEdit happy path
 func Test_PublishApplicationUsersEdit_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
 	err := generatedHTTPInfra.PublishApplicationUsersEdit(http, generatedHTTPInfra.DefaultApplicationAPIHTTPHandler{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 // Test_PublishApplicationUsersList_Success test the PublishApplicationUsersList happy path
 func Test_PublishApplicationUsersList_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
 	err := generatedHTTPInfra.PublishApplicationUsersList(http, generatedHTTPInfra.DefaultApplicationAPIHTTPHandler{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 // Test_PublishApplicationUsersRemove_Success test the PublishApplicationUsersRemove happy path
 func Test_PublishApplicationUsersRemove_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
 	err := generatedHTTPInfra.PublishApplicationUsersRemove(http, generatedHTTPInfra.DefaultApplicationAPIHTTPHandler{})
-	require.Nil(t, err)
+	require.NoError(t, err)
 }

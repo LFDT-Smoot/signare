@@ -13,10 +13,12 @@ import (
 
 	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
 	"github.com/hyperledger-labs/signare/app/pkg/graph"
+	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
 	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
 	"github.com/hyperledger-labs/signare/deployment/cmd/signare/config"
 	"github.com/hyperledger-labs/signare/deployment/cmd/signare/flags"
 	"github.com/hyperledger-labs/signare/deployment/cmd/signare/upgrader"
+	"github.com/hyperledger-labs/signare/deployment/cmd/signare/version"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -32,11 +34,22 @@ const (
 	defaultPrometheusPort = 9785
 	defaultHTTPPort       = 32325
 	defaultRPCPort        = 4545
+
+	serverWriteTimeout      = 15 * time.Second
+	serverReadTimeout       = 15 * time.Second
+	serverIdleTimeout       = 60 * time.Second
+	serverReadHeaderTimeout = 15 * time.Second
+
+	// shutdownGracePeriod bounds how long the servers are given to drain in-flight requests during
+	// graceful shutdown. It matches the per-request read/write timeouts so a request the server
+	// would have allowed to run still has a full window to finish before the process exits.
+	shutdownGracePeriod = 15 * time.Second
 )
 
 var (
 	commitHash string
 	buildTime  string
+	branch     string
 	tag        string
 )
 
@@ -52,9 +65,10 @@ func main() {
 
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.SetEnvPrefix("GOsignare")
+	viper.SetEnvPrefix("SIGNARE")
 
 	coreCmd.AddCommand(upgrader.Command())
+	coreCmd.AddCommand(version.Command(version.BuildInfo{CommitHash: commitHash, BuildTime: buildTime, Tag: tag, Branch: branch}))
 
 	if err := coreCmd.Execute(); err != nil {
 		logger.LogEntry(context.Background()).Errorf("not able to bootstrap: error executing %s cmd", name)
@@ -128,6 +142,10 @@ func startServer(_ *cobra.Command, _ []string) {
 		panic(fmt.Sprintf("error reading static configuration: [%v]", err))
 	}
 
+	for _, warning := range staticConfig.InsecureSettingsWarnings() {
+		logger.LogEntry(ctxMainWithCancellation).Warn(warning)
+	}
+
 	appConfig := toGraphConfiguration(staticConfig)
 	appGraph, err := graph.New(appConfig)
 	if err != nil {
@@ -143,7 +161,9 @@ func startServer(_ *cobra.Command, _ []string) {
 	}
 	logger.LogEntry(ctxMainWithCancellation).Infof(responseMessage)
 
-	httpServer := startMainServer(addr, *appGraph)
+	maxBodyBytes, maxHeaderBytes := staticConfig.ServerLimits()
+
+	httpServer := startMainServer(addr, *appGraph, maxBodyBytes, maxHeaderBytes)
 	var rpcServerAddress string
 	if viper.GetString(flags.ListenAddressFlag) == defaultAllAddresses {
 		rpcServerAddress = fmt.Sprintf(":%d", viper.GetInt(flags.RPCPortFlag))
@@ -151,11 +171,11 @@ func startServer(_ *cobra.Command, _ []string) {
 		rpcServerAddress = fmt.Sprintf("%s:%d", viper.GetString(flags.ListenAddressFlag), viper.GetInt(flags.RPCPortFlag))
 	}
 
-	rpcServer := startRPCServer(rpcServerAddress, *appGraph)
+	rpcServer := startRPCServer(rpcServerAddress, *appGraph, maxBodyBytes, maxHeaderBytes)
 
 	var metricsServer *http.Server
 	if staticConfig.MetricsConfig != nil {
-		metricsServer, err = startMetricsServers(staticConfig, *appGraph)
+		metricsServer, err = startMetricsServers(staticConfig, *appGraph, maxHeaderBytes)
 		if err != nil {
 			panic(err)
 		}
@@ -171,20 +191,29 @@ func startServer(_ *cobra.Command, _ []string) {
 			mainCancel() // the mainCancel is triggered from terminationChannel
 		case <-ctxMainWithCancellation.Done():
 			logger.LogEntry(ctxMainWithCancellation).Info("shutting down signare")
-			if err = shutDownServer(ctxMainWithCancellation, httpServer); err != nil {
+			// ctxMainWithCancellation is already cancelled here, so a fresh, time-bounded context is
+			// used to give the servers a window to drain in-flight requests before the process exits.
+			shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), shutdownGracePeriod)
+			if err = shutDownServer(shutdownCtx, httpServer); err != nil {
 				logger.LogEntry(ctxMainWithCancellation).Errorf("error shutting down main HTTP signare server: %v", err)
 			}
-			if err = shutDownServer(ctxMainWithCancellation, rpcServer); err != nil {
+			if err = shutDownServer(shutdownCtx, rpcServer); err != nil {
 				logger.LogEntry(ctxMainWithCancellation).Errorf("error shutting down main JSON-RPC signare server: %v", err)
 			}
 			if metricsServer != nil {
-				if err = shutDownServer(ctxMainWithCancellation, metricsServer); err != nil {
+				if err = shutDownServer(shutdownCtx, metricsServer); err != nil {
 					logger.LogEntry(ctxMainWithCancellation).Errorf("error shutting down metrics server: %v", err)
 				}
 			}
+			cancelShutdown()
 			_, err = appGraph.UseCases().HSMConnector.CloseAll(context.Background(), hsmconnector.CloseAllInput{})
 			if err != nil {
 				logger.LogEntry(ctxMainWithCancellation).Errorf("error closing HSM resources: %v", err)
+			}
+			if connection := appGraph.PersistenceFwConnection(); connection != nil {
+				if err = connection.Close(); err != nil {
+					logger.LogEntry(ctxMainWithCancellation).Errorf("error closing database connection pool: %v", err)
+				}
 			}
 			logger.LogEntry(ctxMainWithCancellation).Info("shutdown signare SUCCESS")
 			os.Exit(0)
@@ -192,16 +221,23 @@ func startServer(_ *cobra.Command, _ []string) {
 	}
 }
 
-func startMainServer(addr string, appGraph graph.ApplicationGraph) *http.Server {
-	router := appGraph.MainServer()
-	srv := &http.Server{
+// newHTTPServer builds an *http.Server with the shared slow-client and idle-connection timeouts and the
+// configured maximum header size, applied to every listener (main, RPC, and metrics).
+func newHTTPServer(addr string, handler http.Handler, maxHeaderBytes int) *http.Server {
+	return &http.Server{
 		Addr:              addr,
-		WriteTimeout:      time.Second * 15,
-		ReadTimeout:       time.Second * 15,
-		IdleTimeout:       time.Second * 60,
-		ReadHeaderTimeout: time.Second * 15,
-		Handler:           handlers.LoggingHandler(os.Stdout, router.MainRouter()),
+		WriteTimeout:      serverWriteTimeout,
+		ReadTimeout:       serverReadTimeout,
+		IdleTimeout:       serverIdleTimeout,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+		Handler:           handler,
 	}
+}
+
+func startMainServer(addr string, appGraph graph.ApplicationGraph, maxBodyBytes int64, maxHeaderBytes int) *http.Server {
+	router := appGraph.MainServer()
+	srv := newHTTPServer(addr, httpinfra.MaxBytesMiddleware(maxBodyBytes)(handlers.LoggingHandler(os.Stdout, router.MainRouter())), maxHeaderBytes)
 	logger.LogEntry(context.Background()).Infof("starting HTTP server on %s", addr)
 	printRoutes(context.Background(), router.MainRouter())
 	go func() {
@@ -212,16 +248,9 @@ func startMainServer(addr string, appGraph graph.ApplicationGraph) *http.Server 
 	return srv
 }
 
-func startRPCServer(addr string, appGraph graph.ApplicationGraph) *http.Server {
+func startRPCServer(addr string, appGraph graph.ApplicationGraph, maxBodyBytes int64, maxHeaderBytes int) *http.Server {
 	rpcRouter := appGraph.RPCServer()
-	srv := &http.Server{
-		Addr:              addr,
-		WriteTimeout:      time.Second * 15,
-		ReadTimeout:       time.Second * 15,
-		IdleTimeout:       time.Second * 60,
-		ReadHeaderTimeout: time.Second * 15,
-		Handler:           handlers.LoggingHandler(os.Stdout, rpcRouter.Router()),
-	}
+	srv := newHTTPServer(addr, httpinfra.MaxBytesMiddleware(maxBodyBytes)(handlers.LoggingHandler(os.Stdout, rpcRouter.Router())), maxHeaderBytes)
 	logger.LogEntry(context.Background()).Infof("starting JSON-RPC server on %s", addr)
 	printRPCMethods(context.Background(), appGraph.RPCMethods())
 	go func() {
@@ -232,7 +261,7 @@ func startRPCServer(addr string, appGraph graph.ApplicationGraph) *http.Server {
 	return srv
 }
 
-func startMetricsServers(staticConfig *config.StaticConfiguration, appGraph graph.ApplicationGraph) (*http.Server, error) {
+func startMetricsServers(staticConfig *config.StaticConfiguration, appGraph graph.ApplicationGraph, maxHeaderBytes int) (*http.Server, error) {
 	if staticConfig.MetricsConfig.PrometheusMetricsConfig == nil {
 		return nil, errors.New("unknown metric option to start server listener")
 	}
@@ -242,11 +271,9 @@ func startMetricsServers(staticConfig *config.StaticConfiguration, appGraph grap
 		port = *staticConfig.MetricsConfig.PrometheusMetricsConfig.Port
 	}
 	addr := fmt.Sprintf(":%d", port)
-	prometheusMetricsSrv := &http.Server{
-		Addr:              addr,
-		Handler:           handlers.LoggingHandler(os.Stdout, router.MainRouter()),
-		ReadHeaderTimeout: time.Second * 15,
-	}
+	// No request-body cap here: the metrics endpoint serves bodyless Prometheus scrape GETs. Only the
+	// header limit applies; the body cap is reserved for the REST and JSON-RPC entrypoints.
+	prometheusMetricsSrv := newHTTPServer(addr, handlers.LoggingHandler(os.Stdout, router.MainRouter()), maxHeaderBytes)
 	logger.LogEntry(context.Background()).Infof("starting prometheus metrics server on %s", addr)
 	printRoutes(context.Background(), router.MainRouter())
 	go func() {
@@ -267,6 +294,7 @@ func toGraphConfiguration(staticConfig *config.StaticConfiguration) graph.Config
 		BuildConfig: &graph.BuildConfig{
 			BuildTime:  &buildTime,
 			Tag:        &tag,
+			Branch:     &branch,
 			CommitHash: &commitHash,
 		},
 		Libraries: graph.LibrariesConfig{
@@ -281,13 +309,22 @@ func toGraphConfiguration(staticConfig *config.StaticConfiguration) graph.Config
 					Database: staticConfig.DatabaseInfo.PostgreSQL.Database,
 				},
 			},
-			HSMModules: graph.HSMModules{},
 		},
 	}
 
-	if staticConfig.HSMModules.SoftHSM != nil {
-		graphConfig.Libraries.HSMModules.SoftHSM = &graph.SoftHSMConfig{
-			Library: staticConfig.HSMModules.SoftHSM.Library,
+	if staticConfig.HSMModules != nil {
+		graphConfig.Libraries.HSMModules = new(graph.HSMModules)
+
+		if staticConfig.HSMModules.SoftHSM != nil {
+			graphConfig.Libraries.HSMModules.SoftHSM = &graph.SoftHSMConfig{
+				Library: staticConfig.HSMModules.SoftHSM.Library,
+			}
+		}
+
+		if staticConfig.HSMModules.AKV != nil {
+			graphConfig.Libraries.HSMModules.AKV = &graph.AKVConfig{
+				URL: staticConfig.HSMModules.AKV.URL,
+			}
 		}
 	}
 
@@ -332,7 +369,7 @@ func shutDownServer(ctx context.Context, srv *http.Server) error {
 }
 
 func printRoutes(ctx context.Context, router *mux.Router) {
-	err := router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+	err := router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
 		var err error
 		var methods []string
 		var path string

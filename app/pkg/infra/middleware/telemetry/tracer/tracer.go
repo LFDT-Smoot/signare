@@ -66,6 +66,8 @@ func (m *HTTPContextTracer) HandleTracing(next http.Handler) http.Handler {
 
 // parseVersion attempts to parse the trace parent version. If it succeeds, it returns the parsed version and the flag is set to true.
 // If it fails, it returns the current max version supported and the flag is set to false.
+//
+//nolint:gosec
 func parseVersion(rawTraceParent string) (contextVersion, bool) {
 	if len(rawTraceParent) != traceParentLength {
 		return traceContextVersion, false

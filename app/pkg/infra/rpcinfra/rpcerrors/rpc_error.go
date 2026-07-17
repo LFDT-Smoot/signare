@@ -14,6 +14,8 @@ const (
 	MethodNotFoundErrorCode     ErrorCode = -32601
 	InvalidParamsErrorCode      ErrorCode = -32602
 	InternalErrorCode           ErrorCode = -32603
+	BadGatewayErrorCode         ErrorCode = -32604
+	AlreadyExistsErrorCode      ErrorCode = -32605
 	UnauthorizedErrorCode       ErrorCode = -32099
 	NotFoundErrorCode           ErrorCode = -32098
 	PreconditionFailedErrorCode ErrorCode = -32097
@@ -23,6 +25,8 @@ const (
 	MethodNotFoundErrorMsg     ErrorMsg = "Method not found"
 	InvalidParamsErrorMsg      ErrorMsg = "Invalid params"
 	InternalErrorMsg           ErrorMsg = "Internal error"
+	BadGatewayErrorMsg         ErrorMsg = "Bad gateway"
+	AlreadyExistsErrorMsg      ErrorMsg = "Already exists"
 	UnauthorizedErrorMsg       ErrorMsg = "Unauthorized"
 	NotFoundErrorMsg           ErrorMsg = "Not found"
 	PreconditionFailedErrorMsg ErrorMsg = "Precondition failed"
@@ -109,6 +113,40 @@ func NewInternalFromErr(err error) *RPCError {
 	return &RPCError{
 		Code:       InternalErrorCode,
 		Message:    InternalErrorMsg,
+		WrappedErr: err,
+	}
+}
+
+// NewBadGateway creates a new internal server RPCError.
+func NewBadGateway() *RPCError {
+	return &RPCError{
+		Code:    BadGatewayErrorCode,
+		Message: BadGatewayErrorMsg,
+	}
+}
+
+// NewBadGatewayFromErr creates a new internal server RPCError wrapping the original error.
+func NewBadGatewayFromErr(err error) *RPCError {
+	return &RPCError{
+		Code:       BadGatewayErrorCode,
+		Message:    BadGatewayErrorMsg,
+		WrappedErr: err,
+	}
+}
+
+// NewAlreadyExists creates a new internal server RPCError.
+func NewAlreadyExists() *RPCError {
+	return &RPCError{
+		Code:    AlreadyExistsErrorCode,
+		Message: AlreadyExistsErrorMsg,
+	}
+}
+
+// NewAlreadyExistsFromErr creates a new internal server RPCError wrapping the original error.
+func NewAlreadyExistsFromErr(err error) *RPCError {
+	return &RPCError{
+		Code:       AlreadyExistsErrorCode,
+		Message:    AlreadyExistsErrorMsg,
 		WrappedErr: err,
 	}
 }

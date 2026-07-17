@@ -2,7 +2,6 @@ package hsmmodule
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
 	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
@@ -24,6 +23,8 @@ type ModuleKind string
 
 const (
 	SoftHSMModuleKind ModuleKind = "SoftHSM"
+	AKVModuleKind     ModuleKind = "AKV"
+	LKVModuleKind     ModuleKind = "LocalKeyVault"
 )
 
 // HSMModuleUseCase defines the management of HSMModule in storage.
@@ -91,14 +92,16 @@ func (u *DefaultUseCase) ListHSMModules(ctx context.Context, input ListHSMModule
 
 	filters := u.hsmModuleStorage.Filter()
 	direction := utils.DefaultString(input.OrderDirection, defaultOrderDirection)
+	direction, validDirection := entities.NormalizeOrderDirection(direction)
+	if !validDirection {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("invalid order direction %q, expected one of [asc, desc]", input.OrderDirection)
+	}
 	filters.OrderByCreationDate(persistence.OrderDirection(direction))
 	if input.OrderBy == entities.OrderByLastUpdate {
 		filters.OrderByLastUpdateDate(persistence.OrderDirection(direction))
 	}
 
-	if input.PageLimit > 0 {
-		filters.Paged(input.PageLimit, input.PageOffset)
-	}
+	filters.Paged(persistence.ClampPageLimit(input.PageLimit), input.PageOffset)
 
 	hsmModulesCollection, err := u.hsmModuleStorage.All(ctx, filters)
 	if err != nil {
@@ -118,7 +121,7 @@ func (u *DefaultUseCase) GetHSMModule(ctx context.Context, input GetHSMModuleInp
 	hsmModule, getHsmModuleErr := u.hsmModuleStorage.Get(ctx, input.StandardID)
 	if getHsmModuleErr != nil {
 		if errors.IsNotFound(getHsmModuleErr) {
-			return nil, errors.NotFoundFromErr(getHsmModuleErr).WithMessage(fmt.Sprintf("hsm module [%s] not found", input.ID))
+			return nil, errors.NotFoundFromErr(getHsmModuleErr).WithMessage("hsm module [%s] not found", input.ID)
 		}
 		return nil, errors.InternalFromErr(getHsmModuleErr)
 	}
@@ -134,11 +137,11 @@ func (u *DefaultUseCase) EditHSMModule(ctx context.Context, input EditHSMModuleI
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
 
-	input.HSMModule.LastUpdate = time.Now()
+	input.LastUpdate = time.Now()
 	hsmModule, editHSMModuleErr := u.hsmModuleStorage.Edit(ctx, input.HSMModule)
 	if editHSMModuleErr != nil {
 		if errors.IsNotFound(editHSMModuleErr) {
-			return nil, errors.NotFoundFromErr(editHSMModuleErr).WithMessage(fmt.Sprintf("hsm module [%s] not found", input.ID))
+			return nil, errors.NotFoundFromErr(editHSMModuleErr).WithMessage("hsm module [%s] not found", input.ID)
 		}
 		return nil, errors.InternalFromErr(editHSMModuleErr)
 	}
@@ -162,7 +165,7 @@ func (u *DefaultUseCase) DeleteHSMModule(ctx context.Context, input DeleteHSMMod
 	hsmModule, removeHSMModuleErr := u.hsmModuleStorage.Remove(ctx, input.StandardID)
 	if removeHSMModuleErr != nil {
 		if errors.IsNotFound(removeHSMModuleErr) {
-			return nil, errors.NotFoundFromErr(removeHSMModuleErr).WithMessage(fmt.Sprintf("hsm module [%s] not found", input.ID))
+			return nil, errors.NotFoundFromErr(removeHSMModuleErr).WithMessage("hsm module [%s] not found", input.ID)
 		}
 		return nil, errors.InternalFromErr(removeHSMModuleErr)
 	}

@@ -4,8 +4,12 @@ schemas:
     $ref: ./schemas/admin/ModuleSpec.yaml
   ModuleCreation:
     $ref: ./schemas/admin/ModuleCreation.yaml
+  AKV:
+    $ref: ./schemas/admin/ModuleKindAKV.yaml
   SoftHSM:
-    $ref: ./schemas/admin/SoftHSM.yaml
+    $ref: ./schemas/admin/ModuleKindSoftHSM.yaml
+  LocalKeyVault:
+    $ref: ./schemas/admin/ModuleKindLocalKeyVault.yaml
   ModuleDetail:
     $ref: ./schemas/admin/ModuleDetail.yaml
   ModuleUpdate:
@@ -16,10 +20,14 @@ schemas:
     $ref: ./schemas/admin/SlotCreation.yaml
   SlotDetail:
     $ref: ./schemas/admin/SlotDetail.yaml
+  SlotDetailConfig:
+    $ref: ./schemas/admin/SlotDetailConfig.yaml
   SlotCollection:
     $ref: ./schemas/admin/SlotCollection.yaml
   SlotUpdatePin:
     $ref: ./schemas/admin/SlotUpdatePin.yaml
+  SlotUpdateConfig:
+    $ref: ./schemas/admin/SlotUpdateConfig.yaml
   AdminUserDetail:
     $ref: ./schemas/admin/AdminUserDetail.yaml
   AdminUserCreation:
@@ -102,7 +110,7 @@ parameters:
 
 ## Query Params
   ApplicationIdQuery:
-    $ref: ./parameters/query/ApplicationId.yaml
+    $ref: ./parameters/query/ApplicationIdQuery.yaml
   Limit:
     $ref: ./parameters/query/Limit.yaml
   Offset:

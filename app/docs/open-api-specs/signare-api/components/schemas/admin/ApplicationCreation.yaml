@@ -14,7 +14,7 @@ properties:
         x-required: mandatory
         nullable: false
         description: |
-          The chain identifier with which the application will interact. It must be a valid integer.
+          The default chain ID for signing transactions for this application. It must be a valid integer.
       description:
         type: string
         x-required: optional

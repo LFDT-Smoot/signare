@@ -21,7 +21,8 @@ func (d DefaultRoleStorageInFile) ListRoles(_ context.Context, _ role.ListRolesI
 	roles := make([]role.Role, 0)
 	for _, r := range d.rolesInfo.Roles {
 		newRole := role.Role{
-			ID: r.ID,
+			ID:    r.ID,
+			Scope: role.Scope(r.Scope),
 		}
 		roles = append(roles, newRole)
 	}
@@ -70,6 +71,14 @@ func loadRoles(fileSystem fs.FS, basePath string) (*RolesInfo, error) {
 		err = yaml.Unmarshal(rolesBytes, &roles)
 		if err != nil {
 			return nil, errors.Internal().WithMessage("roles from file %s could not be unmarshalled", rolesFilePath)
+		}
+	}
+
+	for _, r := range roles.Roles {
+		switch role.Scope(r.Scope) {
+		case role.ScopeAdmin, role.ScopeApplication:
+		default:
+			return nil, errors.Internal().WithMessage("role '%s' has an unsupported scope '%s' in file %s", r.ID, r.Scope, path.Join(basePath, defaultRolesFileName))
 		}
 	}
 

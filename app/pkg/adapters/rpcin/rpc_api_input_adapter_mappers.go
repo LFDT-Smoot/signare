@@ -16,5 +16,11 @@ func adaptError(err error) *rpcerrors.RPCError {
 	if errors.IsPreconditionFailed(err) {
 		return rpcerrors.NewPreconditionFailedFromErr(err)
 	}
+	if errors.IsBadGateway(err) {
+		return rpcerrors.NewBadGatewayFromErr(err)
+	}
+	if errors.IsAlreadyExists(err) {
+		return rpcerrors.NewAlreadyExistsFromErr(err)
+	}
 	return rpcerrors.NewInternalFromErr(err)
 }

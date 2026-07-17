@@ -29,12 +29,16 @@ curl --location --request POST 'http://localhost:4545' \
             "gasPrice": "0x0",
             "value": "",
             "nonce": "0x1",
-            "data": "0x1f170873"
+            "data": "0x1f170873",
+            "chainId": "33433"
         }
     ],
     "id": 1
 }'
 ```
+
+!!! note
+    The `chainId` is not required, if a user sends a tx without `chainId` the default for the application will be used.
 
 !!! note 
     Remember that you need valid Ethereum transaction data in order for this request to work. 

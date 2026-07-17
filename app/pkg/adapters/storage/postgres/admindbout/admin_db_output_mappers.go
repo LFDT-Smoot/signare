@@ -33,7 +33,7 @@ func mapToCreateDB(admin admin.Admin) (*admindb.AdminCreateDB, error) {
 	db := admindb.AdminCreateDB{
 		AdminDB: admindb.AdminDB{
 			StandardID:         admin.StandardID,
-			InternalResourceID: admin.InternalResourceID.String(),
+			InternalResourceID: admin.String(),
 			Roles:              string(roles),
 			Description:        description,
 			CreationDate:       admin.CreationDate.ToInt64(),

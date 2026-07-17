@@ -10,9 +10,11 @@ type SlotCreationSpec struct {
 	// Identifier of the application that owns the slot.
 	ApplicationId *string `json:"applicationId"`
 	// Slot number assigned by the HSM.
-	Slot *string `json:"slot"`
+	Slot *string `json:"slot,omitempty"`
 	// PIN that provides access to the slot number inside the HSM.
-	Pin *string `json:"pin"`
+	Pin *string `json:"pin,omitempty"`
+	// collection of config
+	Config *[]SlotDetailConfig `json:"config,omitempty"`
 }
 
 // ValidateWith check whether SlotCreationSpec is valid
@@ -22,15 +24,23 @@ func (data SlotCreationSpec) ValidateWith() (*httpinfra.ValidationResult, *httpi
 		httpError.SetMessage("error validating field [applicationId]")
 		return nil, httpError
 	}
-	if data.Slot == nil {
-		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
-		httpError.SetMessage("error validating field [slot]")
-		return nil, httpError
+	if data.Slot != nil {
 	}
-	if data.Pin == nil {
-		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
-		httpError.SetMessage("error validating field [pin]")
-		return nil, httpError
+	if data.Pin != nil {
+	}
+	if data.Config != nil {
+		for _, item := range *data.Config {
+			item = item
+			itemValidated, err := item.ValidateWith()
+			if err != nil {
+				httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+				httpError.SetMessage("error validating field [Config]")
+				return nil, httpError
+			}
+			if !itemValidated.Valid {
+				return itemValidated, nil
+			}
+		}
 	}
 	return &httpinfra.ValidationResult{
 		Valid: true,

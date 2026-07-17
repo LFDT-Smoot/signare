@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres/admindbout"
+	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
 	"github.com/hyperledger-labs/signare/app/pkg/commons/validators"
 	"github.com/hyperledger-labs/signare/app/pkg/entities"
 	"github.com/hyperledger-labs/signare/app/pkg/graph"
@@ -91,7 +92,7 @@ func TestDefaultUseCase_CreateAdmin(t *testing.T) {
 			Description: &description,
 		}
 		createAdminOutput, createAdminErr := app.AdminUseCase.CreateAdmin(ctx, createAdminInput)
-		require.Nil(t, createAdminErr)
+		require.NoError(t, createAdminErr)
 		require.NotEmpty(t, createAdminOutput.InternalResourceID)
 		require.NotNil(t, createAdminOutput)
 	})
@@ -102,7 +103,7 @@ func TestDefaultUseCase_CreateAdmin(t *testing.T) {
 			Description: &description,
 		}
 		createAdminOutput, createAdminErr := app.AdminUseCase.CreateAdmin(ctx, createAdminInput)
-		require.NotNil(t, createAdminErr)
+		require.Error(t, createAdminErr)
 		require.True(t, errors.IsAlreadyExists(createAdminErr))
 		require.Nil(t, createAdminOutput)
 	})
@@ -119,7 +120,7 @@ func TestDefaultUseCase_ListAdmins(t *testing.T) {
 	for i := 0; i < adminsToCreate; i++ {
 		createAdminInput.ID = fmt.Sprintf("test-admin-%d", i)
 		createAdminOutput, createAdminErr := app.AdminUseCase.CreateAdmin(ctx, createAdminInput)
-		require.Nil(t, createAdminErr)
+		require.NoError(t, createAdminErr)
 		require.NotNil(t, createAdminOutput)
 	}
 
@@ -129,15 +130,16 @@ func TestDefaultUseCase_ListAdmins(t *testing.T) {
 			PageOffset: -30,
 		}
 		listAdminsOutput, listAdminsErr := app.AdminUseCase.ListAdmins(ctx, listAdminsInput)
-		require.NotNil(t, listAdminsErr)
+		require.Error(t, listAdminsErr)
 		require.Nil(t, listAdminsOutput)
 	})
 
-	t.Run("success: list all applications", func(t *testing.T) {
+	t.Run("success: unlimited list is capped at the default page size", func(t *testing.T) {
 		listAdminsInput := admin.ListAdminsInput{}
 		listAdminsOutput, listAdminsErr := app.AdminUseCase.ListAdmins(ctx, listAdminsInput)
 		require.NoError(t, listAdminsErr)
-		require.True(t, len(listAdminsOutput.Items) >= adminsToCreate)
+		require.Len(t, listAdminsOutput.Items, persistence.DefaultPageLimit)
+		require.True(t, listAdminsOutput.MoreItems)
 	})
 
 	t.Run("success: list DESC with limit", func(t *testing.T) {
@@ -170,7 +172,7 @@ func TestDefaultUseCase_ListAdmins(t *testing.T) {
 		require.True(t, listAdminsOutput.MoreItems)
 		// Assert order
 		for i := 1; i < len(listAdminsOutput.Items); i++ {
-			require.Less(t, listAdminsOutput.Items[i-1].LastUpdate.ToInt64(), listAdminsOutput.Items[i].LastUpdate.ToInt64())
+			require.LessOrEqual(t, listAdminsOutput.Items[i-1].CreationDate.ToInt64(), listAdminsOutput.Items[i].CreationDate.ToInt64())
 		}
 	})
 }
