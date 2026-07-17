@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	embedded "github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/role"
+	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/role"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"

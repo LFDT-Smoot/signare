@@ -1,6 +1,6 @@
 package referentialintegritydb
 
-import "github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+import "github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 
 // ReferentialIntegrityEntryDBFilter to filter lists of resources from the database
 type ReferentialIntegrityEntryDBFilter struct {

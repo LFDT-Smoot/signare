@@ -3,9 +3,9 @@ package pip
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/pdp"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/user"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/pdp"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
 )
 
 var _ pdp.UsersPolicyInformationPort = (*DefaultUsersPIPAdapter)(nil)

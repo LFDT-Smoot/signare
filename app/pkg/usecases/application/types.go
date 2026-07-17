@@ -1,8 +1,8 @@
 package application
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 
 	"github.com/google/uuid"
 )

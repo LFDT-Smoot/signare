@@ -12,13 +12,13 @@ import (
 
 	"github.com/jmoiron/sqlx/reflectx"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib" // register postgresql driver
 	"github.com/jmoiron/sqlx"
 
-	sqlfw "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
+	sqlfw "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
 )
 
 const (

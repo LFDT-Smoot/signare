@@ -1,6 +1,6 @@
 package referentialintegritydb
 
-import "github.com/hyperledger-labs/signare/app/pkg/entities"
+import "github.com/lfdt-smoot/signare/app/pkg/entities"
 
 const (
 	KindAccount     = "account"

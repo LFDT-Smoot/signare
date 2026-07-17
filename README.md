@@ -1,8 +1,8 @@
 <h1 align="center">Hyperledger Signare</h1>
 <p align="center"><i>An enterprise grade digital signing solution for DLT related applications and Ethereum clients.</i></p>
 <div align="center">
-<a href="https://github.com/hyperledger-labs/signare/pulls"><img src="https://img.shields.io/github/issues-pr/hyperledger-labs/signare" alt="Pull Requests Badge"/></a>
-<a href="https://github.com/hyperledger-labs/signare/issues"><img src="https://img.shields.io/github/issues/hyperledger-labs/signare" alt="Issues Badge"/></a>
+<a href="https://github.com/lfdt-smoot/signare/pulls"><img src="https://img.shields.io/github/issues-pr/lfdt-smoot/signare" alt="Pull Requests Badge"/></a>
+<a href="https://github.com/lfdt-smoot/signare/issues"><img src="https://img.shields.io/github/issues/lfdt-smoot/signare" alt="Issues Badge"/></a>
 <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License Badge"/></a>
 </div>
 
@@ -30,7 +30,7 @@ The purpose of Hyperledger Signare is to provide a FIPS 140-2 Level 2 compliant 
 - [Documentation](app/docs/mkdocs/docs/index.md): Discover the signare functionality and learn to configure it properly.
 - [Changelog](CHANGELOG.md): Take a look at the record of changes.
 - Feedback: Your help is key to develop the signare.
-    - Found a bug? Need help fixing a problem? You can submit your issues [here](https://github.com/hyperledger-labs/signare/issues).
+    - Found a bug? Need help fixing a problem? You can submit your issues [here](https://github.com/lfdt-smoot/signare/issues).
 
 ## :star: Features
 
@@ -50,7 +50,7 @@ To start working with the signare, follow these installation steps:
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/hyperledger-labs/signare.git
+   git clone https://github.com/lfdt-smoot/signare.git
    ```
 
 2. Navigate to the project's ``deployment`` directory:

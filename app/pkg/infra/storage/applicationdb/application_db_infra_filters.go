@@ -1,7 +1,7 @@
 package applicationdb
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 )
 
 // ApplicationDBFilter to filter lists of resources from the database

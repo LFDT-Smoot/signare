@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/rlp"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/rlp"
 )
 
 var loremIpsum = "Lorem ipsum dolor sit amet, consectetur adipisicing elit"

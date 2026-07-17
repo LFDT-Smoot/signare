@@ -3,8 +3,8 @@ package pip
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/admin"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/pdp"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/pdp"
 )
 
 var _ pdp.AdminsPolicyInformationPort = (*DefaultAdminsPIPAdapter)(nil)

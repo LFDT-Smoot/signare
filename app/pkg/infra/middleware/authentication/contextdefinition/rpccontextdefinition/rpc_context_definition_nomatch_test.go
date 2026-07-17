@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication/contextdefinition/rpccontextdefinition"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextdefinition/rpccontextdefinition"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
 
 	"github.com/stretchr/testify/require"
 )

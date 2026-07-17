@@ -57,4 +57,4 @@ ci.docker_build:
 .PHONY: tools.format
 tools.format:
 	@echo ">> Formatting"
-	@goimports -w -local "github.com/hyperledger-labs" .
+	@goimports -w -local "github.com/lfdt-smoot" .

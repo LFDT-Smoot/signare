@@ -1,4 +1,4 @@
-module github.com/hyperledger-labs/tools/rbac-validator
+module github.com/lfdt-smoot/tools/rbac-validator
 
 go 1.25.11
 

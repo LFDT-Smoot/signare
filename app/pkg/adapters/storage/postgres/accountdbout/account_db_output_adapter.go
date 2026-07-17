@@ -4,12 +4,12 @@ package accountdbout
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/storage/accountdb"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/user"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/postgres"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/accountdb"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
 )
 
 var _ user.AccountStorage = new(Repository)

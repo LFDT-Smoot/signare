@@ -7,7 +7,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 )
 
 const (

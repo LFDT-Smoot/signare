@@ -8,7 +8,7 @@ The target audience of this document are all the tyo of users in the signare.
 
 1. Scan through [specific scenarios](#specific-scenarios) to see if any of these applies to you. If any do follow the instructions in the subsection.
 2. Scan through [general scenarios](#general-scenarios) to find which scenario(s) applies to you. If any do, follow the instructions to update your instance or collect information for the issue report.
-3. If you cannot resolve the problem on your own, create an issue on the [project's repository](https://github.com/hyperledger-labs/signare/issues)
+3. If you cannot resolve the problem on your own, create an issue on the [project's repository](https://github.com/lfdt-smoot/signare/issues)
 
 
 !!! NOTE

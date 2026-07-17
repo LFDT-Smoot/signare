@@ -3,8 +3,8 @@ package rpcinfra_test
 import (
 	"testing"
 
-	embedded "github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
+	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"

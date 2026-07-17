@@ -3,8 +3,8 @@ package hsmmodule
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 // HSMModuleStorage defines the functionality to interact with the CreateHSMModuleOutput in storage.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/metricrecorder"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 )
 
 // HTTPMetrics is a set of metrics to monitor HTTP API behavior

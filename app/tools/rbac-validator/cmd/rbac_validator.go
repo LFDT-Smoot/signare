@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
-	"github.com/hyperledger-labs/tools/rbac-validator/cmd/types"
+	"github.com/lfdt-smoot/tools/rbac-validator/cmd/types"
 )
 
 const (

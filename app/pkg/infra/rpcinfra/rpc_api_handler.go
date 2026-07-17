@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra/rpcerrors"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
 )
 
 // JSONRPCAPIHandler handles the set of operations that are supported by the RPC protocol

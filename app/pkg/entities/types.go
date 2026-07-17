@@ -3,7 +3,7 @@ package entities
 import (
 	"strings"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
 
 	"github.com/google/uuid"
 )

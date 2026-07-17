@@ -3,7 +3,7 @@ package signaturemanager
 import (
 	"golang.org/x/crypto/sha3"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 )
 
 // uncompressedPublicKeyLength is the byte length of a 0x04-prefixed uncompressed secp256k1 public key.

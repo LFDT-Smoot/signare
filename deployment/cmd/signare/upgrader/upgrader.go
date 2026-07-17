@@ -6,13 +6,13 @@ import (
 	"embed"
 	"fmt"
 
-	embedded "github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence/dbmigrator"
-	_ "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql/init" // Used to register sql dialects
-	upgrade "github.com/hyperledger-labs/signare/app/pkg/graph/ugprade"
-	"github.com/hyperledger-labs/signare/deployment/cmd/signare/config"
-	"github.com/hyperledger-labs/signare/deployment/cmd/signare/flags"
+	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence/dbmigrator"
+	_ "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql/init" // Used to register sql dialects
+	upgrade "github.com/lfdt-smoot/signare/app/pkg/graph/ugprade"
+	"github.com/lfdt-smoot/signare/deployment/cmd/signare/config"
+	"github.com/lfdt-smoot/signare/deployment/cmd/signare/flags"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

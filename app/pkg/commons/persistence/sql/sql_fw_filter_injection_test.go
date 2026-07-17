@@ -6,11 +6,11 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	sqlfw "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	sqlfw "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
 
 	// Registers the sqlite dialect via its init function.
-	_ "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql/sqlite"
+	_ "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql/sqlite"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"

@@ -3,7 +3,7 @@ package validators
 import (
 	"github.com/asaskevich/govalidator"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 func setHexBytesValidator() {

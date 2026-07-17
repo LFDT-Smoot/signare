@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 )
 
 const (

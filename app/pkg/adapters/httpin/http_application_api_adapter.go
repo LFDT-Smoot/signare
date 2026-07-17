@@ -7,11 +7,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	generatedhttpinfra "github.com/hyperledger-labs/signare/app/pkg/infra/generated/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/user"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	generatedhttpinfra "github.com/lfdt-smoot/signare/app/pkg/infra/generated/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
 )
 
 var _ generatedhttpinfra.ApplicationAPIAdapter = new(DefaultApplicationAPIAdapter)

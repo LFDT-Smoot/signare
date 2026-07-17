@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/hyperledger-labs/signare/app/pkg/utils"
+	"github.com/lfdt-smoot/signare/app/pkg/utils"
 )
 
 func Test_DefaultIntValue(t *testing.T) {

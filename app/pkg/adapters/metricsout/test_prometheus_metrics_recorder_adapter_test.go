@@ -3,7 +3,7 @@ package metricsout_test
 import (
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/metricsout"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/metricsout"
 
 	"github.com/stretchr/testify/require"
 )

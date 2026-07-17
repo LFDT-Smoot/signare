@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	signererrors "github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	signererrors "github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 
 	"github.com/stretchr/testify/require"
 )

@@ -5,13 +5,13 @@ package graph
 import (
 	"github.com/google/wire"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/httpin"
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/rpcin"
-	generatedhttpinfra "github.com/hyperledger-labs/signare/app/pkg/infra/generated/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/httpin"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/rpcin"
+	generatedhttpinfra "github.com/lfdt-smoot/signare/app/pkg/infra/generated/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/metricshttpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/metricshttpinfra"
 )
 
 type httpAPIGraph struct {

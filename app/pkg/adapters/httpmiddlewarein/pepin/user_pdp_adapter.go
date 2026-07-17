@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization/pep"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/pdp"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authorization/pep"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/pdp"
 )
 
 var _ pep.UserPolicyDecisionPointPort = new(DefaultUserPolicyDecisionPointAdapter)

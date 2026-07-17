@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 )
 
 // Handle wraps the next handler with a deferred recover. A recovered panic is

@@ -8,9 +8,9 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication/contextdefinition"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextdefinition"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 )
 
 // DefineUser defines the user within the context of the request

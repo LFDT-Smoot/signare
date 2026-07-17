@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/pdp"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/pdp"
 
 	"github.com/stretchr/testify/require"
 )

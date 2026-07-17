@@ -1,6 +1,6 @@
 package hsmmodule
 
-import "github.com/hyperledger-labs/signare/app/pkg/entities"
+import "github.com/lfdt-smoot/signare/app/pkg/entities"
 
 // HSMModule defines the HSMModule resource.
 type HSMModule struct {

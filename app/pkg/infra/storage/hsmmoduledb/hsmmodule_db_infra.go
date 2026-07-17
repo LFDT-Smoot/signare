@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 
 	"github.com/google/uuid"
 )

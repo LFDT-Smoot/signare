@@ -1,6 +1,6 @@
 package hsmslotdb
 
-import "github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+import "github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 
 // HSMSlotDBFilter to filter lists of resources from the database
 type HSMSlotDBFilter struct {

@@ -3,11 +3,11 @@ package dbtesthelper
 import (
 	"context"
 
-	embedded "github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence/dbmigrator"
-	_ "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql/init" // Used to register sql dialects
-	"github.com/hyperledger-labs/signare/app/pkg/graph"
-	"github.com/hyperledger-labs/signare/app/test/signaturemanagertesthelper"
+	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence/dbmigrator"
+	_ "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql/init" // Used to register sql dialects
+	"github.com/lfdt-smoot/signare/app/pkg/graph"
+	"github.com/lfdt-smoot/signare/app/test/signaturemanagertesthelper"
 )
 
 func InitializeApp() (*graph.GraphShared, error) {

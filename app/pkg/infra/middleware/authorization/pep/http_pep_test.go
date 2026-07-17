@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization/pep"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
-	signererrors "github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authorization/pep"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
+	signererrors "github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 
 	"github.com/stretchr/testify/require"
 )

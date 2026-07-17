@@ -3,7 +3,7 @@ package rpcinfra
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra/rpcerrors"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
 )
 
 // JSONRPCAPIAdapter adapts the set of operations that are supported by the RPC protocol

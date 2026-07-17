@@ -3,8 +3,8 @@ package hsmmodule
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/transactionalmanager"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 )
 
 // CreateHSMModule implements DefaultUseCase's CreateHSMModule to be a transactional operation.

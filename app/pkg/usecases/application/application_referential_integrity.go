@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/referentialintegrity"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
 )
 
 func (u *DefaultUseCase) removeAllDependencies(ctx context.Context, applicationStandardID entities.StandardID) error {

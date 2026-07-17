@@ -3,7 +3,7 @@ package metricrecorder_test
 import (
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/metricrecorder"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
 
 	"github.com/stretchr/testify/require"
 )

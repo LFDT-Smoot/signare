@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 
 	"github.com/stretchr/testify/require"
 )

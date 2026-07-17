@@ -31,8 +31,8 @@ unit_test:
 	@echo "Creating artifacts dir"
 	mkdir -p ${ARTIFACTS_DIR}
 	@echo "Executing tests for application packages"
-	gotestsum --jsonfile ${ARTIFACTS_DIR}/unit_tests_results.json --format short-verbose --junitfile ${ARTIFACTS_DIR}/junit.xml -- -p 1 -tags=unit -timeout=5m -coverpkg=github.com/hyperledger-labs/signare/app/pkg/... -coverprofile=${ARTIFACTS_DIR}/signare.coverage.out github.com/hyperledger-labs/signare/app/pkg/...
-	$(call postProcess, signare, github.com/hyperledger-labs/signare/app, app)
+	gotestsum --jsonfile ${ARTIFACTS_DIR}/unit_tests_results.json --format short-verbose --junitfile ${ARTIFACTS_DIR}/junit.xml -- -p 1 -tags=unit -timeout=5m -coverpkg=github.com/lfdt-smoot/signare/app/pkg/... -coverprofile=${ARTIFACTS_DIR}/signare.coverage.out github.com/lfdt-smoot/signare/app/pkg/...
+	$(call postProcess, signare, github.com/lfdt-smoot/signare/app, app)
 
 .PHONY: integration_test
 integration_test:
@@ -103,4 +103,4 @@ tools.stop_docs:
 .PHONY: tools.format
 tools.format:
 	@echo ">> Formatting"
-	@goimports -w -local "github.com/hyperledger-labs" .
+	@goimports -w -local "github.com/lfdt-smoot" .

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	embedded "github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 
 	"github.com/stretchr/testify/require"
 )

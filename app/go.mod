@@ -1,4 +1,4 @@
-module github.com/hyperledger-labs/signare/app
+module github.com/lfdt-smoot/signare/app
 
 go 1.25.11
 

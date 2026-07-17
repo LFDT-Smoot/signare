@@ -3,7 +3,7 @@ package role
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 )
 
 // RoleUseCase the set of use cases for the Roles.

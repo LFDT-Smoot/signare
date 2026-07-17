@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/referentialintegrity"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
 )
 
 // stubReferentialIntegrity is a minimal ReferentialIntegrityUseCase used to drive the

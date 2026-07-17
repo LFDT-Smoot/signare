@@ -3,7 +3,7 @@ package persistence_test
 import (
 	"testing"
 
-	embedded "github.com/hyperledger-labs/signare/app"
+	embedded "github.com/lfdt-smoot/signare/app"
 
 	"github.com/stretchr/testify/require"
 )

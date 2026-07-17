@@ -19,8 +19,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	persistencesql "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	persistencesql "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
 )
 
 const driverName = "signarefakedb"

@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication/contextdefinition"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication/contextvalidation"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextdefinition"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextvalidation"
 )
 
 // CreateMiddlewareChain creates a new middleware chain for requests

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/infile/roleinfile"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/role"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/infile/roleinfile"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/role"
 
 	"github.com/stretchr/testify/require"
 )

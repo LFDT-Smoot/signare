@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- Rename the Go module path and all repository references from the archived Hyperledger Labs location to `github.com/lfdt-smoot` (#3).
+
 ## [1.4.1] - 2026-07-02
 
 ### Added

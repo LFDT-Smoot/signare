@@ -1,7 +1,7 @@
 package hsmmoduledb
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 )
 
 // HardwareSecurityModuleDBFilter to filter lists of resources from the database

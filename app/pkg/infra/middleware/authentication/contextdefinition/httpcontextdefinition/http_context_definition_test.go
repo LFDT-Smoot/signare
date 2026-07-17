@@ -5,9 +5,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication/contextdefinition/httpcontextdefinition"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextdefinition/httpcontextdefinition"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 
 	"github.com/stretchr/testify/require"
 )

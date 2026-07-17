@@ -1,6 +1,6 @@
 package postgres
 
-import "github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+import "github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 
 // NewEqualFilter creates a EqualFilter instance with the given options
 func NewEqualFilter(by string) persistence.EqualFilter {
