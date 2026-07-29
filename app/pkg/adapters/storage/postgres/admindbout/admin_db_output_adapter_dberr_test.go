@@ -6,11 +6,11 @@ import (
 	stderrors "errors"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres/admindbout"
-	persistencesql "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/storage/admindb"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/admin"
-	"github.com/hyperledger-labs/signare/app/test/fakedb"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/postgres/admindbout"
+	persistencesql "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/admindb"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
+	"github.com/lfdt-smoot/signare/app/test/fakedb"
 
 	"github.com/stretchr/testify/require"
 )

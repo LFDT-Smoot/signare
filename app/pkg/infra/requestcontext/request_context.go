@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 const (

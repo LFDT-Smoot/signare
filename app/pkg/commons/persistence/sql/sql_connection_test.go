@@ -3,8 +3,8 @@ package sql_test
 import (
 	"testing"
 
-	persistencesql "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
-	"github.com/hyperledger-labs/signare/app/test/fakedb"
+	persistencesql "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/test/fakedb"
 
 	"github.com/stretchr/testify/require"
 )

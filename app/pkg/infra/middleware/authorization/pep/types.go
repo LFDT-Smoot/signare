@@ -3,7 +3,7 @@ package pep
 import (
 	"encoding/json"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 )
 
 // AuthorizeUserInput attributes to authorize a user

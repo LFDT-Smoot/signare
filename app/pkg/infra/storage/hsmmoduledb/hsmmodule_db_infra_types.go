@@ -1,6 +1,6 @@
 package hsmmoduledb
 
-import "github.com/hyperledger-labs/signare/app/pkg/entities"
+import "github.com/lfdt-smoot/signare/app/pkg/entities"
 
 const (
 	SoftHSMModuleKind = "SoftHSM"

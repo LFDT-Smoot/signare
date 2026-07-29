@@ -8,13 +8,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres/referentialintegritydbout"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/validators"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/graph"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/referentialintegrity"
-	"github.com/hyperledger-labs/signare/app/test/dbtesthelper"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/postgres/referentialintegritydbout"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/validators"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/graph"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
+	"github.com/lfdt-smoot/signare/app/test/dbtesthelper"
 )
 
 var app graph.GraphShared

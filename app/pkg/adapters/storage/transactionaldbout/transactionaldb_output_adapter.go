@@ -4,9 +4,9 @@ package transactionaldbout
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/transactionalmanager"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 )
 
 var _ transactionalmanager.TransactionalStorage = new(TransactionalRepository)

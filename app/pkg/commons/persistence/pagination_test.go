@@ -3,7 +3,7 @@ package persistence_test
 import (
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 
 	"github.com/stretchr/testify/require"
 )

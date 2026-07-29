@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
 )
 
 // GenerateAccountRequestParams request definition

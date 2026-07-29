@@ -3,11 +3,11 @@ package hsmconnector
 import (
 	"math/big"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/rlp"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/rlp"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
 )
 
 // PKCS11Library path to the library to connect to a PKCS11 compatible HSM.

@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 )
 
 // AccountStorage defines the functionality to interact with Account in storage.

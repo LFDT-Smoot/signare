@@ -7,13 +7,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	generatedhttpinfra "github.com/hyperledger-labs/signare/app/pkg/infra/generated/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/admin"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/application"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmmodule"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	generatedhttpinfra "github.com/lfdt-smoot/signare/app/pkg/infra/generated/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmslot"
 )
 
 var _ generatedhttpinfra.AdminAPIAdapter = new(DefaultAdminAPIAdapter)

@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 )
 
 // MetricsBasePath base path url for the list of Metrics

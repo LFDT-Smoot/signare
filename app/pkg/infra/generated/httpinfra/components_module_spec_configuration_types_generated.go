@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 )
 
 type ModuleSpecConfigurationHsmKind string

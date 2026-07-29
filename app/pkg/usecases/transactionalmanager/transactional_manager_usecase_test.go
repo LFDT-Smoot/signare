@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/transactionalmanager"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 
 	"github.com/stretchr/testify/require"
 )

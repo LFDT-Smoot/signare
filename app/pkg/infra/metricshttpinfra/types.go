@@ -3,7 +3,7 @@ package metricshttpinfra
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
 )
 
 // PrometheusConfig Prometheus configuration for the metric recorder

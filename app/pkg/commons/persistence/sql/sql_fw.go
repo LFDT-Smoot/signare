@@ -10,7 +10,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 
 	"github.com/jmoiron/sqlx"
 )

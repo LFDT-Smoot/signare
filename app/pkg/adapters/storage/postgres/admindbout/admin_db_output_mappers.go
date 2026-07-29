@@ -3,12 +3,12 @@ package admindbout
 import (
 	"encoding/json"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/storage/admindb"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/admin"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/admindb"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
 )
 
 func mapToCreateDB(admin admin.Admin) (*admindb.AdminCreateDB, error) {

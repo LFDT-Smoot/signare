@@ -5,13 +5,13 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
-	"github.com/hyperledger-labs/signare/app/test/signaturemanagertesthelper"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
+	"github.com/lfdt-smoot/signare/app/test/signaturemanagertesthelper"
 
 	"github.com/stretchr/testify/require"
 )

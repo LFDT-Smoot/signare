@@ -1,7 +1,7 @@
 package admin
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 // Admin defines the administrator user in the application.

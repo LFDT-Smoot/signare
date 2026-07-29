@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/telemetry/tracer"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/telemetry/tracer"
 
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 	"go.opentelemetry.io/otel/propagation"

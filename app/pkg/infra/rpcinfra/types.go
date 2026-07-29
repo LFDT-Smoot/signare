@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra/rpcerrors"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
 
 	"github.com/gorilla/mux"
 )

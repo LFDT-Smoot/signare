@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 )
 
 var errExternal = fmt.Errorf("third party error")
@@ -933,7 +933,7 @@ func TestStackTrace(t *testing.T) {
 	expectedErrorMessage := "Error: INTERNAL (wrapped error: PRECONDITION_FAILED: records can not be empty (wrapped error: NOT_FOUND (wrapped error: third party error)))"
 	expectedFileAndLine := fmt.Sprintf("pkg/internal/errors/errors_test.go:%v", originalErrLine)
 	expectedOriginalErrorStackTrace := `Original Error Stack Trace:
-	at github.com/hyperledger-labs/signare/app/pkg/internal/errors_test.errorParentFunc`
+	at github.com/lfdt-smoot/signare/app/pkg/internal/errors_test.errorParentFunc`
 
 	stackTrace := wrappedErr.GetStack()
 	require.Contains(t, stackTrace, expectedErrorMessage)

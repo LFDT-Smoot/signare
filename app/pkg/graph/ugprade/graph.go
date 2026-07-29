@@ -4,7 +4,7 @@ package upgrade
 import (
 	"github.com/asaskevich/govalidator"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
 )
 
 type UpgradeGraph struct {

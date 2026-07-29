@@ -3,8 +3,8 @@ package hsmslot
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/transactionalmanager"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 )
 
 // CreateHSMSlot implements DefaultUseCase's CreateHSMSlot to be a transactional operation.

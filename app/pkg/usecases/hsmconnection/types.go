@@ -1,10 +1,10 @@
 package hsmconnection
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmslot"
 )
 
 // ByApplicationInput input to get an HSMConnector given an application.

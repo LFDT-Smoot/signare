@@ -3,7 +3,7 @@
 package httpinfra
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 )
 
 // ResourceMetaUpdate - Meta information of the resource

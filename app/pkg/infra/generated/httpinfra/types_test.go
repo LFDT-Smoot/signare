@@ -7,8 +7,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 )
 
 func init() {

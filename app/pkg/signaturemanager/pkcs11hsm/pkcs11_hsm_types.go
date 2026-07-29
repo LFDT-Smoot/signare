@@ -1,7 +1,7 @@
 package pkcs11hsm
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 
 	"github.com/miekg/pkcs11"
 )

@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	generatedHTTPInfra "github.com/hyperledger-labs/signare/app/pkg/infra/generated/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
+	generatedHTTPInfra "github.com/lfdt-smoot/signare/app/pkg/infra/generated/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 )
 
 // Test_PublishApplicationAccountsCreate_Success test the PublishApplicationAccountsCreate happy path

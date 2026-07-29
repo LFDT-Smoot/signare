@@ -4,11 +4,11 @@ import (
 	"context"
 	"os"
 
-	signererrors "github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager/akv"
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager/localkeyvault"
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager/pkcs11hsm"
+	signererrors "github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/akv"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/localkeyvault"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/pkcs11hsm"
 
 	"github.com/miekg/pkcs11"
 )

@@ -3,7 +3,7 @@ package time_test
 import (
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
 
 	"github.com/stretchr/testify/require"
 )

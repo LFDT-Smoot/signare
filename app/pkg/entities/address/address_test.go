@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 )
 
 var (

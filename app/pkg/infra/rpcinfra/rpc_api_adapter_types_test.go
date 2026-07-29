@@ -5,9 +5,9 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra/rpcerrors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
 
 	"github.com/stretchr/testify/require"
 )

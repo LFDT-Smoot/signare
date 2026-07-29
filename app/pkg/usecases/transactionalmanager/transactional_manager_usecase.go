@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 )
 
 // FuncToExecuteAfterCommitType callback function to execute after a database transaction commit

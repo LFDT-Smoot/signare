@@ -6,14 +6,14 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra/rpcerrors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnection"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/user"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnection"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmslot"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
 )
 
 var _ rpcinfra.JSONRPCAPIAdapter = new(DefaultAPIAdapter)

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/metricrecorder"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )

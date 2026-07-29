@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 func TestNewInt256FromString(t *testing.T) {

@@ -3,12 +3,12 @@ package hsmconnection
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/application"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmmodule"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmslot"
 
 	"github.com/asaskevich/govalidator"
 )

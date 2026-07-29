@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	signertime "github.com/hyperledger-labs/signare/app/pkg/commons/time"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	signertime "github.com/lfdt-smoot/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 // Logger defines the functionality to log with different levels in the application.

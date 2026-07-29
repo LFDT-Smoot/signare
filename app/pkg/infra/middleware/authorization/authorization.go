@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization/pep"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authorization/pep"
 )
 
 // CreateMiddlewareChain creates a new middleware chain for requests

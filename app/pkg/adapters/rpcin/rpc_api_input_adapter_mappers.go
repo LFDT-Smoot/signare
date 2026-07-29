@@ -2,8 +2,8 @@
 package rpcin
 
 import (
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra/rpcerrors"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 )
 
 func adaptError(err error) *rpcerrors.RPCError {

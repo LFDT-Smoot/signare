@@ -5,21 +5,21 @@ package graph
 import (
 	"github.com/google/wire"
 
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/referentialintegrity"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/transactionalmanager"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 
-	embedded "github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/infile/roleinfile"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/metricrecorder"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/admin"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/application"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/role"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnection"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmmodule"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/user"
+	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/infile/roleinfile"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/role"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnection"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmslot"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
 )
 
 type useCasesGraph struct {

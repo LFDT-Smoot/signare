@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/crypto/sha3"
 
-	signererrors "github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	signererrors "github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 )
 
 const (

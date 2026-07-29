@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra/rpcerrors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/eip712"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnection"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmconnector"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnection"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 
 	"github.com/stretchr/testify/require"
 )

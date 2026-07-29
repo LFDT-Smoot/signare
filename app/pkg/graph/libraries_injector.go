@@ -10,14 +10,14 @@ import (
 
 	"github.com/google/wire"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 
-	embedded "github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
+	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
 )
 
 type librariesGraph struct {

@@ -4,12 +4,12 @@ package hsmslotdbout
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/storage/hsmslotdb"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/hsmslot"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/postgres"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/hsmslotdb"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmslot"
 )
 
 var _ hsmslot.HSMSlotStorage = new(Repository)

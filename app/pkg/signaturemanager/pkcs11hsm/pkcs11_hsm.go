@@ -15,11 +15,11 @@ import (
 	curves "github.com/btcsuite/btcd/btcec/v2"
 	"github.com/miekg/pkcs11"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	signererrors "github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	signererrors "github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 )
 
 const (

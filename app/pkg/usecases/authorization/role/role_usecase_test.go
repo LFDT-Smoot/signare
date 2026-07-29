@@ -7,11 +7,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/infile/roleinfile"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/validators"
-	"github.com/hyperledger-labs/signare/app/pkg/graph"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/authorization/role"
-	"github.com/hyperledger-labs/signare/app/test/dbtesthelper"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/infile/roleinfile"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/validators"
+	"github.com/lfdt-smoot/signare/app/pkg/graph"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/role"
+	"github.com/lfdt-smoot/signare/app/test/dbtesthelper"
 )
 
 var app graph.GraphShared

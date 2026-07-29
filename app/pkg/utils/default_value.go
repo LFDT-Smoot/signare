@@ -4,7 +4,7 @@ package utils
 import (
 	"strings"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 // DefaultIntValue returns a default integer value if the real value equals zero

@@ -12,10 +12,10 @@ import (
 	"strings"
 
 	"github.com/google/wire"
-	"github.com/hyperledger-labs/signare/app"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
 )
 
 // Injectors from libraries_injector.go:

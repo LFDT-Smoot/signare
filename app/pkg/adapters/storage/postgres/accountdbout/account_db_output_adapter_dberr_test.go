@@ -6,12 +6,12 @@ import (
 	stderrors "errors"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/storage/postgres/accountdbout"
-	persistencesql "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/storage/accountdb"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/user"
-	"github.com/hyperledger-labs/signare/app/test/fakedb"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/postgres/accountdbout"
+	persistencesql "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/accountdb"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
+	"github.com/lfdt-smoot/signare/app/test/fakedb"
 
 	"github.com/stretchr/testify/require"
 )

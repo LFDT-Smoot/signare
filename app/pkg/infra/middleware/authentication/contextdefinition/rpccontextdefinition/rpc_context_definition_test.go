@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/adapters/metricsout"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/metricrecorder"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication/contextdefinition/rpccontextdefinition"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/metricsout"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextdefinition/rpccontextdefinition"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/require"

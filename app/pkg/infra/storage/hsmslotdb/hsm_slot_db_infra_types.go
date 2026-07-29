@@ -1,6 +1,6 @@
 package hsmslotdb
 
-import "github.com/hyperledger-labs/signare/app/pkg/entities"
+import "github.com/lfdt-smoot/signare/app/pkg/entities"
 
 // HSMSlotDB is the data struct of the resource in the database
 type HSMSlotDB struct {

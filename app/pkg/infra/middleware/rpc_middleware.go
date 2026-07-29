@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/entrypoint/rpcbatchrequestsupport"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/recovery"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/telemetry"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authorization"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/entrypoint/rpcbatchrequestsupport"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/recovery"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/telemetry"
 )
 
 // Create the middlewares chains for the RPC protocol

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence"
-	sqlfw "github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
+	sqlfw "github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/jmoiron/sqlx/reflectx"

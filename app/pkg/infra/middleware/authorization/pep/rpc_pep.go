@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/logger"
-	"github.com/hyperledger-labs/signare/app/pkg/entities/address"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/utils"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/utils"
 )
 
 // accountSigningMethods maps each account-signing RPC method to whether the account it signs with is

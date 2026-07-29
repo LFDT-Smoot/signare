@@ -3,7 +3,7 @@ package pdp
 import (
 	"context"
 
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 )
 
 // AdminsPolicyInformationPort is a port to adapt requests related to the Admin resource.

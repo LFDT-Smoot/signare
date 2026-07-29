@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 
 	curves "github.com/btcsuite/btcd/btcec/v2"
 	"github.com/stretchr/testify/require"

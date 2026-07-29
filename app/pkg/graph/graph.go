@@ -5,18 +5,18 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hyperledger-labs/signare/app/pkg/commons/metricrecorder"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/persistence/sql"
-	"github.com/hyperledger-labs/signare/app/pkg/commons/validators"
-	"github.com/hyperledger-labs/signare/app/pkg/entities"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/rpcinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/internal/errors"
-	"github.com/hyperledger-labs/signare/app/pkg/usecases/admin"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence/sql"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/validators"
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
 
 	"github.com/asaskevich/govalidator"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authentication/contextdefinition"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextdefinition"
 )
 
 type GraphShared struct {

@@ -4,8 +4,8 @@ site_description: >-
   Signare documentation
 
 # Repository
-repo_name: hyperledger-labs/signare
-repo_url: https://github.com/hyperledger-labs/signare
+repo_name: lfdt-smoot/signare
+repo_url: https://github.com/lfdt-smoot/signare
 
 # Fail the build on any docs warning instead of emitting it and continuing. In
 # particular, the Changelog page is generated and gitignored (see
@@ -100,7 +100,7 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github-alt
-      link: https://github.com/hyperledger-labs/signare
+      link: https://github.com/lfdt-smoot/signare
     - icon: fontawesome/brands/docker
       link: https://hub.docker.com # TODO change this to the hosted signare image url
 

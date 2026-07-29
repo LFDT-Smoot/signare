@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hyperledger-labs/signare/app/pkg/infra/httpinfra"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/middleware/authorization/pep"
-	"github.com/hyperledger-labs/signare/app/pkg/infra/requestcontext"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authorization/pep"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 
 	"github.com/stretchr/testify/require"
 )

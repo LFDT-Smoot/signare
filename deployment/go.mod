@@ -1,4 +1,4 @@
-module github.com/hyperledger-labs/signare/deployment
+module github.com/lfdt-smoot/signare/deployment
 
 go 1.25.11
 
@@ -6,7 +6,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
-	github.com/hyperledger-labs/signare/app v0.0.0
+	github.com/lfdt-smoot/signare/app v0.0.0
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.18.2
@@ -73,4 +73,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/hyperledger-labs/signare/app v0.0.0 => ../app
+replace github.com/lfdt-smoot/signare/app v0.0.0 => ../app
