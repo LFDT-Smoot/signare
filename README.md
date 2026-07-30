@@ -1,4 +1,4 @@
-<h1 align="center">Hyperledger Signare</h1>
+<h1 align="center">Signare</h1>
 <p align="center"><i>An enterprise grade digital signing solution for DLT related applications and Ethereum clients.</i></p>
 <div align="center">
 <a href="https://github.com/lfdt-smoot/signare/pulls"><img src="https://img.shields.io/github/issues-pr/lfdt-smoot/signare" alt="Pull Requests Badge"/></a>
@@ -6,7 +6,7 @@
 <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License Badge"/></a>
 </div>
 
-Signare, a Hyperledger Lab, is an enterprise grade digital signing solution for DLT related applications and Ethereum clients. The application provides a REST API server to manage resource configuration and an ETH-JSON-RPC 2.0 server that provides functionality for generating, removing, listing and signing Ethereum transactions.
+Signare, part of the LFDT Smoot lab, is an enterprise grade digital signing solution for DLT related applications and Ethereum clients. The application provides a REST API server to manage resource configuration and an ETH-JSON-RPC 2.0 server that provides functionality for generating, removing, listing and signing Ethereum transactions.
 
 ## 🗒 Contents
 - [Scope of Lab](#scope-of-lab)
@@ -23,7 +23,7 @@ Signare, a Hyperledger Lab, is an enterprise grade digital signing solution for 
 
 A security concern shared by most users of DLT applications is "keeping their private key private". In the enterprise space FIPS 140 is often used to inform institutions of how they must manage their private keys. Specifically, FIPS 140-2 Level 2 adds requirements for physical tamper-evidence (and/or tamper-resistance) and role-based authentication, which necessitates the use of an HSM or Cloud HSM.
 
-The purpose of Hyperledger Signare is to provide a FIPS 140-2 Level 2 compliant signing solution for enterprise applications where various HSM and Cloud HSM vendors will be supported via plugins. Hyperledger Signare also provides role-based access controlled interfaces to solve multiple usecases, such as signing Ethereum transactions and for blockchain clients such as Hyperledger Besu to store keys in an HSM or Cloud HSM.
+The purpose of Signare is to provide a FIPS 140-2 Level 2 compliant signing solution for enterprise applications where various HSM and Cloud HSM vendors will be supported via plugins. Signare also provides role-based access controlled interfaces to solve multiple usecases, such as signing Ethereum transactions and for blockchain clients such as Besu to store keys in an HSM or Cloud HSM.
 
 ## :globe_with_meridians: Useful Links
 
