@@ -1,0 +1,124 @@
+# Dependabot configuration
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Each ecosystem groups ALL of its updates into a single PR per run. Both regular
+# version updates and security fixes are grouped, so Dependabot opens at most one
+# PR per ecosystem (security updates are otherwise opened individually and
+# ungrouped by default, which is how a backlog of advisories turns into a wall of
+# single-dependency PRs). Every grouped PR lands on its own Dependabot branch.
+#
+# Every ecosystem also sets a 30-day `cooldown`: a newly published version is not
+# proposed until it has been on the registry for 30 days, which is the window in
+# which a compromised or typosquatted release is usually yanked. `cooldown`
+# applies to version updates ONLY, so security updates driven by a published
+# advisory are never delayed by it. A dependency still inside its cooldown is
+# simply left out of that run's group PR and picked up once it becomes eligible.
+#
+# `directories` (unlike `directory`) supports globbing, so `**/*` covers every
+# manifest without enumerating them. At the time of writing that resolves to
+# /app, /deployment and /app/tools/rbac-validator for gomod, to /app and
+# /app/docs for docker, and to the codegen plugin for maven.
+#
+# PRs are opened against develop rather than main, since main is the protected
+# release branch. Note that Dependabot always reads THIS file from the default
+# branch; `target-branch` only redirects where the PRs are opened.
+
+version: 2
+
+updates:
+  # ---- Go modules ----
+  - package-ecosystem: gomod
+    directories:
+      - "**/*"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+      semver-major-days: 30
+      semver-minor-days: 30
+      semver-patch-days: 30
+    groups:
+      gomod:
+        applies-to: version-updates
+        patterns: ["*"]
+      gomod-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ---- Maven (OpenAPI generator plugin) ----
+  - package-ecosystem: maven
+    directories:
+      - "**/*"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+    ignore:
+      # openapi-generator is pinned in pom.xml and integrity-checked against a
+      # version-named .sha256; bumping it also regenerates committed Go
+      # (see http-infra-openapi-generator/README.md), so it must be a manual,
+      # reviewed change rather than an automated PR.
+      - dependency-name: "org.openapitools:openapi-generator"
+    groups:
+      maven:
+        applies-to: version-updates
+        patterns: ["*"]
+      maven-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ---- Docker base images ----
+  # The golang build base in app/Dockerfile is pinned by digest and must stay in
+  # lockstep with the `go` directive in the go.mod files, so a bump here needs a
+  # matching go.mod change in the same review.
+  - package-ecosystem: docker
+    directories:
+      - "**/*"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+    groups:
+      docker:
+        applies-to: version-updates
+        patterns: ["*"]
+      docker-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ---- GitHub Actions ----
+  # No-op until workflows are added under .github/workflows; kept here so action
+  # pins are covered automatically once CI lands.
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns: ["*"]
+      github-actions-security:
+        applies-to: security-updates
+        patterns: ["*"]

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
+- Add a Dependabot configuration covering the Go modules, the OpenAPI generator Maven plugin, the Docker base images, and GitHub Actions. Each ecosystem groups both its version updates and its security updates, so a backlog of advisories arrives as one pull request per ecosystem instead of one per vulnerable dependency, which is how Dependabot behaves by default. Every ecosystem is capped at a single open pull request and applies a 30-day cooldown before proposing a newly published version, long enough for a compromised or typosquatted release to be yanked; the cooldown never delays a security update. `openapi-generator` is excluded because it is integrity-checked against a committed checksum and regenerating its output must stay a reviewed manual step.
 
 ## [1.4.2] - 2026-07-30
 
