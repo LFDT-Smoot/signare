@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
 
+### Changed
+- Adapt `rbac-validator` to the `kin-openapi` API change that made `openapi3.T.Paths` a struct rather than a map, by iterating `spec.Paths.Map()`. The validator reads the same set of operation IDs from the bundled API spec as before.
+
+### Security
+- Clear all open Dependabot alerts across the three Go modules. `golang.org/x/crypto` moves to `v0.52.0` in `/app` and `/deployment`, and `github.com/getkin/kin-openapi` moves to `v0.144.0` in the `rbac-validator` tool. Neither vulnerable code path was reachable: only `x/crypto/sha3` and `x/crypto/pkcs12` are linked in (every advisory is in `x/crypto/ssh`), and the tool imports only `openapi3` (every advisory is in `openapi3filter`).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed
