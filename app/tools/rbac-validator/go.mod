@@ -1,6 +1,6 @@
 module github.com/lfdt-smoot/tools/rbac-validator
 
-go 1.25.11
+go 1.25.14
 
 require (
 	github.com/getkin/kin-openapi v0.144.0
