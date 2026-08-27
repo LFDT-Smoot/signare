@@ -1,6 +1,8 @@
 package hsmslot
 
 import (
+	"log/slog"
+
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 )
@@ -22,10 +24,44 @@ type HSMSlot struct {
 	Config SlotConfig `valid:"required"`
 }
 
+// LogValue implements slog.LogValuer so that logging an HSMSlot emits only its identifying fields.
+//
+// Pin is the code that unlocks the signing keys, and Config may hold Local Key Vault private key
+// material, so neither is emitted. This is a guard on the type rather than a fix at one call site: a
+// tracer property or a wrapped error anywhere can otherwise put the whole struct in front of a
+// handler, and the JSON handler would marshal every field.
+//
+// It protects the value and pointer forms, which is what log call sites use. It does NOT extend to an
+// HSMSlot reached inside a slice, map or enclosing struct: slog resolves LogValuer on the attribute
+// value itself, not on values nested inside it, so a handler marshals the raw struct in those cases.
+// TestHSMSlot_LogValueDoesNotExtendIntoContainers pins that boundary. Log a slot directly, and give
+// any type that carries one its own LogValue, as HSMConnection does.
+func (s HSMSlot) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("id", s.ID),
+		slog.String("applicationId", s.ApplicationID),
+		slog.String("hsmModuleId", s.HSMModuleID),
+		slog.String("slot", s.Slot),
+	)
+}
+
 // SlotConfig defines the configuration for a particular slot.
 type SlotConfig struct {
 	AKV           []AKVConfig          `valid:"optional"`
 	LocalKeyVault *LocalKeyVaultConfig `valid:"optional"`
+}
+
+// LogValue implements slog.LogValuer so slot configuration cannot leak key material into a log
+// record. Only the shape is reported, never the Local Key Vault key store.
+func (c SlotConfig) LogValue() slog.Value {
+	localKeys := 0
+	if c.LocalKeyVault != nil {
+		localKeys = len(c.LocalKeyVault.KeyStore)
+	}
+	return slog.GroupValue(
+		slog.Int("akvEntries", len(c.AKV)),
+		slog.Int("localKeyVaultEntries", localKeys),
+	)
 }
 
 // AKVConfig defines possible configurations for Azure Key Vault.

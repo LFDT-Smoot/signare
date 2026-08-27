@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
 
+### Security
+- Redact the HSM slot PIN and Local Key Vault key material from log records via `slog.LogValuer`, and stop the remove-account path handing the whole slot entity to the tracer, which wrote the credential that unlocks the signing keys to the log at debug level (#17).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed
