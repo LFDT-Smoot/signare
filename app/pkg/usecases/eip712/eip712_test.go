@@ -3,6 +3,7 @@ package eip712_test
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -414,4 +415,308 @@ func TestEIP712EncodeInteger_Precision(t *testing.T) {
 		_, err := eip712.Types{}.EncodeField("uint256", json.Number("1.5"))
 		require.Error(t, err)
 	})
+}
+
+// domainOnlyTypes is a minimal valid EIP712Domain definition, used by the unbounded-recursion tests
+// so each case declares only the types under test.
+func domainOnlyTypes() eip712.Types {
+	return eip712.Types{
+		"EIP712Domain": []eip712.Type{{Name: "name", Type: "string"}},
+	}
+}
+
+func hashTypedDataFor(types eip712.Types, primaryType string, message eip712.EIP712Message) (eip712.TypedData, error) {
+	data := eip712.TypedData{
+		Types:       types,
+		PrimaryType: primaryType,
+		Domain:      eip712.EIP712Domain{Name: "test"},
+		Message:     message,
+	}
+	return data, data.Validate()
+}
+
+// A type that refers to itself has no finite encoding. Before the fix, Validate passed it and
+// HashTypedData recursed until the goroutine stack overflowed, which is a Go fatal error that
+// recover cannot intercept, so it took the whole process down.
+func TestTypedDataValidate_RejectsSelfReferencingType(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Loop"] = []eip712.Type{{Name: "self", Type: "Loop"}}
+
+	_, err := hashTypedDataFor(types, "Loop", eip712.EIP712Message{})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cyclic definition")
+	require.Contains(t, err.Error(), "Loop")
+}
+
+func TestTypedDataValidate_RejectsIndirectCycle(t *testing.T) {
+	types := domainOnlyTypes()
+	types["A"] = []eip712.Type{{Name: "b", Type: "B"}}
+	types["B"] = []eip712.Type{{Name: "c", Type: "C"}}
+	types["C"] = []eip712.Type{{Name: "a", Type: "A"}}
+
+	_, err := hashTypedDataFor(types, "A", eip712.EIP712Message{})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cyclic definition")
+}
+
+// Array notation must not hide a cycle: Node.children is Node[], so the base type still refers back.
+func TestTypedDataValidate_RejectsCycleThroughArrayType(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Node"] = []eip712.Type{{Name: "children", Type: "Node[]"}}
+
+	_, err := hashTypedDataFor(types, "Node", eip712.EIP712Message{})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cyclic definition")
+}
+
+// A cycle reachable only through the domain type is rejected too, since the domain separator is
+// encoded on every digest.
+func TestTypedDataValidate_RejectsCycleReachableFromDomain(t *testing.T) {
+	types := eip712.Types{
+		"EIP712Domain": []eip712.Type{{Name: "meta", Type: "Meta"}},
+		"Meta":         []eip712.Type{{Name: "self", Type: "Meta"}},
+		"Msg":          []eip712.Type{{Name: "text", Type: "string"}},
+	}
+
+	_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cyclic definition")
+}
+
+// A cyclic type that neither the domain nor the primary type can reach is never encoded, so it is
+// left alone rather than failing a payload that would hash correctly.
+func TestTypedDataValidate_AllowsUnreachableCycle(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
+	types["Orphan"] = []eip712.Type{{Name: "self", Type: "Orphan"}}
+
+	data, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+	require.NoError(t, err)
+
+	_, _, hashErr := eip712.HashTypedData(data)
+	require.NoError(t, hashErr)
+}
+
+// A diamond is not a cycle: Top reaches Leaf by two distinct paths and must still encode.
+func TestTypedDataValidate_AllowsDiamondDependency(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Top"] = []eip712.Type{{Name: "left", Type: "Mid1"}, {Name: "right", Type: "Mid2"}}
+	types["Mid1"] = []eip712.Type{{Name: "leaf", Type: "Leaf"}}
+	types["Mid2"] = []eip712.Type{{Name: "leaf", Type: "Leaf"}}
+	types["Leaf"] = []eip712.Type{{Name: "text", Type: "string"}}
+
+	message := eip712.EIP712Message{
+		"left":  map[string]interface{}{"leaf": map[string]interface{}{"text": "l"}},
+		"right": map[string]interface{}{"leaf": map[string]interface{}{"text": "r"}},
+	}
+	data, err := hashTypedDataFor(types, "Top", message)
+	require.NoError(t, err)
+
+	_, _, hashErr := eip712.HashTypedData(data)
+	require.NoError(t, hashErr)
+}
+
+// The headline vector the cycle check does not catch: an acyclic, shallow type graph whose encoding
+// still expands exponentially. Eleven types with a fanout of eight is roughly 8^10 struct encodings
+// from about 2.4 KB of type definitions. Only the total-work budget stops this.
+func TestHashTypedData_RejectsExponentialTypeExpansion(t *testing.T) {
+	const levels = 10
+	const fanout = 8
+
+	types := domainOnlyTypes()
+	for level := 0; level < levels; level++ {
+		fields := make([]eip712.Type, fanout)
+		for field := 0; field < fanout; field++ {
+			fields[field] = eip712.Type{
+				Name: fmt.Sprintf("f%d", field),
+				Type: fmt.Sprintf("T%d", level+1),
+			}
+		}
+		types[fmt.Sprintf("T%d", level)] = fields
+	}
+	// A zero-field struct is a legal type and, unlike every scalar, encodes successfully from a nil
+	// value. That is what lets all 8^10 branches bottom out instead of erroring at the first leaf.
+	types[fmt.Sprintf("T%d", levels)] = []eip712.Type{}
+
+	data, err := hashTypedDataFor(types, "T0", eip712.EIP712Message{})
+	require.NoError(t, err, "an acyclic graph must pass validation; the budget is what stops it")
+
+	_, _, hashErr := eip712.HashTypedData(data)
+	require.Error(t, hashErr)
+	require.Contains(t, hashErr.Error(), "struct encodings")
+}
+
+// The depth cap backstops nesting that comes from the message rather than the type graph, which the
+// cycle check cannot see.
+func TestHashTypedData_RejectsExcessiveArrayNesting(t *testing.T) {
+	const depth = 40
+
+	arrayType := "string"
+	for i := 0; i < depth; i++ {
+		arrayType += "[]"
+	}
+	types := domainOnlyTypes()
+	types["Msg"] = []eip712.Type{{Name: "deep", Type: arrayType}}
+
+	var value interface{} = "leaf"
+	for i := 0; i < depth; i++ {
+		value = []interface{}{value}
+	}
+
+	data, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"deep": value})
+	require.NoError(t, err)
+
+	_, _, hashErr := eip712.HashTypedData(data)
+	require.Error(t, hashErr)
+	require.Contains(t, hashErr.Error(), "maximum depth")
+}
+
+// A type string ending in a closing bracket with no opening one is not array notation. Before the
+// fix it reached fieldType[:strings.LastIndex(fieldType, "[")] with an index of -1 and panicked.
+func TestEncodeField_MalformedArrayTypeReturnsError(t *testing.T) {
+	for _, fieldType := range []string{"]", "foo]", "uint256]"} {
+		t.Run(fieldType, func(t *testing.T) {
+			types := domainOnlyTypes()
+			types["Msg"] = []eip712.Type{{Name: "x", Type: fieldType}}
+
+			data, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"x": "anything"})
+			require.NoError(t, err)
+
+			require.NotPanics(t, func() {
+				_, _, hashErr := eip712.HashTypedData(data)
+				require.Error(t, hashErr)
+				require.Contains(t, hashErr.Error(), "unsupported type")
+			})
+		})
+	}
+}
+
+// fanoutChain adds a chain of types named prefix0..prefixN where each level has `fanout` fields of
+// the next, and the last level is a zero-field struct. Encoding prefix0 from a nil value costs
+// (fanout^(levels+1) - 1) / (fanout - 1) struct encodings, so it is a way to spend a chosen,
+// calculable amount of the budget.
+func fanoutChain(types eip712.Types, prefix string, levels, fanout int) string {
+	for level := 0; level < levels; level++ {
+		fields := make([]eip712.Type, fanout)
+		for field := 0; field < fanout; field++ {
+			fields[field] = eip712.Type{
+				Name: fmt.Sprintf("f%d", field),
+				Type: fmt.Sprintf("%s%d", prefix, level+1),
+			}
+		}
+		types[fmt.Sprintf("%s%d", prefix, level)] = fields
+	}
+	types[fmt.Sprintf("%s%d", prefix, levels)] = []eip712.Type{}
+	return prefix + "0"
+}
+
+// The budget spans a whole digest rather than resetting per struct, so it cannot be doubled by
+// splitting the work across the domain separator and the message.
+//
+// This is built so each half alone stays under the budget while the two together exceed it: the
+// domain and the message each carry an identical expansion. If the state were created per hashStruct
+// rather than per HashTypedData, both halves would fit and no error would be raised.
+func TestHashTypedData_BudgetIsSharedAcrossDomainAndMessage(t *testing.T) {
+	// (9^6-1)/8 = 66430 struct encodings per half: under maxStructEncodings alone, over it combined.
+	const levels, fanout = 5, 9
+
+	// One half on its own must succeed, otherwise the combined case proves nothing.
+	t.Run("one half alone is under the budget", func(t *testing.T) {
+		types := eip712.Types{"EIP712Domain": []eip712.Type{{Name: "name", Type: "string"}}}
+		primary := fanoutChain(types, "M", levels, fanout)
+
+		data, err := hashTypedDataFor(types, primary, eip712.EIP712Message{})
+		require.NoError(t, err)
+
+		_, _, hashErr := eip712.HashTypedData(data)
+		require.NoError(t, hashErr, "one half must fit within the budget on its own")
+	})
+
+	t.Run("both halves together exceed it", func(t *testing.T) {
+		types := eip712.Types{}
+		domainHeavy := fanoutChain(types, "D", levels, fanout)
+		primary := fanoutChain(types, "M", levels, fanout)
+		// The domain separator hashes EIP712Domain, and toFieldMap never supplies this field, so it
+		// expands from a nil value exactly like the message half does.
+		types["EIP712Domain"] = []eip712.Type{{Name: "heavy", Type: domainHeavy}}
+
+		data, err := hashTypedDataFor(types, primary, eip712.EIP712Message{})
+		require.NoError(t, err)
+
+		_, _, hashErr := eip712.HashTypedData(data)
+		require.Error(t, hashErr, "a shared budget must reject what two independent budgets would allow")
+		require.Contains(t, hashErr.Error(), "struct encodings")
+	})
+}
+
+// The depth cap has to reject the explosive case without rejecting legitimate nesting, so pin both
+// sides of the boundary. Without these, a future > / >= slip at the edge would go unnoticed.
+func TestHashTypedData_DepthBoundary(t *testing.T) {
+	// nestedChain builds primary -> L1 -> ... -> L(depth-1) -> string, i.e. `depth` encodeField levels.
+	nestedChain := func(depth int) (eip712.Types, string, eip712.EIP712Message) {
+		types := domainOnlyTypes()
+		for level := 1; level < depth; level++ {
+			types[fmt.Sprintf("L%d", level)] = []eip712.Type{
+				{Name: "n", Type: fmt.Sprintf("L%d", level+1)},
+			}
+		}
+		types[fmt.Sprintf("L%d", depth)] = []eip712.Type{{Name: "leaf", Type: "string"}}
+
+		message := eip712.EIP712Message{"leaf": "bottom"}
+		for level := depth; level > 1; level-- {
+			message = eip712.EIP712Message{"n": map[string]interface{}(message)}
+		}
+		return types, "L1", message
+	}
+
+	t.Run("at the limit it still encodes", func(t *testing.T) {
+		types, primary, message := nestedChain(32)
+		data, err := hashTypedDataFor(types, primary, message)
+		require.NoError(t, err)
+
+		_, _, hashErr := eip712.HashTypedData(data)
+		require.NoError(t, hashErr, "32 levels is the documented limit and must be accepted")
+	})
+
+	t.Run("one past the limit is rejected", func(t *testing.T) {
+		types, primary, message := nestedChain(33)
+		data, err := hashTypedDataFor(types, primary, message)
+		require.NoError(t, err)
+
+		_, _, hashErr := eip712.HashTypedData(data)
+		require.Error(t, hashErr)
+		require.Contains(t, hashErr.Error(), "maximum depth")
+	})
+}
+
+// Memoizing the per-type hash must not change any digest: it is a cost optimisation, not a semantic
+// one. A message that encodes the same type many times is where a broken cache would show up.
+func TestHashTypedData_RepeatedTypeEncodesConsistently(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Item"] = []eip712.Type{{Name: "v", Type: "string"}}
+	types["Bag"] = []eip712.Type{{Name: "items", Type: "Item[]"}}
+
+	single, err := hashTypedDataFor(types, "Bag", eip712.EIP712Message{
+		"items": []interface{}{map[string]interface{}{"v": "a"}},
+	})
+	require.NoError(t, err)
+	_, singleDigest, hashErr := eip712.HashTypedData(single)
+	require.NoError(t, hashErr)
+
+	repeated, err := hashTypedDataFor(types, "Bag", eip712.EIP712Message{
+		"items": []interface{}{
+			map[string]interface{}{"v": "a"},
+			map[string]interface{}{"v": "a"},
+		},
+	})
+	require.NoError(t, err)
+	_, repeatedDigest, hashErr := eip712.HashTypedData(repeated)
+	require.NoError(t, hashErr)
+
+	require.NotEqual(t, hex.EncodeToString(singleDigest), hex.EncodeToString(repeatedDigest),
+		"a second element must change the digest; equality would mean the cache elided real work")
 }

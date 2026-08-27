@@ -487,7 +487,11 @@ func (d DefaultUseCase) SignTypedData(ctx context.Context, input SignTypedDataIn
 
 	typedDataHash, prefixedDataHash, err := eip712.HashTypedData(input.TypedData)
 	if err != nil {
-		return nil, err
+		// Every failure here is caused by the caller's own types or message: an unsupported or malformed
+		// field type, a value of the wrong shape, or a type graph that exceeds the encoder's depth or work
+		// limits. Classifying them as InvalidArgument returns InvalidParams to the client instead of a
+		// generic internal error, which would otherwise report attacker-controlled input as a signer fault.
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("invalid typed data")
 	}
 	ethereumSignature, signErr := d.sign(ctx, input.SlotConnectionData, input.Address, prefixedDataHash, tracer)
 	if signErr != nil {

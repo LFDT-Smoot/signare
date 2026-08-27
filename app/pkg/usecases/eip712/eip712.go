@@ -14,6 +14,43 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+// eip712DomainType is the name of the mandatory domain type, whose hash forms the domain separator.
+const eip712DomainType = "EIP712Domain"
+
+const (
+	// maxTypeDepth bounds how deep the struct and array encoding walk may descend. Real EIP-712
+	// payloads nest a handful of levels, so this is far beyond any legitimate message while keeping
+	// the walk's stack usage bounded. Validate rejects cyclic types before encoding starts; this is
+	// the backstop for the paths that reach the encoder without it, and for deeply nested arrays,
+	// whose depth comes from the message rather than from the type graph.
+	maxTypeDepth = 32
+	// maxStructEncodings bounds the total number of struct encodings performed for one digest. A type
+	// graph can be acyclic and shallow yet expand exponentially: a type with N struct-typed fields
+	// repeated to depth D encodes N^D structs, which a cycle check and a depth cap both pass. A few
+	// kilobytes of type definitions are enough to make that expansion effectively unbounded, so the
+	// total work has to be capped in its own right.
+	//
+	// The limit is set well above what the 1 MiB entrypoint body cap can legitimately ask for, since a
+	// message is at least a few bytes per encoded struct, so a well-formed payload cannot reach it. It
+	// is far below the exponential case, which runs to the billions. Each encoding is cheap because the
+	// type hash is memoized per digest (see encodeState.typeHashes), so the ceiling bounds total work
+	// rather than merely the count.
+	maxStructEncodings = 100000
+)
+
+// encodeState carries the per-digest limits across the mutually recursive encoding walk. One state
+// spans a whole HashTypedData call, so the domain separator and the message share a single budget.
+type encodeState struct {
+	depth  int
+	budget int
+	// typeHashes memoizes keccak256(encodeType(name)) for the duration of one digest.
+	typeHashes map[string][]byte
+}
+
+func newEncodeState() *encodeState {
+	return &encodeState{budget: maxStructEncodings, typeHashes: make(map[string][]byte)}
+}
+
 // TypedData represents the EIP-712 structured data.
 type TypedData struct {
 	Types       Types         `json:"types"`
@@ -106,9 +143,10 @@ func (d EIP712Domain) toFieldMap() map[string]interface{} {
 type EIP712Message map[string]interface{}
 
 // Validate checks that the typed data declares the minimum structure required to compute an
-// EIP-712 digest: a non-empty primaryType that is present in Types, and an EIP712Domain type
-// definition. Without these, HashTypedData hashes a degenerate empty structure instead of
-// rejecting the input. It does not re-derive the encoding; HashStruct still surfaces deeper errors.
+// EIP-712 digest: a non-empty primaryType that is present in Types, an EIP712Domain type
+// definition, and an acyclic type graph. Without these, HashTypedData hashes a degenerate empty
+// structure, or fails to terminate, instead of rejecting the input. It does not re-derive the
+// encoding; HashStruct still surfaces deeper errors.
 func (d TypedData) Validate() error {
 	if d.PrimaryType == "" {
 		return errors.New("typed data primaryType must not be empty")
@@ -119,10 +157,54 @@ func (d TypedData) Validate() error {
 	if _, ok := d.Types[d.PrimaryType]; !ok {
 		return fmt.Errorf("typed data types missing a definition for primaryType %q", d.PrimaryType)
 	}
-	if _, ok := d.Types["EIP712Domain"]; !ok {
+	if _, ok := d.Types[eip712DomainType]; !ok {
 		return errors.New("typed data types missing the EIP712Domain definition")
 	}
+	// A struct type that refers back to itself, directly or through a chain, has no finite encoding:
+	// hashStruct would descend into it forever. Only the two types actually encoded are walked, so an
+	// unreachable cyclic definition is left alone rather than failing a payload that would encode fine.
+	for _, root := range []string{eip712DomainType, d.PrimaryType} {
+		if cycle := d.Types.findCycle(root); cycle != "" {
+			return fmt.Errorf("typed data types contain a cyclic definition: %s", cycle)
+		}
+	}
 	return nil
+}
+
+// findCycle returns a human-readable path describing the first cycle reachable from root in the
+// struct-type graph, or an empty string when the reachable graph is acyclic. Non-struct field types
+// and references to undeclared types are leaves.
+func (t Types) findCycle(root string) string {
+	onPath := make(map[string]bool)
+	settled := make(map[string]bool)
+	return t.findCycleFrom(root, nil, onPath, settled)
+}
+
+func (t Types) findCycleFrom(typeName string, path []string, onPath, settled map[string]bool) string {
+	if onPath[typeName] {
+		return strings.Join(append(path, typeName), " -> ")
+	}
+	if settled[typeName] || t[typeName] == nil {
+		return ""
+	}
+	onPath[typeName] = true
+	path = append(path, typeName)
+	for _, field := range t[typeName] {
+		if cycle := t.findCycleFrom(baseTypeName(field.Type), path, onPath, settled); cycle != "" {
+			return cycle
+		}
+	}
+	onPath[typeName] = false
+	settled[typeName] = true
+	return ""
+}
+
+// baseTypeName strips array notation, so "Person[2][]" resolves to the struct type "Person".
+func baseTypeName(fieldType string) string {
+	if i := strings.Index(fieldType, "["); i != -1 {
+		return fieldType[:i]
+	}
+	return fieldType
 }
 
 func hashKeccak256(data []byte) ([]byte, error) {
@@ -134,8 +216,16 @@ func hashKeccak256(data []byte) ([]byte, error) {
 }
 
 // HashStruct returns the keccak256 hash of the ABI-encoded struct (typeHash || encodeData).
+//
+// The walk is bounded by maxTypeDepth and maxStructEncodings and returns an error rather than
+// recursing without limit, so a cyclic or explosively wide type graph is rejected instead of
+// exhausting the goroutine stack. Each call starts a fresh budget.
 func (t Types) HashStruct(primaryType string, data map[string]interface{}) ([]byte, error) {
-	encodedData, err := t.EncodeData(primaryType, data)
+	return t.hashStruct(primaryType, data, newEncodeState())
+}
+
+func (t Types) hashStruct(primaryType string, data map[string]interface{}, state *encodeState) ([]byte, error) {
+	encodedData, err := t.encodeData(primaryType, data, state)
 	if err != nil {
 		return nil, err
 	}
@@ -143,9 +233,38 @@ func (t Types) HashStruct(primaryType string, data map[string]interface{}) ([]by
 }
 
 // EncodeData returns typeHash concatenated with the ABI encoding of each field value.
+//
+// Bounded by maxTypeDepth and maxStructEncodings; see HashStruct. Each call starts a fresh budget.
 func (t Types) EncodeData(primaryType string, data map[string]interface{}) ([]byte, error) {
+	return t.encodeData(primaryType, data, newEncodeState())
+}
+
+// typeHash returns TypeHash(name), reusing the value already computed for this digest if there is one.
+//
+// Types is immutable while a digest is computed, so the hash of a given type name is stable and caching
+// it changes no output. It matters for cost: without it every struct encoding rebuilds and hashes the
+// canonical type string, whose length grows with the whole reachable type graph, so a message with many
+// structs of the same type multiplies a large hash by the number of encodings.
+func (t Types) typeHash(name string, state *encodeState) ([]byte, error) {
+	if cached, ok := state.typeHashes[name]; ok {
+		return cached, nil
+	}
+	hash, err := t.TypeHash(name)
+	if err != nil {
+		return nil, err
+	}
+	state.typeHashes[name] = hash
+	return hash, nil
+}
+
+func (t Types) encodeData(primaryType string, data map[string]interface{}, state *encodeState) ([]byte, error) {
+	if state.budget <= 0 {
+		return nil, fmt.Errorf("typed data expands to more than the maximum of %d struct encodings", maxStructEncodings)
+	}
+	state.budget--
+
 	var buffer bytes.Buffer
-	typeHash, err := t.TypeHash(primaryType)
+	typeHash, err := t.typeHash(primaryType, state)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +273,7 @@ func (t Types) EncodeData(primaryType string, data map[string]interface{}) ([]by
 	fields := t[primaryType]
 	for _, field := range fields {
 		val := data[field.Name]
-		encoded, err := t.EncodeField(field.Type, val)
+		encoded, err := t.encodeField(field.Type, val, state)
 		if err != nil {
 			return nil, err
 		}
@@ -224,11 +343,7 @@ func (t Types) findDependencies(primaryType string, deps map[string]bool) {
 	}
 	deps[primaryType] = true
 	for _, field := range fields {
-		// Clean type name from array notation
-		baseType := field.Type
-		if i := strings.Index(baseType, "["); i != -1 {
-			baseType = baseType[:i]
-		}
+		baseType := baseTypeName(field.Type)
 		if t[baseType] != nil {
 			t.findDependencies(baseType, deps)
 		}
@@ -236,7 +351,19 @@ func (t Types) findDependencies(primaryType string, deps map[string]bool) {
 }
 
 // EncodeField ABI-encodes a single field value according to the EIP-712 encoding rules for fieldType.
+//
+// Bounded by maxTypeDepth and maxStructEncodings; see HashStruct. Each call starts a fresh budget.
 func (t Types) EncodeField(fieldType string, value interface{}) ([]byte, error) {
+	return t.encodeField(fieldType, value, newEncodeState())
+}
+
+func (t Types) encodeField(fieldType string, value interface{}, state *encodeState) ([]byte, error) {
+	if state.depth >= maxTypeDepth {
+		return nil, fmt.Errorf("typed data nesting exceeds the maximum depth of %d", maxTypeDepth)
+	}
+	state.depth++
+	defer func() { state.depth-- }()
+
 	if t[fieldType] != nil {
 		// Nested struct
 		m, ok := value.(map[string]interface{})
@@ -250,19 +377,24 @@ func (t Types) EncodeField(fieldType string, value interface{}) ([]byte, error) 
 				return nil, err
 			}
 		}
-		return t.HashStruct(fieldType, m)
+		return t.hashStruct(fieldType, m, state)
 	}
 
 	if strings.HasSuffix(fieldType, "]") {
 		// Array
-		subType := fieldType[:strings.LastIndex(fieldType, "[")]
+		openBracket := strings.LastIndex(fieldType, "[")
+		if openBracket < 0 {
+			// A closing bracket with no opening one is not array notation; slicing on -1 would panic.
+			return nil, fmt.Errorf("unsupported type %s", fieldType)
+		}
+		subType := fieldType[:openBracket]
 		val := reflect.ValueOf(value)
 		if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
 			return nil, fmt.Errorf("expected slice/array for %s, got %T", fieldType, value)
 		}
 		var encoded []byte
 		for i := 0; i < val.Len(); i++ {
-			fieldEncoded, err := t.EncodeField(subType, val.Index(i).Interface())
+			fieldEncoded, err := t.encodeField(subType, val.Index(i).Interface(), state)
 			if err != nil {
 				return nil, err
 			}
@@ -399,11 +531,14 @@ func decodeBytes(value interface{}) ([]byte, error) {
 // HashTypedData returns (structHash, prefixedHash) where prefixedHash is the final digest to sign:
 // keccak256("\x19\x01" || domainSeparator || structHash).
 func HashTypedData(data TypedData) ([]byte, []byte, error) {
-	domainSeparator, err := data.Types.HashStruct("EIP712Domain", data.Domain.toFieldMap())
+	// One state for the whole digest, so the domain separator and the message share a single budget
+	// and a caller cannot double the permitted work by splitting it across the two.
+	state := newEncodeState()
+	domainSeparator, err := data.Types.hashStruct(eip712DomainType, data.Domain.toFieldMap(), state)
 	if err != nil {
 		return nil, nil, err
 	}
-	dataHash, err := data.Types.HashStruct(data.PrimaryType, data.Message)
+	dataHash, err := data.Types.hashStruct(data.PrimaryType, data.Message, state)
 	if err != nil {
 		return nil, nil, err
 	}
