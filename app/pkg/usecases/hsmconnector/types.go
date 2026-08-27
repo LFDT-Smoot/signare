@@ -154,7 +154,7 @@ type SignTxInput struct {
 	To *address.Address `valid:"optional"`
 	// Gas amount to use for transaction execution.
 	Gas *entities.HexUInt64 `valid:"optional"`
-	// GasPrice to use for each paid gas. Legacy (Type 0) only.
+	// GasPrice to use for each paid gas. Legacy (Type 0) and EIP-2930 (Type 1) only.
 	GasPrice *entities.HexInt256 `valid:"optional"`
 	// Value amount sent with this transaction.
 	Value *entities.HexInt256 `valid:"optional"`
@@ -168,7 +168,7 @@ type SignTxInput struct {
 	MaxFeePerGas *entities.HexInt256 `valid:"optional"`
 	// MaxPriorityFeePerGas is the maximum fee per gas to give to the miner as a tip. EIP-1559 (Type 2) only.
 	MaxPriorityFeePerGas *entities.HexInt256 `valid:"optional"`
-	// AccessList is a list of addresses and storage keys the transaction accesses. EIP-1559 (Type 2) only.
+	// AccessList is a list of addresses and storage keys the transaction accesses. EIP-2930 (Type 1) and EIP-1559 (Type 2) only.
 	AccessList AccessList `valid:"optional"`
 	// MaxFeePerBlobGas is the maximum fee per blob gas the sender is willing to pay. EIP-4844 (Type 3) only.
 	MaxFeePerBlobGas *entities.HexInt256 `valid:"optional"`
@@ -184,6 +184,8 @@ type SignTxOutput struct {
 	SignedTx string
 	// Transaction represents a legacy Ethereum transaction. Populated for legacy (Type 0) transactions.
 	Transaction EthereumTransaction
+	// EIP2930Tx represents an EIP-2930 Ethereum transaction. Populated for Type 1 transactions.
+	EIP2930Tx *EIP2930Transaction
 	// EIP1559Tx represents an EIP-1559 Ethereum transaction. Populated for Type 2 transactions.
 	EIP1559Tx *EIP1559Transaction
 }
@@ -288,10 +290,7 @@ func (tx EthereumTransaction) RLPEncode() (*entities.HexBytes, error) {
 		nonceBytes = []byte{}
 	}
 
-	var gasPrice *big.Int
-	if tx.GasPrice.BigInt().Sign() != 0 {
-		gasPrice = tx.GasPrice.BigInt()
-	}
+	gasPrice := nonZeroOrNil(tx.GasPrice)
 
 	gas, err := entities.NewHexBytesFromString(hexStringEvenLength(tx.Gas.String()))
 	if err != nil {
@@ -364,10 +363,7 @@ func (tx EthereumTransaction) Hash() (*entities.HexBytes, error) {
 		nonceBytes = []byte{}
 	}
 
-	var gasPrice *big.Int
-	if tx.GasPrice.BigInt().Sign() != 0 {
-		gasPrice = tx.GasPrice.BigInt()
-	}
+	gasPrice := nonZeroOrNil(tx.GasPrice)
 
 	gas, err := entities.NewHexBytesFromString(hexStringEvenLength(tx.Gas.String()))
 	if err != nil {
@@ -400,9 +396,9 @@ func (tx EthereumTransaction) Hash() (*entities.HexBytes, error) {
 	} else {
 		data = []byte{}
 	}
-	chainID, err := entities.NewHexBytesFromString(hexStringEvenLength(tx.ChainID.String()))
+	chainID, err := chainIDToRLPBytes(tx.ChainID)
 	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the HexBytes from chain ID")
+		return nil, err
 	}
 
 	dataToEncode := []interface{}{
@@ -412,7 +408,7 @@ func (tx EthereumTransaction) Hash() (*entities.HexBytes, error) {
 		toBytes,
 		value,
 		data,
-		chainID.Bytes(),
+		chainID,
 		uint(0),
 		uint(0),
 	}
@@ -431,7 +427,7 @@ func (tx EthereumTransaction) Hash() (*entities.HexBytes, error) {
 	return entities.NewHexBytes(hash), nil
 }
 
-// AccessListEntry represents a single entry in an EIP-1559 access list.
+// AccessListEntry represents a single entry in an EIP-2930 or EIP-1559 access list.
 type AccessListEntry struct {
 	// Address is the account address being accessed.
 	Address address.Address
@@ -439,7 +435,7 @@ type AccessListEntry struct {
 	StorageKeys []entities.HexBytes32
 }
 
-// AccessList is a list of access list entries for EIP-1559 transactions.
+// AccessList is a list of access list entries for EIP-2930 and EIP-1559 transactions.
 type AccessList []AccessListEntry
 
 // AuthorizationListEntry represents a single entry in an EIP-7702 authorization list.
@@ -452,6 +448,41 @@ type AuthorizationListEntry struct {
 
 // AuthorizationList is a list of authorization list entries for EIP-7702 transactions.
 type AuthorizationList []AuthorizationListEntry
+
+// YParityTransactionSignature represents a transaction signature with YParity.
+// YParity is 0 or 1 (not the EIP-155 formula).
+type YParityTransactionSignature struct {
+	YParity entities.Int256
+	R       entities.Int256
+	S       entities.Int256
+}
+
+// EIP2930Transaction represents an EIP-2930 (Type 1) Ethereum transaction.
+type EIP2930Transaction struct {
+	// From address.
+	From address.Address
+	// To address.
+	To *address.Address
+	// Gas amount to use for transaction execution.
+	Gas entities.HexUInt64
+	// GasPrice to use for each paid gas.
+	GasPrice entities.HexInt256
+	// Value amount sent with this transaction.
+	Value *entities.HexInt256
+	// Data arguments packed according to JSON RPC standard.
+	Data entities.HexBytes
+	// Nonce integer to identify request.
+	Nonce entities.HexUInt64
+	// ChainID id of the blockchain network where the transaction is sent to.
+	ChainID entities.HexInt256
+	// AccessList is a list of addresses and storage keys the transaction accesses.
+	AccessList AccessList
+	// Signature transaction signature with Y parity.
+	Signature *YParityTransactionSignature
+}
+
+// eip2930TypePrefix is the transaction type byte for EIP-2930.
+const eip2930TypePrefix = 0x01
 
 // EIP1559Transaction represents an EIP-1559 (Type 2) Ethereum transaction.
 type EIP1559Transaction struct {
@@ -475,31 +506,79 @@ type EIP1559Transaction struct {
 	ChainID entities.HexInt256
 	// AccessList is a list of addresses and storage keys the transaction accesses.
 	AccessList AccessList
-	// Signature EIP-1559 transaction signature.
-	Signature *EIP1559TransactionSignature
-}
-
-// EIP1559TransactionSignature represents an EIP-1559 transaction signature.
-// YParity is 0 or 1 (not the EIP-155 formula).
-type EIP1559TransactionSignature struct {
-	YParity entities.Int256
-	R       entities.Int256
-	S       entities.Int256
+	// Signature transaction signature with Y parity.
+	Signature *YParityTransactionSignature
 }
 
 // eip1559TypePrefix is the transaction type byte for EIP-1559.
 const eip1559TypePrefix = 0x02
 
+// typedTxEnvelope is the EIP-2718 envelope of a typed transaction: the transaction type prefix byte and
+// the list of fields the signature commits to, in the order the relevant EIP defines.
+type typedTxEnvelope struct {
+	prefix byte
+	fields []interface{}
+}
+
+func hashTypedTx(envelope typedTxEnvelope) (*entities.HexBytes, error) {
+	rlpEncoded, err := rlp.Encode(envelope.fields)
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("failed to RLP encode the type %d payload to sign", envelope.prefix)
+	}
+
+	hash, err := hashKeccak256(append([]byte{envelope.prefix}, rlpEncoded...))
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the Keccak256 of the type %d payload", envelope.prefix)
+	}
+
+	return entities.NewHexBytes(hash), nil
+}
+
+// encodeTypedTx RLP encodes a typed transaction for the wire:
+// prefix || rlp(fields ++ [yParity, r, s]).
+func encodeTypedTx(envelope typedTxEnvelope, signature *YParityTransactionSignature) (*entities.HexBytes, error) {
+	if signature == nil {
+		return nil, errors.Internal().WithMessage("tx doesn't have a signature so it can't be RLP encoded")
+	}
+
+	signed := make([]interface{}, 0, len(envelope.fields)+3)
+	signed = append(signed, envelope.fields...)
+	signed = append(signed, signature.YParity.BigInt(), signature.R.BigInt(), signature.S.BigInt())
+
+	rlpEncoded, err := rlp.Encode(signed)
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("failed to RLP encode the type %d transaction", envelope.prefix)
+	}
+
+	return entities.NewHexBytes(append([]byte{envelope.prefix}, rlpEncoded...)), nil
+}
+
+// chainIDToRLPBytes converts a chain ID to its big-endian byte representation for RLP encoding.
+func chainIDToRLPBytes(chainID entities.HexInt256) ([]byte, error) {
+	hexBytes, err := entities.NewHexBytesFromString(hexStringEvenLength(chainID.String()))
+	if err != nil {
+		return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the HexBytes from chain ID")
+	}
+	return hexBytes.Bytes(), nil
+}
+
+func nonZeroOrNil(amount entities.HexInt256) *big.Int {
+	if amount.BigInt().Sign() == 0 {
+		return nil
+	}
+	return amount.BigInt()
+}
+
 // accessListToRLPInterface converts an AccessList to the nested []interface{} structure for RLP encoding.
-func accessListToRLPInterface(accessList AccessList) []interface{} {
+func accessListToRLPInterface(accessList AccessList) ([]interface{}, error) {
 	if len(accessList) == 0 {
-		return []interface{}{}
+		return []interface{}{}, nil
 	}
 	result := make([]interface{}, len(accessList))
 	for i, entry := range accessList {
 		addrBytes, err := entities.NewHexBytesFromString(entry.Address.String())
 		if err != nil {
-			return nil
+			return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the HexBytes from the access list address at index %d", i)
 		}
 		storageKeys := make([]interface{}, len(entry.StorageKeys))
 		for j, key := range entry.StorageKeys {
@@ -511,7 +590,7 @@ func accessListToRLPInterface(accessList AccessList) []interface{} {
 			storageKeys,
 		}
 	}
-	return result
+	return result, nil
 }
 
 // prepareCommonFields converts common transaction fields to their RLP-ready representations.
@@ -558,111 +637,111 @@ func prepareCommonFields(nonce entities.HexUInt64, gas entities.HexUInt64, to *a
 	return nonceBytes, gasBytes, toBytes, valueBigInt, data, nil
 }
 
-// RLPEncode RLP encodes the EIP-1559 transaction (including its signature).
-// The result is 0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList, signatureYParity, signatureR, signatureS])
-func (tx EIP1559Transaction) RLPEncode() (*entities.HexBytes, error) {
-	if tx.Signature == nil {
-		return nil, errors.Internal().WithMessage("tx doesn't have a signature so it can't be RLP encoded")
+// RLPEncode RLP encodes the EIP-2930 transaction (including its signature).
+// The result is 0x01 || rlp([chainId, nonce, gasPrice, gasLimit, to, value, data, accessList, signatureYParity, signatureR, signatureS])
+func (tx EIP2930Transaction) RLPEncode() (*entities.HexBytes, error) {
+	envelope, err := tx.envelope()
+	if err != nil {
+		return nil, err
 	}
+	return encodeTypedTx(*envelope, tx.Signature)
+}
 
+// Hash calculates the EIP-2930 transaction hash for signing.
+// The hash is keccak256(0x01 || rlp([chainId, nonce, gasPrice, gasLimit, to, value, data, accessList]))
+func (tx EIP2930Transaction) Hash() (*entities.HexBytes, error) {
+	envelope, err := tx.envelope()
+	if err != nil {
+		return nil, err
+	}
+	return hashTypedTx(*envelope)
+}
+
+// envelope returns the EIP-2930 type prefix and the field list its signature commits to:
+// [chainId, nonce, gasPrice, gasLimit, to, value, data, accessList]
+func (tx EIP2930Transaction) envelope() (*typedTxEnvelope, error) {
 	nonceBytes, gasBytes, toBytes, value, data, err := prepareCommonFields(tx.Nonce, tx.Gas, tx.To, tx.Value, tx.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	var maxFeePerGas *big.Int
-	if tx.MaxFeePerGas.BigInt().Sign() != 0 {
-		maxFeePerGas = tx.MaxFeePerGas.BigInt()
-	}
-
-	var maxPriorityFeePerGas *big.Int
-	if tx.MaxPriorityFeePerGas.BigInt().Sign() != 0 {
-		maxPriorityFeePerGas = tx.MaxPriorityFeePerGas.BigInt()
-	}
-
-	chainID, err := entities.NewHexBytesFromString(hexStringEvenLength(tx.ChainID.String()))
+	chainID, err := chainIDToRLPBytes(tx.ChainID)
 	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the HexBytes from chain ID")
+		return nil, err
 	}
 
-	accessListRLP := accessListToRLPInterface(tx.AccessList)
-
-	dataToEncode := []interface{}{
-		chainID.Bytes(),
-		&nonceBytes,
-		maxPriorityFeePerGas,
-		maxFeePerGas,
-		gasBytes,
-		toBytes,
-		value,
-		data,
-		accessListRLP,
-		tx.Signature.YParity.BigInt(),
-		tx.Signature.R.BigInt(),
-		tx.Signature.S.BigInt(),
-	}
-
-	rlpEncoded, err := rlp.Encode(dataToEncode)
+	accessListRLP, err := accessListToRLPInterface(tx.AccessList)
 	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("failed to RLP encode the EIP-1559 transaction")
+		return nil, err
 	}
 
-	// Prepend type prefix 0x02
-	result := append([]byte{eip1559TypePrefix}, rlpEncoded...)
-	return entities.NewHexBytes(result), nil
+	return &typedTxEnvelope{
+		prefix: eip2930TypePrefix,
+		fields: []interface{}{
+			chainID,
+			&nonceBytes,
+			nonZeroOrNil(tx.GasPrice),
+			gasBytes,
+			toBytes,
+			value,
+			data,
+			accessListRLP,
+		},
+	}, nil
+}
+
+// RLPEncode RLP encodes the EIP-1559 transaction (including its signature).
+// The result is 0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList, signatureYParity, signatureR, signatureS])
+func (tx EIP1559Transaction) RLPEncode() (*entities.HexBytes, error) {
+	envelope, err := tx.envelope()
+	if err != nil {
+		return nil, err
+	}
+	return encodeTypedTx(*envelope, tx.Signature)
 }
 
 // Hash calculates the EIP-1559 transaction hash for signing.
 // The hash is keccak256(0x02 || rlp([chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList]))
 func (tx EIP1559Transaction) Hash() (*entities.HexBytes, error) {
+	envelope, err := tx.envelope()
+	if err != nil {
+		return nil, err
+	}
+	return hashTypedTx(*envelope)
+}
+
+// envelope returns the EIP-1559 type prefix and the field list its signature commits to:
+// [chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList]
+func (tx EIP1559Transaction) envelope() (*typedTxEnvelope, error) {
 	nonceBytes, gasBytes, toBytes, value, data, err := prepareCommonFields(tx.Nonce, tx.Gas, tx.To, tx.Value, tx.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	var maxFeePerGas *big.Int
-	if tx.MaxFeePerGas.BigInt().Sign() != 0 {
-		maxFeePerGas = tx.MaxFeePerGas.BigInt()
-	}
-
-	var maxPriorityFeePerGas *big.Int
-	if tx.MaxPriorityFeePerGas.BigInt().Sign() != 0 {
-		maxPriorityFeePerGas = tx.MaxPriorityFeePerGas.BigInt()
-	}
-
-	chainID, err := entities.NewHexBytesFromString(hexStringEvenLength(tx.ChainID.String()))
+	chainID, err := chainIDToRLPBytes(tx.ChainID)
 	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the HexBytes from chain ID")
+		return nil, err
 	}
 
-	accessListRLP := accessListToRLPInterface(tx.AccessList)
-
-	dataToEncode := []interface{}{
-		chainID.Bytes(),
-		&nonceBytes,
-		maxPriorityFeePerGas,
-		maxFeePerGas,
-		gasBytes,
-		toBytes,
-		value,
-		data,
-		accessListRLP,
-	}
-
-	rlpEncoded, err := rlp.Encode(dataToEncode)
+	accessListRLP, err := accessListToRLPInterface(tx.AccessList)
 	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("failed to RLP encode the EIP-1559 payload to sign")
+		return nil, err
 	}
 
-	// Prepend type prefix 0x02
-	payload := append([]byte{eip1559TypePrefix}, rlpEncoded...)
-
-	hash, err := hashKeccak256(payload)
-	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the Keccak256 of the EIP-1559 payload")
-	}
-
-	return entities.NewHexBytes(hash), nil
+	return &typedTxEnvelope{
+		prefix: eip1559TypePrefix,
+		fields: []interface{}{
+			chainID,
+			&nonceBytes,
+			nonZeroOrNil(tx.MaxPriorityFeePerGas),
+			nonZeroOrNil(tx.MaxFeePerGas),
+			gasBytes,
+			toBytes,
+			value,
+			data,
+			accessListRLP,
+		},
+	}, nil
 }
 
 func hexStringEvenLength(input string) string {

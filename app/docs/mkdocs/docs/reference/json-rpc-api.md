@@ -32,6 +32,16 @@ The `eth_signTransaction` method is supported following the [Ethereum JSON-RPC A
 
 Please, refer to Ethereum's documentation for details about its input and output parameters.
 
+The following transaction types are supported. The type is inferred from the combination of fields present in the request body (there is no explicit `type` field):
+
+| Transaction type      | How it is inferred                                                                                        |
+|-----------------------|-----------------------------------------------------------------------------------------------------------|
+| Legacy (Type 0)       | `gasPrice` is set (or no gas fields are set) and no `accessList` is set                                   |
+| EIP-2930 (Type 1)     | `accessList` is set (an empty accessList is valid), together with `gasPrice` or with no gas fields at all |
+| EIP-1559 (Type 2)     | `maxFeePerGas` and `maxPriorityFeePerGas` are set; `accessList` is optional                               |
+
+Combining `gasPrice` with EIP-1559 fields (`maxFeePerGas`/`maxPriorityFeePerGas`) is ambiguous and is rejected with an invalid params error.
+
 !!! info
     If the ``gasPrice`` field of the request body is not informed, it is set to 0.
 

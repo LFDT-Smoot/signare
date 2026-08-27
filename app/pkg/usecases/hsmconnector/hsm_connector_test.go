@@ -14,6 +14,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/graph"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
@@ -21,6 +22,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/test/dbtesthelper"
 	"github.com/lfdt-smoot/signare/app/test/signaturemanagertesthelper"
 
+	btcececdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/stretchr/testify/require"
 )
 
@@ -669,8 +671,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		yParity := signTxOutput.EIP1559Tx.Signature.YParity.Int64()
 		require.True(t, yParity == 0 || yParity == 1, "YParity should be 0 or 1, got %d", yParity)
 		// R and S should be non-zero
-		require.NotEqual(t, big.NewInt(0), &signTxOutput.EIP1559Tx.Signature.R.Int)
-		require.NotEqual(t, big.NewInt(0), &signTxOutput.EIP1559Tx.Signature.S.Int)
+		require.NotZero(t, signTxOutput.EIP1559Tx.Signature.R.Sign())
+		require.NotZero(t, signTxOutput.EIP1559Tx.Signature.S.Sign())
 	})
 
 	t.Run("success: EIP-1559 output preserves input fields correctly", func(t *testing.T) {
@@ -890,7 +892,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		require.Nil(t, signTxOutput)
 	})
 
-	t.Run("failure: partial EIP-1559 fields (MaxFeePerGas and MaxPriorityFeePerGas but no AccessList)", func(t *testing.T) {
+	t.Run("success: EIP-1559 transaction without an access list", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		maxFeePerGas := big.NewInt(100)
 		maxPriorityFeePerGas := big.NewInt(10)
@@ -919,12 +921,15 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			},
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, signTxOutput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		require.NotNil(t, signTxOutput.EIP1559Tx)
+		require.Len(t, signTxOutput.EIP1559Tx.AccessList, 0)
+		// EIP-1559 (Type 2) transactions must start with 0x02
+		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x02"))
 	})
 
-	t.Run("failure: type 1 (EIP-2930) transaction is not supported", func(t *testing.T) {
+	t.Run("success: EIP-2930 transaction with empty access list", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
@@ -935,6 +940,200 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
 			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 1000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		require.NotNil(t, signTxOutput.EIP2930Tx)
+		require.Len(t, signTxOutput.EIP2930Tx.AccessList, 0)
+		require.NotEmpty(t, signTxOutput.SignedTx)
+		// EIP-2930 (Type 1) transactions must start with 0x01
+		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x01"))
+	})
+
+	t.Run("success: EIP-2930 transaction with populated access list", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+		storageKey1 := entities.HexBytes32{}
+		storageKey2 := entities.HexBytes32{}
+		storageKey2[31] = 0x01
+		anotherAddress := address.MustNewFromHexString("0x1234567890abcdef1234567890abcdef12345678")
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				Pin:        slotPin,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 2000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{
+				{
+					Address:     toAddress,
+					StorageKeys: []entities.HexBytes32{storageKey1, storageKey2},
+				},
+				{
+					Address:     anotherAddress,
+					StorageKeys: []entities.HexBytes32{},
+				},
+			},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		require.NotNil(t, signTxOutput.EIP2930Tx)
+		require.Len(t, signTxOutput.EIP2930Tx.AccessList, 2)
+	})
+
+	t.Run("success: EIP-2930 output contains valid signature and preserves input fields", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				Pin:        slotPin,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 5000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		require.NotNil(t, signTxOutput.EIP2930Tx)
+		require.NotNil(t, signTxOutput.EIP2930Tx.Signature)
+		// YParity should be 0 or 1 for EIP-2930
+		yParity := signTxOutput.EIP2930Tx.Signature.YParity.Int64()
+		require.True(t, yParity == 0 || yParity == 1, "YParity should be 0 or 1, got %d", yParity)
+		require.NotZero(t, signTxOutput.EIP2930Tx.Signature.R.Sign())
+		require.NotZero(t, signTxOutput.EIP2930Tx.Signature.S.Sign())
+		require.Equal(t, signTxInput.From.String(), signTxOutput.EIP2930Tx.From.String())
+		require.Equal(t, signTxInput.To.String(), signTxOutput.EIP2930Tx.To.String())
+		require.Equal(t, entities.UInt64(5000), signTxOutput.EIP2930Tx.Gas.UInt64)
+		require.Equal(t, nonce, signTxOutput.EIP2930Tx.Nonce.UInt64)
+	})
+
+	t.Run("success: EIP-2930 signature EC-recovers the expected sender", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				Pin:        slotPin,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 5000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		require.NotNil(t, signTxOutput.EIP2930Tx)
+		require.NotNil(t, signTxOutput.EIP2930Tx.Signature)
+
+		// Recover the signer from the type-1 signing hash and the emitted (yParity, r, s), which is
+		// what a node does on receipt. This proves the signature commits to the 0x01-prefixed hash
+		// and that yParity carries the correct recovery id. Asserting on the echoed From field
+		// cannot catch either mistake, because the connector copies it from the input.
+		hash, err := signTxOutput.EIP2930Tx.Hash()
+		require.NoError(t, err)
+
+		signature := signTxOutput.EIP2930Tx.Signature
+		// RecoverCompact expects [27+recid || R || S] with R and S left-padded to 32 bytes.
+		compactSignature := make([]byte, 0, 65)
+		compactSignature = append(compactSignature, byte(27+signature.YParity.Int64()))
+		compactSignature = append(compactSignature, signature.R.BigInt().FillBytes(make([]byte, 32))...)
+		compactSignature = append(compactSignature, signature.S.BigInt().FillBytes(make([]byte, 32))...)
+
+		publicKey, _, err := btcececdsa.RecoverCompact(compactSignature, hash.Bytes())
+		require.NoError(t, err)
+
+		recovered, err := signaturemanager.DeriveAddressFromPublicKey(publicKey.SerializeUncompressed())
+		require.NoError(t, err)
+		require.Equal(t, signTxInput.From.String(), recovered.String())
+	})
+
+	t.Run("success: EIP-2930 transaction with nil To (contract deployment)", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1234"))
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				Pin:        slotPin,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   nil,
 			Gas: &entities.HexUInt64{
 				UInt64: 1000,
 			},
@@ -950,18 +1149,14 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			AccessList: hsmconnector.AccessList{},
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, signTxOutput)
-		useCaseErr, ok := errors.CastAsUseCaseError(err)
-		require.True(t, ok)
-		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		require.NotNil(t, signTxOutput.EIP2930Tx)
+		require.Nil(t, signTxOutput.EIP2930Tx.To)
 	})
 
-	t.Run("failure: type 1 (EIP-2930) transaction is not supported (non-empty AccessList)", func(t *testing.T) {
+	t.Run("success: EIP-2930 transaction with an access list and no gas price", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
-		storageKey := entities.HexBytes32{}
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
@@ -974,11 +1169,6 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			Gas: &entities.HexUInt64{
 				UInt64: 1000,
 			},
-			GasPrice: &entities.HexInt256{
-				Int256: entities.Int256{
-					Int: *gasPrice,
-				},
-			},
 			Data: *data,
 			Nonce: entities.HexUInt64{
 				UInt64: nonce,
@@ -986,18 +1176,18 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			AccessList: hsmconnector.AccessList{
 				{
 					Address:     toAddress,
-					StorageKeys: []entities.HexBytes32{storageKey},
+					StorageKeys: []entities.HexBytes32{{}},
 				},
 			},
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, signTxOutput)
-		useCaseErr, ok := errors.CastAsUseCaseError(err)
-		require.True(t, ok)
-		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		// The access list must not be dropped by signing the transaction as legacy.
+		require.NotNil(t, signTxOutput.EIP2930Tx)
+		require.Len(t, signTxOutput.EIP2930Tx.AccessList, 1)
+		require.Equal(t, int64(0), signTxOutput.EIP2930Tx.GasPrice.BigInt().Int64())
+		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x01"))
 	})
 
 	t.Run("failure: type 3 (EIP-4844) transaction is not supported (MaxFeePerBlobGas field is not nil)", func(t *testing.T) {
@@ -1278,6 +1468,76 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
+	// An access list is also carried by transaction types the signer does not support. The presence of a
+	// blob or authorization field must win over it, so that an unsupported request is rejected instead of
+	// signed as a Type 1 transaction with that field silently discarded.
+	unsupportedWithAccessList := []struct {
+		name  string
+		apply func(*hsmconnector.SignTxInput)
+	}{
+		{
+			name: "MaxFeePerBlobGas",
+			apply: func(in *hsmconnector.SignTxInput) {
+				in.MaxFeePerBlobGas = &entities.HexInt256{Int256: entities.Int256{Int: *big.NewInt(1)}}
+			},
+		},
+		{
+			name: "BlobVersionedHashes",
+			apply: func(in *hsmconnector.SignTxInput) {
+				in.BlobVersionedHashes = []entities.HexBytes32{{}}
+			},
+		},
+		{
+			name: "AuthorizationList",
+			apply: func(in *hsmconnector.SignTxInput) {
+				in.AuthorizationList = hsmconnector.AuthorizationList{}
+			},
+		},
+	}
+	for _, unsupported := range unsupportedWithAccessList {
+		t.Run("failure: unsupported transaction type (AccessList and "+unsupported.name+" are set)", func(t *testing.T) {
+			data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+			signTxInput := hsmconnector.SignTxInput{
+				ChainID: *chainIDHex,
+				SlotConnectionData: hsmconnector.SlotConnectionData{
+					Slot:       slotID,
+					Pin:        slotPin,
+					ModuleKind: hsmconnector.SoftHSMModuleKind,
+				},
+				From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+				To:   &toAddress,
+				Gas: &entities.HexUInt64{
+					UInt64: 1000,
+				},
+				GasPrice: &entities.HexInt256{
+					Int256: entities.Int256{
+						Int: *gasPrice,
+					},
+				},
+				Data: *data,
+				Nonce: entities.HexUInt64{
+					UInt64: nonce,
+				},
+				AccessList: hsmconnector.AccessList{
+					{
+						Address:     toAddress,
+						StorageKeys: []entities.HexBytes32{{}},
+					},
+				},
+			}
+			unsupported.apply(&signTxInput)
+
+			signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+			require.Error(t, err)
+			require.True(t, errors.IsInvalidArgument(err))
+			require.Nil(t, signTxOutput)
+			useCaseErr, ok := errors.CastAsUseCaseError(err)
+			require.True(t, ok)
+			require.NotNil(t, useCaseErr.HumanReadableMessage())
+			require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		})
+	}
+
 	t.Run("failure: ambiguous transaction type (GasPrice and MaxFeePerGas are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		maxFeePerGas := big.NewInt(100)
@@ -1352,7 +1612,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
-	t.Run("failure: ambiguous transaction type (GasPrice and MaxFeePerBlobGas are set)", func(t *testing.T) {
+	t.Run("failure: unsupported transaction type (GasPrice and MaxFeePerBlobGas are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		maxFeePerBlobGas := big.NewInt(1)
 		signTxInput := hsmconnector.SignTxInput{
@@ -1386,10 +1646,10 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		useCaseErr, ok := errors.CastAsUseCaseError(err)
 		require.True(t, ok)
 		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
+		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
-	t.Run("failure: ambiguous transaction type (GasPrice and BlobVersionedHashes are set)", func(t *testing.T) {
+	t.Run("failure: unsupported transaction type (GasPrice and BlobVersionedHashes are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
@@ -1418,10 +1678,10 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		useCaseErr, ok := errors.CastAsUseCaseError(err)
 		require.True(t, ok)
 		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
+		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
-	t.Run("failure: ambiguous transaction type (GasPrice and AuthorizationList are set)", func(t *testing.T) {
+	t.Run("failure: unsupported transaction type (GasPrice and AuthorizationList are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
@@ -1450,7 +1710,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		useCaseErr, ok := errors.CastAsUseCaseError(err)
 		require.True(t, ok)
 		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
+		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
 	t.Run("failure: ambiguous transaction type (GasPrice, MaxFeePerGas and AccessList are set)", func(t *testing.T) {
