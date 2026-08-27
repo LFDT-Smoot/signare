@@ -49,3 +49,45 @@ func TestError_Description(t *testing.T) {
 	})
 
 }
+
+// TestWithMessage_DoesNotMutateReceiver is the regression guard for a cross-request information leak.
+//
+// pkcs11hsm keeps a package-level translator map holding one *Error per PKCS#11 return code, built
+// once at initialisation and returned to every caller that hits that code. While WithMessage assigned
+// to the receiver, two concurrent requests hitting the same code both mutated that one instance:
+// a data race on description, and one request could read the other's error text, which carries slot
+// detail.
+func TestWithMessage_DoesNotMutateReceiver(t *testing.T) {
+	shared := signaturemanager.NewPinIncorrectError()
+	original := shared.Error()
+
+	derived := shared.WithMessage("slot 7 detail that must not escape")
+
+	require.NotSame(t, shared, derived, "WithMessage must return a new value, not the receiver")
+	require.Equal(t, original, shared.Error(), "the shared instance must be unchanged")
+	require.Contains(t, derived.Error(), "slot 7 detail that must not escape")
+}
+
+// Copies must keep their sentinel, so errors.Is/As classification still works. Without this a
+// non-mutating WithMessage could silently break every Is*Error helper.
+func TestWithMessage_CopyPreservesClassification(t *testing.T) {
+	derived := signaturemanager.NewPinIncorrectError().WithMessage("some detail")
+	require.True(t, signaturemanager.IsPinIncorrectError(derived))
+	require.False(t, signaturemanager.IsInvalidSlotError(derived))
+
+	slotErr := signaturemanager.NewInvalidSlotError().WithMessage("other detail")
+	require.True(t, signaturemanager.IsInvalidSlotError(slotErr))
+	require.False(t, signaturemanager.IsPinIncorrectError(slotErr))
+}
+
+// Two derivations from the same shared instance must not observe each other.
+func TestWithMessage_DerivationsAreIndependent(t *testing.T) {
+	shared := signaturemanager.NewAlreadyInitializedError()
+
+	first := shared.WithMessage("first request")
+	second := shared.WithMessage("second request")
+
+	require.Contains(t, first.Error(), "first request")
+	require.NotContains(t, first.Error(), "second request")
+	require.Contains(t, second.Error(), "second request")
+}

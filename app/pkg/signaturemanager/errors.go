@@ -30,9 +30,19 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.err.Error(), e.description)
 }
 
+// WithMessage returns a copy of e carrying the given description.
+//
+// It deliberately does not mutate the receiver. Some Error values are shared rather than per-call:
+// pkcs11hsm's error translator holds one instance per PKCS#11 code, built once at package
+// initialisation and handed to every caller that hits that code. Mutating the receiver would race
+// concurrent requests on description and let one request observe another's error text, which carries
+// slot detail.
 func (e *Error) WithMessage(message string) *Error {
-	e.description = message
-	return e
+	// Copy the whole value rather than naming its fields, so a field added to Error later is carried
+	// across instead of being silently dropped here.
+	derived := *e
+	derived.description = message
+	return &derived
 }
 
 func NewNotImplementedError() *Error {
