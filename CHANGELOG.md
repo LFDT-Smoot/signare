@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
 
+### Security
+- Stop writing to the digital signature manager map after construction, so adding an HSM slot no longer races the signing path; the concurrent map access was a runtime fatal error that panic recovery cannot intercept, taking the whole signer down (#15).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed

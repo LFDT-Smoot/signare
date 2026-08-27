@@ -36,8 +36,11 @@ func (u *DefaultDigitalSignatureManagerFactory) Reset(ctx context.Context, kind 
 	if openErr != nil {
 		return signererrors.Internal().WithMessage("error opening digital signature manager connection '%s'. Error: %v", kind, openErr)
 	}
-	u.digitalSignatureManagerMap[kind] = digitalSignatureManager
 
+	// The manager is deliberately not written back into the map. Close and Open act on the instance
+	// read above, which is never reassigned, so storing it again would be m[kind] = m[kind]: no effect
+	// on the map, but a write racing every Create below. digitalSignatureManagerMap is populated once
+	// in ProvideDefaultDigitalSignatureManagerFactory and must stay read-only afterwards.
 	return nil
 }
 
@@ -71,6 +74,10 @@ var _ DigitalSignatureManagerFactory = new(DefaultDigitalSignatureManagerFactory
 // manager compatible instances.
 // It Initializes the pkcs11 library at creation time so that there is one pkcs11.Ctx per digital signature manager supported type.
 type DefaultDigitalSignatureManagerFactory struct {
+	// digitalSignatureManagerMap is populated once at construction and never written afterwards.
+	// It is read by Create on every signing request, concurrently with admin requests reaching Reset,
+	// and there is no lock: a write here would be a concurrent map access, which the Go runtime treats
+	// as a fatal error that recover cannot intercept, taking the whole signer down. Keep it read-only.
 	digitalSignatureManagerMap map[ModuleKind]signaturemanager.DigitalSignatureManager
 }
 
