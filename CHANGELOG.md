@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
 
+### Security
+- Refuse an application-scoped caller creating or editing their own user record, closing a separation-of-duties bypass where an application-admin could assign themselves the `transaction-signer` role and then sign with any of the application's keys (#12).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed

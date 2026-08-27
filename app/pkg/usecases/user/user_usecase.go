@@ -73,6 +73,9 @@ func (u *DefaultUserUseCase) CreateUser(ctx context.Context, input CreateUserInp
 	if validateErr := u.validateApplicationScopedRoles(ctx, input.Roles); validateErr != nil {
 		return nil, validateErr
 	}
+	if selfErr := validateNotSelfService(input.Caller, user.ApplicationStandardID); selfErr != nil {
+		return nil, selfErr
+	}
 
 	user.InternalResourceID = entities.NewInternalResourceID()
 	addUserToApplicationDependencyErr := u.addUserToApplicationDependency(ctx, user)
@@ -92,6 +95,30 @@ func (u *DefaultUserUseCase) CreateUser(ctx context.Context, input CreateUserInp
 	return &CreateUserOutput{
 		User: *addedUser,
 	}, nil
+}
+
+// validateNotSelfService refuses an application-scoped caller acting on their own user record.
+//
+// validateApplicationScopedRoles keeps an application-admin from assigning an admin-scoped role, but
+// application-admin and transaction-signer are both application-scoped, so it cannot tell them apart.
+// Without this check an application-admin could add transaction-signer to their own user and then bind
+// any of the application's keys to themselves, collapsing the separation of duties between the
+// principal who hands out signing rights and the principal who uses them.
+//
+// The guard is deliberately broader than "do not change your own roles": it refuses the whole
+// self-directed write. There is no self-service endpoint in this API, so nothing legitimate is lost,
+// and it avoids reading the stored roles to compare them, which would open a window between the read
+// and the write.
+//
+// A signer-admin is unaffected. They reach application routes without an application header, so the
+// caller is not application-scoped and administration works exactly as before.
+func validateNotSelfService(caller Caller, target entities.ApplicationStandardID) error {
+	if !caller.IsApplicationScoped() || !caller.IsSelf(target) {
+		return nil
+	}
+	return errors.InvalidArgument().
+		WithMessage("user [%s] attempted to modify their own record in application [%s]", caller.ID, caller.ApplicationID).
+		SetHumanReadableMessage("a user cannot create or modify their own user record")
 }
 
 // validateApplicationScopedRoles ensures every requested role is supported and assignable to an
@@ -210,6 +237,9 @@ func (u *DefaultUserUseCase) EditUser(ctx context.Context, input EditUserInput) 
 
 	if validateErr := u.validateApplicationScopedRoles(ctx, input.Roles); validateErr != nil {
 		return nil, validateErr
+	}
+	if selfErr := validateNotSelfService(input.Caller, input.ApplicationStandardID); selfErr != nil {
+		return nil, selfErr
 	}
 
 	user := User{

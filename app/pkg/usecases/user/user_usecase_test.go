@@ -1314,3 +1314,189 @@ func TestDefaultUseCase_AddUserAccounts_AKVEmptyConfig(t *testing.T) {
 		require.Nil(t, output)
 	})
 }
+
+// TestDefaultUseCase_SelfServiceGuard covers the separation of duties between application-admin, who
+// hands out signing rights, and transaction-signer, who uses them. Both roles are application-scoped,
+// so validateApplicationScopedRoles cannot tell them apart; the caller-relative guard is what stops an
+// application-admin granting themselves the signing role and then binding the application's keys to
+// their own user.
+func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
+	ctx := context.Background()
+
+	applicationID := uuid.NewString()
+	description := "application for self-service guard test"
+	createdApplication, createApplicationErr := app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{
+		ID:          &applicationID,
+		ChainID:     *chainID,
+		Description: &description,
+	})
+	require.NoError(t, createApplicationErr)
+	require.NotNil(t, createdApplication)
+
+	// adminUser stands in for the application-admin doing the escalating.
+	adminUserID := uuid.NewString()
+	createdAdmin, createErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+		ID:            &adminUserID,
+		ApplicationID: createdApplication.ID,
+		Roles:         []string{"application-admin"},
+	})
+	require.NoError(t, createErr)
+	require.NotNil(t, createdAdmin)
+
+	selfCaller := user.Caller{ID: adminUserID, ApplicationID: createdApplication.ID}
+
+	t.Run("failure: application-admin cannot grant themselves transaction-signer", func(t *testing.T) {
+		output, err := app.UserUseCase.EditUser(ctx, user.EditUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            adminUserID,
+				ApplicationID: createdApplication.ID,
+			},
+			ResourceVersion: createdAdmin.ResourceVersion,
+			Roles:           []string{"application-admin", "transaction-signer"},
+			Caller:          selfCaller,
+		})
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("failure: the guard is on the record, not just on the roles", func(t *testing.T) {
+		// Editing your own record with the roles you already hold is refused too. The guard covers the
+		// whole self-directed write so it never has to read the stored roles back to compare them.
+		newDescription := "self-service description change"
+		output, err := app.UserUseCase.EditUser(ctx, user.EditUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            adminUserID,
+				ApplicationID: createdApplication.ID,
+			},
+			ResourceVersion: createdAdmin.ResourceVersion,
+			Roles:           []string{"application-admin"},
+			Description:     &newDescription,
+			Caller:          selfCaller,
+		})
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("failure: application-admin cannot create a user under their own id", func(t *testing.T) {
+		output, err := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			ID:            &adminUserID,
+			ApplicationID: createdApplication.ID,
+			Roles:         []string{"transaction-signer"},
+			Caller:        selfCaller,
+		})
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("success: application-admin can still onboard a different signer", func(t *testing.T) {
+		// Onboarding signers is the application-admin's job. The guard must not block it, otherwise the
+		// fix would be an overcorrection that breaks the documented workflow.
+		signerID := uuid.NewString()
+		output, err := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			ID:            &signerID,
+			ApplicationID: createdApplication.ID,
+			Roles:         []string{"transaction-signer"},
+			Caller:        selfCaller,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, output)
+		require.Contains(t, output.Roles, "transaction-signer")
+
+		edited, editErr := app.UserUseCase.EditUser(ctx, user.EditUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            signerID,
+				ApplicationID: createdApplication.ID,
+			},
+			ResourceVersion: output.ResourceVersion,
+			Roles:           []string{"application-admin", "transaction-signer"},
+			Caller:          selfCaller,
+		})
+		require.NoError(t, editErr)
+		require.NotNil(t, edited)
+	})
+
+	t.Run("success: an admin caller is unaffected", func(t *testing.T) {
+		// A signer-admin reaches application routes without an application header, so the caller is not
+		// application-scoped and administration behaves exactly as before, including on their own id.
+		current, getErr := app.UserUseCase.GetUser(ctx, user.GetUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            adminUserID,
+				ApplicationID: createdApplication.ID,
+			},
+		})
+		require.NoError(t, getErr)
+
+		output, err := app.UserUseCase.EditUser(ctx, user.EditUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            adminUserID,
+				ApplicationID: createdApplication.ID,
+			},
+			ResourceVersion: current.ResourceVersion,
+			Roles:           []string{"application-admin", "transaction-signer"},
+			Caller:          user.Caller{ID: "some-signer-admin"},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, output)
+		require.Contains(t, output.Roles, "transaction-signer")
+	})
+
+	t.Run("success: editing the same user id in a different application is not self", func(t *testing.T) {
+		// The exploit in the issue uses the Edit path, so pin the per-application comparison there too
+		// and not only on Create: a future divergence in how the target is built would go unnoticed.
+		otherApplicationID := uuid.NewString()
+		otherDescription := "other application for the edit path"
+		otherApplication, otherErr := app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{
+			ID:          &otherApplicationID,
+			ChainID:     *chainID,
+			Description: &otherDescription,
+		})
+		require.NoError(t, otherErr)
+
+		targetID := uuid.NewString()
+		created, createTargetErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			ID:            &targetID,
+			ApplicationID: otherApplication.ID,
+			Roles:         []string{"transaction-signer"},
+		})
+		require.NoError(t, createTargetErr)
+
+		output, err := app.UserUseCase.EditUser(ctx, user.EditUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            targetID,
+				ApplicationID: otherApplication.ID,
+			},
+			ResourceVersion: created.ResourceVersion,
+			Roles:           []string{"application-admin"},
+			// Same user id, different application: not the caller's own record.
+			Caller: user.Caller{ID: targetID, ApplicationID: createdApplication.ID},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, output)
+	})
+
+	t.Run("success: same user id in a different application is not self", func(t *testing.T) {
+		// Identifiers are only unique within an application, so the guard must compare the application
+		// too. A caller with a colliding id in another application must not be treated as the target.
+		otherApplicationID := uuid.NewString()
+		otherDescription := "other application"
+		otherApplication, otherErr := app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{
+			ID:          &otherApplicationID,
+			ChainID:     *chainID,
+			Description: &otherDescription,
+		})
+		require.NoError(t, otherErr)
+
+		targetID := uuid.NewString()
+		output, err := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			ID:            &targetID,
+			ApplicationID: otherApplication.ID,
+			Roles:         []string{"transaction-signer"},
+			Caller:        user.Caller{ID: targetID, ApplicationID: createdApplication.ID},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, output)
+	})
+}
