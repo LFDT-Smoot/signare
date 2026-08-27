@@ -14,6 +14,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip191"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
 )
 
@@ -37,6 +38,8 @@ type HSMConnector interface {
 	Reset(ctx context.Context, input ResetInput) (*ResetOutput, error)
 	// SignTypedData signs EIP-712 structured typed data and returns the signature.
 	SignTypedData(ctx context.Context, input SignTypedDataInput) (*SignTypedDataOutput, error)
+	// PersonalSign signs an arbitrary message under the EIP-191 personal message prefix and returns the signature.
+	PersonalSign(ctx context.Context, input PersonalSignInput) (*PersonalSignOutput, error)
 }
 
 const (
@@ -499,6 +502,47 @@ func (d DefaultUseCase) SignTypedData(ctx context.Context, input SignTypedDataIn
 	return &SignTypedDataOutput{
 		SignedData: ethereumSignature.ToHex(),
 		TypedHash:  hex.EncodeToString(typedDataHash),
+	}, nil
+}
+
+// PersonalSign signs a message under the EIP-191 personal message prefix, the format Sign-In With
+// Ethereum verifiers expect.
+//
+// Unlike SignTypedData there is no chain id: EIP-191 carries no chain binding, and the recovery byte
+// the shared sign helper produces is plain 27/28 rather than the EIP-155 form. Binding a personal
+// signature to a chain is the verifier's job, via the message text.
+func (d DefaultUseCase) PersonalSign(ctx context.Context, input PersonalSignInput) (*PersonalSignOutput, error) {
+	_, err := govalidator.ValidateStruct(input)
+	if err != nil {
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
+	}
+
+	if input.Address.IsEmpty() {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("field 'address' cannot be empty")
+	}
+	if len(input.Message) == 0 {
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("field 'message' cannot be empty")
+	}
+
+	tracer := logger.NewTracer(ctx)
+	tracer.AddProperty("slot", input.Slot)
+	tracer.AddProperty("moduleKind", input.ModuleKind)
+	tracer.AddProperty("operation", "PersonalSign")
+
+	digest, digestErr := eip191.HashPersonalMessage(input.Message)
+	if digestErr != nil {
+		return nil, errors.InternalFromErr(digestErr).WithMessage("error hashing personal message: %s", digestErr.Error())
+	}
+
+	ethereumSignature, signErr := d.sign(ctx, input.SlotConnectionData, input.Address, digest, tracer)
+	if signErr != nil {
+		// Returned as-is for the same reason as SignTypedData: sign's error already carries the right
+		// classification, and re-wrapping here would flatten it to Internal.
+		return nil, signErr
+	}
+	return &PersonalSignOutput{
+		SignedData: ethereumSignature.ToHex(),
+		Digest:     hex.EncodeToString(digest),
 	}, nil
 }
 

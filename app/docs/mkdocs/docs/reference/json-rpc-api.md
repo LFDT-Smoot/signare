@@ -90,6 +90,57 @@ If the `typedData` `domain` declares a `chainId`, it must equal the application'
     {"jsonrpc":"2.0","id":1,"result":"0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c"}
     ```
 
+### personal_sign
+
+Calculates an Ethereum specific signature over an arbitrary message under the EIP-191 personal message
+prefix: `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))`. This is the
+signature format Sign-In With Ethereum (EIP-4361) verifiers expect, so it allows an identity whose key
+is custodied only in the HSM to authenticate.
+
+Unlike `eth_signTransaction` and `eth_signTypedData` there is no chain binding: EIP-191 carries no
+chain id, and the recovery byte is the plain 27/28 form rather than the EIP-155 one. Binding a personal
+signature to a chain is the verifier's job, normally through the message text.
+
+> **Parameter shape.** Signare takes a **named object**, consistent with its other signing methods,
+> rather than the positional `[message, address]` form wallets use for `personal_sign`. Naming the
+> fields removes the argument-order confusion between `personal_sign` and `eth_sign`, which take their
+> two arguments in opposite orders.
+
+* Request:
+
+  Input parameters:
+
+  | Name    | Type   | Required | Notes                                                       |
+  |---------|--------|----------|-------------------------------------------------------------|
+  | address | string | ✔        | The account that signs. Must be authorized for the caller.  |
+  | message | string | ✔        | The message to sign, as a **`0x`-prefixed** hex string.     |
+
+  The `0x` prefix is required rather than optional, so that a plain-text message which happens to be
+  valid hex cannot be silently decoded into different bytes than the caller intended. An empty message
+  is rejected.
+
+  Example, signing the message `Hello` (`0x48656c6c6f`):
+    ```
+    curl -X POST -H "X-Auth-UserId: <user>" -H "X-Auth-ApplicationId: <application>" --data '{"jsonrpc":"2.0","method":"personal_sign","params":[{"address":"0xcc753268336A33e56Da47500D9C786077CC24311","message":"0x48656c6c6f"}], "id":1}' http://localhost:4545
+    ```
+
+* Success response:
+
+  The hex-encoded 65-byte `r || s || v` signature, with `v` being 27 or 28.
+
+    ```
+    {"jsonrpc":"2.0","id":1,"result":"0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c"}
+    ```
+
+* Error responses:
+
+  | Code   | Message             |
+  |--------|---------------------|
+  | -32602 | Invalid params      |
+  | -32603 | Internal error      |
+  | -32604 | Bad gateway         |
+  | -32099 | Unauthorized        |
+
 ## Custom RPC methods
 
 ### eth_generateAccount

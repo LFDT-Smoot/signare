@@ -23,6 +23,7 @@ import (
 var accountSigningMethods = map[string]bool{
 	rpcinfra.SignTransactionMethod: false, // eth_signTransaction signs with `from`
 	rpcinfra.SignTypedDataMethod:   true,  // eth_signTypedData signs with `address`
+	rpcinfra.PersonalSignMethod:    true,  // personal_sign signs with `address`
 }
 
 // accountSigningField reports whether the action must pass per-account authorization and, if so,

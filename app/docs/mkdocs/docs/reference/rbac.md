@@ -91,6 +91,7 @@ actions:
   - rpc.method.eth_accounts
   - rpc.method.eth_signTransaction
   - rpc.method.eth_signTypedData
+  - rpc.method.personal_sign
 ```
 
 ### How to edit permissions
@@ -99,10 +100,11 @@ Move over to ``/app/include/rbac`` and by editing the file ``permissions.yaml`` 
 
 ```YAML
   - id: allow-user-transaction-sign-actions
-    description: Grants access to sign transactions and EIP-712 typed data
+    description: Grants access to sign transactions, EIP-712 typed data and EIP-191 personal messages
     actions:
       - rpc.method.eth_signTransaction
       - rpc.method.eth_signTypedData
+      - rpc.method.personal_sign
 ```
 
 ### How to edit roles
@@ -136,11 +138,11 @@ The default RBAC configuration consists of the following roles and allowed actio
 | Name                   | User type | REST API resources that can be interacted with        | Allowed RPC API methods                              |
 |------------------------|-----------|-------------------------------------------------------|------------------------------------------------------|
 | **signer-admin**       | Admin     | Admins, Users, Accounts, Applications, Modules, Slots | ✗                                                    |
-| **application-admin**  | User      | Users, Accounts                                       | eth_generateAccount, eth_removeAccount, eth_accounts |
-| **transaction-signer** | User      | ✗                                                     | eth_signTransaction, eth_signTypedData               |
+| **application-admin**  | User      | Users, Accounts                                       | eth_generateAccount, eth_importAccount, eth_removeAccount, eth_accounts |
+| **transaction-signer** | User      | ✗                                                     | eth_signTransaction, eth_signTypedData, personal_sign |
 
 ### Transaction signing
 
-One special case in our RBAC model is the access model configured for the account signing RPC methods, ``eth_signTransaction`` and ``eth_signTypedData``. 
+One special case in our RBAC model is the access model configured for the account signing RPC methods, ``eth_signTransaction``, ``eth_signTypedData`` and ``personal_sign``. 
 Beyond the role-based permission to call the method, the signing account must be enabled in the accounts' list of the user defined in the HTTP header of the request. 
-The signing account is taken from the `from` field for ``eth_signTransaction`` and from the `address` field for ``eth_signTypedData``.
+The signing account is taken from the `from` field for ``eth_signTransaction`` and from the `address` field for ``eth_signTypedData`` and ``personal_sign``.

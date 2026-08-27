@@ -2,17 +2,21 @@ package hsmconnector_test
 
 import (
 	"context"
+	"encoding/hex"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip191"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 	"github.com/lfdt-smoot/signare/app/test/signaturemanagertesthelper"
 
+	btcececdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/stretchr/testify/require"
 )
 
@@ -225,4 +229,102 @@ func etherMailTypedData() eip712.TypedData {
 			"contents": "Hello, Bob!",
 		},
 	}
+}
+
+// TestDefaultUseCase_PersonalSign_RecoversSigner is the acceptance criterion from the issue: a
+// personal_sign signature over an arbitrary message must EC-recover to the signing account, which is
+// exactly what a SIWE verifier does. Signing and then recovering is the only check that proves the
+// digest, the recovery byte and the serialisation all agree; asserting the output is non-empty would
+// pass with a wrong prefix.
+func TestDefaultUseCase_PersonalSign_RecoversSigner(t *testing.T) {
+	expected := address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress)
+	message := []byte("example.com wants you to sign in with your Ethereum account")
+
+	out, err := app.HSMConnector.PersonalSign(ctx, hsmconnector.PersonalSignInput{
+		SlotConnectionData: hsmconnector.SlotConnectionData{
+			Slot:       slotID,
+			Pin:        slotPin,
+			ModuleKind: hsmconnector.SoftHSMModuleKind,
+		},
+		Address: expected,
+		Message: message,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, out)
+
+	digest, digestErr := eip191.HashPersonalMessage(message)
+	require.NoError(t, digestErr)
+	require.Equal(t, hex.EncodeToString(digest), out.Digest, "the reported digest must be the one that was signed")
+
+	signature, decodeErr := hex.DecodeString(strings.TrimPrefix(out.SignedData, "0x"))
+	require.NoError(t, decodeErr)
+	require.Len(t, signature, 65, "SIWE verifiers expect a 65-byte r||s||v signature")
+
+	v := signature[64]
+	require.Contains(t, []byte{27, 28}, v, "EIP-191 signatures carry a plain 27/28 recovery byte, not the EIP-155 form")
+
+	// btcec's RecoverCompact takes v||r||s, while the wire format is r||s||v.
+	compact := make([]byte, 65)
+	compact[0] = v
+	copy(compact[1:], signature[:64])
+
+	publicKey, _, recoverErr := btcececdsa.RecoverCompact(compact, digest)
+	require.NoError(t, recoverErr)
+	recovered, deriveErr := signaturemanager.DeriveAddressFromPublicKey(publicKey.SerializeUncompressed())
+	require.NoError(t, deriveErr)
+	require.Equal(t, expected.String(), recovered.String())
+}
+
+// A signature over a different message must not recover to the signer, which pins that the message
+// bytes actually reach the digest rather than being ignored.
+func TestDefaultUseCase_PersonalSign_MessageIsBoundToTheSignature(t *testing.T) {
+	signer := address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress)
+	input := func(message []byte) hsmconnector.PersonalSignInput {
+		return hsmconnector.PersonalSignInput{
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				Pin:        slotPin,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			Address: signer,
+			Message: message,
+		}
+	}
+
+	first, err := app.HSMConnector.PersonalSign(ctx, input([]byte("message one")))
+	require.NoError(t, err)
+	second, err := app.HSMConnector.PersonalSign(ctx, input([]byte("message two")))
+	require.NoError(t, err)
+
+	require.NotEqual(t, first.Digest, second.Digest)
+	require.NotEqual(t, first.SignedData, second.SignedData)
+}
+
+func TestDefaultUseCase_PersonalSign_RejectsEmptyMessage(t *testing.T) {
+	out, err := app.HSMConnector.PersonalSign(ctx, hsmconnector.PersonalSignInput{
+		SlotConnectionData: hsmconnector.SlotConnectionData{
+			Slot:       slotID,
+			Pin:        slotPin,
+			ModuleKind: hsmconnector.SoftHSMModuleKind,
+		},
+		Address: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+		Message: []byte{},
+	})
+	require.Error(t, err)
+	require.Nil(t, out)
+	require.True(t, errors.IsInvalidArgument(err))
+}
+
+func TestDefaultUseCase_PersonalSign_RejectsEmptyAddress(t *testing.T) {
+	out, err := app.HSMConnector.PersonalSign(ctx, hsmconnector.PersonalSignInput{
+		SlotConnectionData: hsmconnector.SlotConnectionData{
+			Slot:       slotID,
+			Pin:        slotPin,
+			ModuleKind: hsmconnector.SoftHSMModuleKind,
+		},
+		Message: []byte("hello"),
+	})
+	require.Error(t, err)
+	require.Nil(t, out)
+	require.True(t, errors.IsInvalidArgument(err))
 }

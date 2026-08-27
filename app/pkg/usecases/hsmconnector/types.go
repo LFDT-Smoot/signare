@@ -210,6 +210,29 @@ type SignTypedDataOutput struct {
 	TypedHash string
 }
 
+// PersonalSignInput for EIP-191 personal message signing requests.
+type PersonalSignInput struct {
+	// SlotConnectionData configuration to connect to a slot.
+	SlotConnectionData
+	// Address of the account that will sign the message.
+	Address address.Address `valid:"address"`
+	// Message is the raw message to sign, already decoded from its hex transport encoding. It is signed
+	// as opaque bytes under the EIP-191 prefix and is never interpreted as text.
+	// Skipped by govalidator: there is no meaningful structural constraint on arbitrary bytes, and
+	// PersonalSign rejects an empty message explicitly.
+	Message []byte `valid:"-"`
+}
+
+// PersonalSignOutput for EIP-191 personal message signing responses.
+type PersonalSignOutput struct {
+	// SignedData is the hex-encoded 65-byte [R || S || V] signature over the EIP-191 digest, signed with
+	// the private key of the Ethereum account corresponding to the given address.
+	SignedData string
+	// Digest is the hex-encoded EIP-191 digest that was signed, returned so a caller can verify the
+	// signature without reconstructing the prefix themselves.
+	Digest string
+}
+
 // CloseAllInput input to close all the signature manager resources.
 type CloseAllInput struct {
 }

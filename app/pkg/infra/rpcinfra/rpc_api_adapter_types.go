@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/eip712"
@@ -467,6 +468,69 @@ func (p *SignTypedDataRequestParams) SetParamsFrom(params []any) error {
 		return errors.New("a single object is expected")
 	}
 	return errors.New("could not decode eth_signTypedData params; expected a single object with [address] and [typedData]")
+}
+
+// PersonalSignRequestParams request definition for personal_sign.
+//
+// The shape is a named object, matching eth_signTransaction and eth_signTypedData, rather than the
+// positional [message, address] form wallets use for personal_sign. Signare's client is a gateway
+// rather than a wallet, and naming the fields removes the argument-order confusion between
+// personal_sign and eth_sign, which take their two arguments in opposite orders.
+type PersonalSignRequestParams struct {
+	// ApplicationID performing the signature.
+	ApplicationID string
+	// Address of the account that will sign the message.
+	Address string `json:"address"`
+	// Message is the 0x-prefixed hex encoding of the raw bytes to sign.
+	Message string `json:"message"`
+}
+
+func (p *PersonalSignRequestParams) SetParamsFrom(params []any) error {
+	if len(params) != 1 {
+		return fmt.Errorf("only one object is expected")
+	}
+	paramMap, ok := params[0].(map[string]any)
+	if !ok {
+		return errors.New("a single object is expected")
+	}
+	addressParam, ok := paramMap["address"]
+	if !ok {
+		return errors.New("missing required field [address]")
+	}
+	addressValue, ok := addressParam.(string)
+	if !ok {
+		return errors.New("[address] must be of type string")
+	}
+	messageParam, ok := paramMap["message"]
+	if !ok {
+		return errors.New("missing required field [message]")
+	}
+	messageValue, ok := messageParam.(string)
+	if !ok {
+		return errors.New("[message] must be of type string")
+	}
+	p.Address = addressValue
+	p.Message = messageValue
+	return nil
+}
+
+func (p *PersonalSignRequestParams) ValidateParams() error {
+	if len(p.Address) == 0 {
+		return errors.New("[address] cannot be nil")
+	}
+	if len(p.Message) == 0 {
+		return errors.New("[message] cannot be nil")
+	}
+	// The 0x prefix is required rather than optional. entities.NewHexBytesFromString accepts input with
+	// or without it, which would make a plain-text message that happens to be valid hex ("cafe") decode
+	// to bytes instead of being rejected, and the caller would sign something they did not intend.
+	if !strings.HasPrefix(p.Message, "0x") {
+		return errors.New("[message] must be a 0x-prefixed hex string")
+	}
+	if len(p.Message) == 2 {
+		return errors.New("[message] cannot be empty")
+	}
+	return nil
 }
 
 func (p *SignTypedDataRequestParams) ValidateParams() error {
