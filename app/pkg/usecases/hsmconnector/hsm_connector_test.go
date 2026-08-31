@@ -1581,6 +1581,32 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		})
 	}
 
+	// Regression guard: with no gas pricing field to key off, these requests used to fall through to
+	// legacy and be signed with the blob or authorization field silently dropped from the payload.
+	for _, unsupported := range unsupportedWithAccessList {
+		t.Run("failure: unsupported transaction type ("+unsupported.name+" alone)", func(t *testing.T) {
+			signTxInput := hsmconnector.SignTxInput{
+				ChainID: *chainIDHex,
+				SlotConnectionData: hsmconnector.SlotConnectionData{
+					Slot:       slotID,
+					Pin:        slotPin,
+					ModuleKind: hsmconnector.SoftHSMModuleKind,
+				},
+				From:  address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+				To:    &toAddress,
+				Nonce: entities.HexUInt64{UInt64: nonce},
+			}
+			unsupported.apply(&signTxInput)
+
+			signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+			require.Error(t, err)
+			require.Nil(t, signTxOutput)
+			useCaseErr, ok := errors.CastAsUseCaseError(err)
+			require.True(t, ok)
+			require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		})
+	}
+
 	t.Run("failure: ambiguous transaction type (GasPrice and MaxFeePerGas are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		maxFeePerGas := big.NewInt(100)
