@@ -1,32 +1,47 @@
 # Dependabot configuration
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
 #
-# Each ecosystem groups ALL of its updates into a single PR per run. Both regular
-# version updates and security fixes are grouped, so Dependabot opens at most one
-# PR per ecosystem (security updates are otherwise opened individually and
-# ungrouped by default, which is how a backlog of advisories turns into a wall of
-# single-dependency PRs). Every grouped PR lands on its own Dependabot branch.
+# There are TWO entries per ecosystem and the split is deliberate.
 #
-# Every ecosystem also sets a 30-day `cooldown`: a newly published version is not
-# proposed until it has been on the registry for 30 days, which is the window in
-# which a compromised or typosquatted release is usually yanked. `cooldown`
-# applies to version updates ONLY, so security updates driven by a published
-# advisory are never delayed by it. A dependency still inside its cooldown is
-# simply left out of that run's group PR and picked up once it becomes eligible.
+# Dependabot always reads THIS file from the default branch, and it always raises
+# security-update PRs against the default branch. An entry that sets
+# `target-branch` is documented to stop applying to security updates altogether:
+# "Options defined for this `package-ecosystem` no longer apply to security updates
+# because security updates always use the default branch for the repository." A
+# single `target-branch: develop` entry per ecosystem would therefore silently lose
+# its security grouping, its commit prefix and its ignores for security PRs. Hence:
 #
-# `directories` (unlike `directory`) supports globbing, so `**/*` covers every
-# manifest without enumerating them. At the time of writing that resolves to
-# /app, /deployment and /app/tools/rbac-validator for gomod, to /app and
-# /app/docs for docker, and to the codegen plugin for maven.
+#   - a version-update entry with `target-branch: develop`, so routine bumps land on
+#     develop rather than on the protected release branch;
+#   - a security-update entry with no `target-branch` and
+#     `open-pull-requests-limit: 0`, which is documented as disabling version updates
+#     for that entry, leaving it to carry the security group only.
 #
-# PRs are opened against develop rather than main, since main is the protected
-# release branch. Note that Dependabot always reads THIS file from the default
-# branch; `target-branch` only redirects where the PRs are opened.
+# Grouping is the point of the file. Dependabot opens security-update PRs
+# individually and ungrouped by default, which is how a backlog of advisories turns
+# into a wall of single-dependency PRs. Every group uses `patterns: ["*"]`, so a run
+# produces one PR per ecosystem per update kind, spanning all matched directories.
+#
+# `open-pull-requests-limit: 1` caps VERSION-update PRs only: security-update PRs are
+# not subject to the limit and do not count toward it.
+#
+# `cooldown` holds a newly published version back for 30 days, which is the window in
+# which a compromised or typosquatted release is usually yanked. It applies to version
+# updates ONLY, so it is set on the version-update entries alone and an advisory-driven
+# fix is never delayed by it. A dependency still inside its cooldown is left out of
+# that run's group and picked up once it becomes eligible. `default-days` covers every
+# bump type, so the per-semver keys are only worth setting if they ever differ.
+#
+# `directories` (unlike `directory`) supports globbing, so `**/*` covers every manifest
+# without enumerating them. It matches subdirectories only, NOT the repository root, so
+# a manifest added at the root would have to be listed explicitly. At the time of
+# writing `**/*` resolves to /app, /deployment and /app/tools/rbac-validator for gomod,
+# and to the codegen plugin for maven.
 
 version: 2
 
 updates:
-  # ---- Go modules ----
+  # ---- Go modules: version updates ----
   - package-ecosystem: gomod
     directories:
       - "**/*"
@@ -39,18 +54,30 @@ updates:
       include: scope
     cooldown:
       default-days: 30
-      semver-major-days: 30
-      semver-minor-days: 30
-      semver-patch-days: 30
     groups:
       gomod:
         applies-to: version-updates
         patterns: ["*"]
+
+  # ---- Go modules: security updates ----
+  # No `target-branch`, so this entry applies to security updates and files against
+  # the default branch. `open-pull-requests-limit: 0` disables its version updates,
+  # which the entry above already covers.
+  - package-ecosystem: gomod
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
       gomod-security:
         applies-to: security-updates
         patterns: ["*"]
 
-  # ---- Maven (OpenAPI generator plugin) ----
+  # ---- Maven (OpenAPI generator plugin): version updates ----
   - package-ecosystem: maven
     directories:
       - "**/*"
@@ -73,14 +100,39 @@ updates:
       maven:
         applies-to: version-updates
         patterns: ["*"]
+
+  # ---- Maven (OpenAPI generator plugin): security updates ----
+  - package-ecosystem: maven
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore
+      include: scope
+    ignore:
+      # Repeated here on purpose. An `ignore` entry suppresses update PRs of both
+      # kinds, and an automated security bump of openapi-generator would move the
+      # pom while leaving the committed .sha256 stale, breaking the fetch step. The
+      # Dependabot ALERT is unaffected, since alerts come from repository settings
+      # and not from this file, so an advisory is still visible and the response is
+      # the manual bump documented in http-infra-openapi-generator/README.md.
+      - dependency-name: "org.openapitools:openapi-generator"
+    groups:
       maven-security:
         applies-to: security-updates
         patterns: ["*"]
 
-  # ---- Docker base images ----
-  # The golang build base in app/Dockerfile is pinned by digest and must stay in
-  # lockstep with the `go` directive in the go.mod files, so a bump here needs a
-  # matching go.mod change in the same review.
+  # ---- Docker base images: version updates only ----
+  # Docker is version-updates only: container images are not covered by the GitHub
+  # Advisory Database, so a docker security-update entry would never match anything.
+  # Note also that the golang build base in app/Dockerfile is declared as
+  # `ARG BUILD_BASE_IMAGE` and consumed as `FROM $BUILD_BASE_IMAGE`. Dependabot's
+  # docker parser does not expand ARG values before matching the image on the FROM
+  # line, so that base is invisible to it and stays a manual bump, kept in lockstep
+  # with the `go` directive as the Dockerfile requires. The only image Dependabot
+  # sees here is the mkdocs base in app/docs/Dockerfile.
   - package-ecosystem: docker
     directories:
       - "**/*"
@@ -97,13 +149,11 @@ updates:
       docker:
         applies-to: version-updates
         patterns: ["*"]
-      docker-security:
-        applies-to: security-updates
-        patterns: ["*"]
 
-  # ---- GitHub Actions ----
-  # No-op until workflows are added under .github/workflows; kept here so action
-  # pins are covered automatically once CI lands.
+  # ---- GitHub Actions: version updates ----
+  # No workflows exist yet, so both actions entries are future-proofing. Until a
+  # workflow lands under .github/workflows the weekly run has no files to fetch and
+  # shows as an errored job in the Dependabot logs rather than a clean skip.
   - package-ecosystem: github-actions
     directory: "/"
     target-branch: develop
@@ -119,6 +169,17 @@ updates:
       github-actions:
         applies-to: version-updates
         patterns: ["*"]
+
+  # ---- GitHub Actions: security updates ----
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
       github-actions-security:
         applies-to: security-updates
         patterns: ["*"]
