@@ -241,19 +241,30 @@ func (d *DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTx
 		tracer.AddProperty("to", input.To.String())
 	}
 
+	var output *SignTxOutput
 	switch txType {
 	case entities.TransactionType0Legacy:
-		return d.signLegacyTx(ctx, input, tracer)
+		output, err = d.signLegacyTx(ctx, input, tracer)
 	case entities.TransactionType1EIP2930:
-		return d.signEIP2930Tx(ctx, input, tracer)
+		output, err = d.signEIP2930Tx(ctx, input, tracer)
 	case entities.TransactionType2EIP1559:
-		return d.signEIP1559Tx(ctx, input, tracer)
+		output, err = d.signEIP1559Tx(ctx, input, tracer)
 	default:
 		return nil, errors.InvalidArgument().SetHumanReadableMessage("Not supported transaction type")
 	}
+	if err != nil {
+		return nil, err
+	}
 
+	// Labelled here rather than in each signer so the reported type is by construction the one that
+	// selected the signer.
+	output.TxType = txType
+
+	return output, nil
 }
 
+// gasOrDefault returns the requested gas limit, defaulting to the value eth_signTransaction defines
+// when the request omits it: https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_signtransaction
 func gasOrDefault(gas *entities.HexUInt64) entities.HexUInt64 {
 	if gas != nil {
 		return *gas
@@ -357,8 +368,8 @@ func (d *DefaultUseCase) signEIP2930Tx(ctx context.Context, input SignTxInput, t
 	transaction.Signature = signature
 
 	return &SignTxOutput{
-		SignedTx:  signedTx,
-		EIP2930Tx: &transaction,
+		SignedTx:    signedTx,
+		Transaction: transaction,
 	}, nil
 }
 
@@ -390,8 +401,8 @@ func (d *DefaultUseCase) signEIP1559Tx(ctx context.Context, input SignTxInput, t
 	transaction.Signature = signature
 
 	return &SignTxOutput{
-		SignedTx:  signedTx,
-		EIP1559Tx: &transaction,
+		SignedTx:    signedTx,
+		Transaction: transaction,
 	}, nil
 }
 

@@ -178,16 +178,27 @@ type SignTxInput struct {
 	AuthorizationList AuthorizationList `valid:"optional"`
 }
 
+// SignedTransaction is a transaction that has been signed. Hash returns the digest the signature
+// commits to and RLPEncode returns the bytes that go on the wire, so RLPEncode always re-derives
+// SignTxOutput.SignedTx. Every supported transaction type implements it, which is what lets
+// SignTxOutput carry one transaction field instead of one field per type.
+type SignedTransaction interface {
+	// Hash returns the digest the transaction's signature commits to.
+	Hash() (*entities.HexBytes, error)
+	// RLPEncode returns the signed transaction as it is broadcast.
+	RLPEncode() (*entities.HexBytes, error)
+}
+
 // SignTxOutput for transaction signing responses.
 type SignTxOutput struct {
 	// SignedTx an encrypted transaction with the corresponding private key of the Ethereum account.
 	SignedTx string
-	// Transaction represents a legacy Ethereum transaction. Populated for legacy (Type 0) transactions.
-	Transaction EthereumTransaction
-	// EIP2930Tx represents an EIP-2930 Ethereum transaction. Populated for Type 1 transactions.
-	EIP2930Tx *EIP2930Transaction
-	// EIP1559Tx represents an EIP-1559 Ethereum transaction. Populated for Type 2 transactions.
-	EIP1559Tx *EIP1559Transaction
+	// TxType is the transaction type that was signed, one of the entities.TransactionType values.
+	// It identifies the concrete type held by Transaction.
+	TxType string
+	// Transaction is the signed transaction. Its concrete type follows TxType: EthereumTransaction
+	// for type 0, EIP2930Transaction for type 1 and EIP1559Transaction for type 2.
+	Transaction SignedTransaction
 }
 
 // SignTypedDataInput for types data signing requests.

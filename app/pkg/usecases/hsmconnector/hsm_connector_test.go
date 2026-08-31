@@ -257,6 +257,48 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 	})
 }
 
+// requireSignedTx asserts that the output reports the expected transaction type and that its
+// transaction re-encodes to exactly the bytes in SignedTx. That second assertion is the one that
+// matters: SignTx derives SignedTx from the envelope rather than from RLPEncode, so without it the
+// two routes could diverge and only the golden-vector fixtures would notice.
+func requireSignedTx(t *testing.T, out *hsmconnector.SignTxOutput, wantType string) hsmconnector.SignedTransaction {
+	t.Helper()
+	require.NotNil(t, out)
+	require.Equal(t, wantType, out.TxType)
+	require.NotNil(t, out.Transaction)
+	encoded, err := out.Transaction.RLPEncode()
+	require.NoError(t, err)
+	require.Equal(t, out.SignedTx, encoded.Encode())
+	return out.Transaction
+}
+
+// requireEIP2930 asserts the output holds a signed type-1 transaction and returns it.
+func requireEIP2930(t *testing.T, out *hsmconnector.SignTxOutput) hsmconnector.EIP2930Transaction {
+	t.Helper()
+	signed := requireSignedTx(t, out, entities.TransactionType1EIP2930)
+	tx, ok := signed.(hsmconnector.EIP2930Transaction)
+	require.Truef(t, ok, "expected an EIP2930Transaction, got %T", signed)
+	return tx
+}
+
+// requireEIP1559 asserts the output holds a signed type-2 transaction and returns it.
+func requireEIP1559(t *testing.T, out *hsmconnector.SignTxOutput) hsmconnector.EIP1559Transaction {
+	t.Helper()
+	signed := requireSignedTx(t, out, entities.TransactionType2EIP1559)
+	tx, ok := signed.(hsmconnector.EIP1559Transaction)
+	require.Truef(t, ok, "expected an EIP1559Transaction, got %T", signed)
+	return tx
+}
+
+// requireLegacy asserts the output holds a signed type-0 transaction and returns it.
+func requireLegacy(t *testing.T, out *hsmconnector.SignTxOutput) hsmconnector.EthereumTransaction {
+	t.Helper()
+	signed := requireSignedTx(t, out, entities.TransactionType0Legacy)
+	tx, ok := signed.(hsmconnector.EthereumTransaction)
+	require.Truef(t, ok, "expected an EthereumTransaction, got %T", signed)
+	return tx
+}
+
 func TestDefaultUseCase_SignTx(t *testing.T) {
 	toAddress := address.MustNewFromHexString("0xA4F666f1860D2aCbe49b342C87867754a21dE850")
 	gasPrice := big.NewInt(20)
@@ -399,7 +441,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
+		requireEIP1559(t, signTxOutput)
 		require.NotEmpty(t, signTxOutput.SignedTx)
 	})
 
@@ -443,8 +485,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Nil(t, signTxOutput.EIP1559Tx.To)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Nil(t, eip1559Tx.To)
 	})
 
 	t.Run("success: EIP-1559 transaction with default gas", func(t *testing.T) {
@@ -480,7 +522,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
+		requireEIP1559(t, signTxOutput)
 	})
 
 	t.Run("success: EIP-1559 transaction with nil value", func(t *testing.T) {
@@ -519,7 +561,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
+		requireEIP1559(t, signTxOutput)
 	})
 
 	t.Run("success: EIP-1559 transaction with empty access list", func(t *testing.T) {
@@ -564,8 +606,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Len(t, signTxOutput.EIP1559Tx.AccessList, 0)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Len(t, eip1559Tx.AccessList, 0)
 	})
 
 	t.Run("success: EIP-1559 transaction with populated access list", func(t *testing.T) {
@@ -621,8 +663,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Len(t, signTxOutput.EIP1559Tx.AccessList, 2)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Len(t, eip1559Tx.AccessList, 2)
 	})
 
 	t.Run("success: EIP-1559 output contains valid signature fields", func(t *testing.T) {
@@ -665,14 +707,14 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.NotNil(t, signTxOutput.EIP1559Tx.Signature)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.NotNil(t, eip1559Tx.Signature)
 		// YParity should be 0 or 1 for EIP-1559
-		yParity := signTxOutput.EIP1559Tx.Signature.YParity.Int64()
+		yParity := eip1559Tx.Signature.YParity.Int64()
 		require.True(t, yParity == 0 || yParity == 1, "YParity should be 0 or 1, got %d", yParity)
 		// R and S should be non-zero
-		require.NotZero(t, signTxOutput.EIP1559Tx.Signature.R.Sign())
-		require.NotZero(t, signTxOutput.EIP1559Tx.Signature.S.Sign())
+		require.NotZero(t, eip1559Tx.Signature.R.Sign())
+		require.NotZero(t, eip1559Tx.Signature.S.Sign())
 	})
 
 	t.Run("success: EIP-1559 output preserves input fields correctly", func(t *testing.T) {
@@ -715,13 +757,13 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Equal(t, signTxInput.From.String(), signTxOutput.EIP1559Tx.From.String())
-		require.Equal(t, signTxInput.To.String(), signTxOutput.EIP1559Tx.To.String())
-		require.Equal(t, entities.UInt64(5000), signTxOutput.EIP1559Tx.Gas.UInt64)
-		require.Equal(t, int64(100), signTxOutput.EIP1559Tx.MaxFeePerGas.Int64())
-		require.Equal(t, int64(10), signTxOutput.EIP1559Tx.MaxPriorityFeePerGas.Int64())
-		require.Equal(t, nonce, signTxOutput.EIP1559Tx.Nonce.UInt64)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Equal(t, signTxInput.From.String(), eip1559Tx.From.String())
+		require.Equal(t, signTxInput.To.String(), eip1559Tx.To.String())
+		require.Equal(t, entities.UInt64(5000), eip1559Tx.Gas.UInt64)
+		require.Equal(t, int64(100), eip1559Tx.MaxFeePerGas.Int64())
+		require.Equal(t, int64(10), eip1559Tx.MaxPriorityFeePerGas.Int64())
+		require.Equal(t, nonce, eip1559Tx.Nonce.UInt64)
 	})
 
 	t.Run("success: EIP-1559 signed tx has type 2 prefix", func(t *testing.T) {
@@ -832,8 +874,9 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
-		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.Transaction)
+		legacyTx := requireLegacy(t, signTxOutput)
+		// An omitted gasPrice is signed as legacy with a zero gasPrice, not rejected.
+		require.Equal(t, int64(0), legacyTx.GasPrice.BigInt().Int64())
 	})
 
 	t.Run("failure: partial EIP-1559 fields (only MaxFeePerGas)", func(t *testing.T) {
@@ -923,8 +966,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Len(t, signTxOutput.EIP1559Tx.AccessList, 0)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Len(t, eip1559Tx.AccessList, 0)
 		// EIP-1559 (Type 2) transactions must start with 0x02
 		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x02"))
 	})
@@ -962,8 +1005,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP2930Tx)
-		require.Len(t, signTxOutput.EIP2930Tx.AccessList, 0)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Len(t, eip2930Tx.AccessList, 0)
 		require.NotEmpty(t, signTxOutput.SignedTx)
 		// EIP-2930 (Type 1) transactions must start with 0x01
 		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x01"))
@@ -1015,8 +1058,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP2930Tx)
-		require.Len(t, signTxOutput.EIP2930Tx.AccessList, 2)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Len(t, eip2930Tx.AccessList, 2)
 	})
 
 	t.Run("success: EIP-2930 output contains valid signature and preserves input fields", func(t *testing.T) {
@@ -1052,17 +1095,17 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP2930Tx)
-		require.NotNil(t, signTxOutput.EIP2930Tx.Signature)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.NotNil(t, eip2930Tx.Signature)
 		// YParity should be 0 or 1 for EIP-2930
-		yParity := signTxOutput.EIP2930Tx.Signature.YParity.Int64()
+		yParity := eip2930Tx.Signature.YParity.Int64()
 		require.True(t, yParity == 0 || yParity == 1, "YParity should be 0 or 1, got %d", yParity)
-		require.NotZero(t, signTxOutput.EIP2930Tx.Signature.R.Sign())
-		require.NotZero(t, signTxOutput.EIP2930Tx.Signature.S.Sign())
-		require.Equal(t, signTxInput.From.String(), signTxOutput.EIP2930Tx.From.String())
-		require.Equal(t, signTxInput.To.String(), signTxOutput.EIP2930Tx.To.String())
-		require.Equal(t, entities.UInt64(5000), signTxOutput.EIP2930Tx.Gas.UInt64)
-		require.Equal(t, nonce, signTxOutput.EIP2930Tx.Nonce.UInt64)
+		require.NotZero(t, eip2930Tx.Signature.R.Sign())
+		require.NotZero(t, eip2930Tx.Signature.S.Sign())
+		require.Equal(t, signTxInput.From.String(), eip2930Tx.From.String())
+		require.Equal(t, signTxInput.To.String(), eip2930Tx.To.String())
+		require.Equal(t, entities.UInt64(5000), eip2930Tx.Gas.UInt64)
+		require.Equal(t, nonce, eip2930Tx.Nonce.UInt64)
 	})
 
 	t.Run("success: EIP-2930 signature EC-recovers the expected sender", func(t *testing.T) {
@@ -1098,17 +1141,17 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP2930Tx)
-		require.NotNil(t, signTxOutput.EIP2930Tx.Signature)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.NotNil(t, eip2930Tx.Signature)
 
 		// Recover the signer from the type-1 signing hash and the emitted (yParity, r, s), which is
 		// what a node does on receipt. This proves the signature commits to the 0x01-prefixed hash
 		// and that yParity carries the correct recovery id. Asserting on the echoed From field
 		// cannot catch either mistake, because the connector copies it from the input.
-		hash, err := signTxOutput.EIP2930Tx.Hash()
+		hash, err := eip2930Tx.Hash()
 		require.NoError(t, err)
 
-		signature := signTxOutput.EIP2930Tx.Signature
+		signature := eip2930Tx.Signature
 		// RecoverCompact expects [27+recid || R || S] with R and S left-padded to 32 bytes.
 		compactSignature := make([]byte, 0, 65)
 		compactSignature = append(compactSignature, byte(27+signature.YParity.Int64()))
@@ -1151,8 +1194,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP2930Tx)
-		require.Nil(t, signTxOutput.EIP2930Tx.To)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Nil(t, eip2930Tx.To)
 	})
 
 	t.Run("success: EIP-2930 transaction with an access list and no gas price", func(t *testing.T) {
@@ -1184,9 +1227,9 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
 		// The access list must not be dropped by signing the transaction as legacy.
-		require.NotNil(t, signTxOutput.EIP2930Tx)
-		require.Len(t, signTxOutput.EIP2930Tx.AccessList, 1)
-		require.Equal(t, int64(0), signTxOutput.EIP2930Tx.GasPrice.BigInt().Int64())
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Len(t, eip2930Tx.AccessList, 1)
+		require.Equal(t, int64(0), eip2930Tx.GasPrice.BigInt().Int64())
 		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x01"))
 	})
 
