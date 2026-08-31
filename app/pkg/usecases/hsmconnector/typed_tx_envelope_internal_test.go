@@ -1,7 +1,6 @@
 package hsmconnector
 
 import (
-	"bytes"
 	"math/big"
 	"testing"
 
@@ -12,20 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// rlpListContents strips the RLP list header from encoded, returning just the concatenated encodings of
-// its items. Only list payloads are expected here, so anything else is a test failure.
-func rlpListContents(t *testing.T, encoded []byte) []byte {
+// decodeRLPList decodes encoded and asserts it is an RLP list, returning its items. Decoding rather
+// than stripping the list header means the assertions below cover the header itself: a wrong declared
+// length fails here instead of being sliced away.
+func decodeRLPList(t *testing.T, encoded []byte) []interface{} {
 	t.Helper()
-	require.NotEmpty(t, encoded)
-	switch first := encoded[0]; {
-	case first >= 0xc0 && first <= 0xf7: // short list: header is the single length byte
-		return encoded[1:]
-	case first >= 0xf8: // long list: header is the length-of-length byte plus that many length bytes
-		return encoded[1+int(first-0xf7):]
-	default:
-		t.Fatalf("expected an RLP list, got a payload starting with 0x%02x", first)
-		return nil
-	}
+	decoded, err := rlp.Decode(encoded)
+	require.NoError(t, err)
+	items, ok := decoded.([]interface{})
+	require.Truef(t, ok, "expected an RLP list, decoded a %T", decoded)
+	return items
 }
 
 // TestTypedTxSignedEncodingCommitsToTheHashedFields guards the invariant that makes a typed transaction
@@ -68,15 +63,20 @@ func TestTypedTxSignedEncodingCommitsToTheHashedFields(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		wantPrefix byte
-		envelope   func() (*typedTxEnvelope, error)
-		hash       func() (*entities.HexBytes, error)
-		encode     func() (*entities.HexBytes, error)
+		name string
+		// wantFieldCount is how many fields the type's signature commits to, so the signed list must
+		// decode to exactly that many plus yParity, R and S.
+		wantFieldCount int
+		wantPrefix     byte
+		envelope       func() (*typedTxEnvelope, error)
+		hash           func() (*entities.HexBytes, error)
+		encode         func() (*entities.HexBytes, error)
 	}{
 		{
-			name:       "EIP-2930",
-			wantPrefix: eip2930TypePrefix,
+			// [chainId, nonce, gasPrice, gasLimit, to, value, data, accessList]
+			name:           "EIP-2930",
+			wantFieldCount: 8,
+			wantPrefix:     eip2930TypePrefix,
 			envelope: func() (*typedTxEnvelope, error) {
 				return eip2930Fixture(chainID, nonce, gasPrice, gas, to, value, data, accessList, signature).envelope()
 			},
@@ -88,8 +88,10 @@ func TestTypedTxSignedEncodingCommitsToTheHashedFields(t *testing.T) {
 			},
 		},
 		{
-			name:       "EIP-1559",
-			wantPrefix: eip1559TypePrefix,
+			// [chainId, nonce, maxPriorityFeePerGas, maxFeePerGas, gasLimit, to, value, data, accessList]
+			name:           "EIP-1559",
+			wantFieldCount: 9,
+			wantPrefix:     eip1559TypePrefix,
 			envelope: func() (*typedTxEnvelope, error) {
 				return eip1559Fixture(chainID, nonce, maxFeePerGas, maxPriorityFeePerGas, gas, to, value, data, accessList, signature).envelope()
 			},
@@ -124,19 +126,21 @@ func TestTypedTxSignedEncodingCommitsToTheHashedFields(t *testing.T) {
 			require.NoError(t, txHashErr)
 			require.Equal(t, entities.NewHexBytes(wantHash).Encode(), gotHash.Encode())
 
-			// The signed list must begin with exactly the hashed list's items, so the three signature
-			// values are the only difference between what was signed and what is broadcast.
-			hashedItems := rlpListContents(t, payloadRLP)
-			signedItems := rlpListContents(t, signedBytes[1:])
-			require.Truef(t, bytes.HasPrefix(signedItems, hashedItems),
-				"signed field list does not begin with the hashed field list\n hashed: %x\n signed: %x", hashedItems, signedItems)
+			// Round trip both encodings back through the decoder. The signed list must decode to exactly
+			// the hashed list's items followed by the three signature values, so those values are the only
+			// difference between what was signed and what is broadcast.
+			hashedItems := decodeRLPList(t, payloadRLP)
+			signedItems := decodeRLPList(t, signedBytes[1:])
+			require.Len(t, hashedItems, tt.wantFieldCount)
+			require.Len(t, signedItems, tt.wantFieldCount+3)
+			require.Equal(t, hashedItems, signedItems[:tt.wantFieldCount])
 
 			// And the remainder must be exactly yParity, R and S.
 			wantSignatureItems, sigErr := rlp.Encode([]interface{}{
 				signature.YParity.BigInt(), signature.R.BigInt(), signature.S.BigInt(),
 			})
 			require.NoError(t, sigErr)
-			require.Equal(t, rlpListContents(t, wantSignatureItems), signedItems[len(hashedItems):])
+			require.Equal(t, decodeRLPList(t, wantSignatureItems), signedItems[tt.wantFieldCount:])
 		})
 	}
 }
