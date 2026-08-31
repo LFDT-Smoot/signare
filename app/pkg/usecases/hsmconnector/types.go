@@ -581,27 +581,21 @@ func nonZeroOrNil(amount entities.HexInt256) *big.Int {
 }
 
 // accessListToRLPInterface converts an AccessList to the nested []interface{} structure for RLP encoding.
-func accessListToRLPInterface(accessList AccessList) ([]interface{}, error) {
-	if len(accessList) == 0 {
-		return []interface{}{}, nil
-	}
+// An Address is a fixed 20-byte array and a storage key a fixed 32-byte array, so both are taken as bytes
+// directly: there is no encoding step here that can fail.
+func accessListToRLPInterface(accessList AccessList) []interface{} {
 	result := make([]interface{}, len(accessList))
 	for i, entry := range accessList {
-		addrBytes, err := entities.NewHexBytesFromString(entry.Address.String())
-		if err != nil {
-			return nil, errors.InternalFromErr(err).WithMessage("failed to calculate the HexBytes from the access list address at index %d", i)
-		}
 		storageKeys := make([]interface{}, len(entry.StorageKeys))
 		for j, key := range entry.StorageKeys {
-			keyBytes := key.Bytes()
-			storageKeys[j] = keyBytes
+			storageKeys[j] = key.Bytes()
 		}
 		result[i] = []interface{}{
-			addrBytes.Bytes(),
+			entry.Address[:],
 			storageKeys,
 		}
 	}
-	return result, nil
+	return result
 }
 
 // prepareCommonFields converts common transaction fields to their RLP-ready representations.
@@ -681,10 +675,7 @@ func (tx EIP2930Transaction) envelope() (*typedTxEnvelope, error) {
 		return nil, err
 	}
 
-	accessListRLP, err := accessListToRLPInterface(tx.AccessList)
-	if err != nil {
-		return nil, err
-	}
+	accessListRLP := accessListToRLPInterface(tx.AccessList)
 
 	return &typedTxEnvelope{
 		prefix: eip2930TypePrefix,
@@ -734,10 +725,7 @@ func (tx EIP1559Transaction) envelope() (*typedTxEnvelope, error) {
 		return nil, err
 	}
 
-	accessListRLP, err := accessListToRLPInterface(tx.AccessList)
-	if err != nil {
-		return nil, err
-	}
+	accessListRLP := accessListToRLPInterface(tx.AccessList)
 
 	return &typedTxEnvelope{
 		prefix: eip1559TypePrefix,
