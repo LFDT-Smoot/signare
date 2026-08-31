@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
-- Add end-to-end signing for EIP-2930 (type 1, access list) transactions, closing the last standard pre-1559 transaction type signare could classify but not sign. A `gasPrice` plus `accessList` request is now signed as a `0x01`-prefixed envelope over `keccak256(0x01 || rlp([chainId, nonce, gasPrice, gasLimit, to, value, data, accessList]))`, using the existing access-list encoding and the y-parity signature scheme rather than the EIP-155 `v` formula. An empty but non-nil access list with a `gasPrice` stays classified as type 1 instead of being rerouted to legacy, and `gasPrice` may be zero so the path remains usable on free-gas and zero-base-fee networks. Type 0 and type 2 signing are unchanged; type 3 and type 4 are still rejected as unsupported.
+- Add signing for EIP-2930 (type 1, access list) transactions, emitted as a `0x01`-prefixed envelope (#5).
+
+### Changed
+- An `eth_signTransaction` request with both EIP-1559 fee fields and no `accessList` is now signed as type 2 instead of being rejected as missing a mandatory field, and a request carrying a blob or authorization field is now rejected as an unsupported transaction type rather than as an undeterminable one (#5).
 
 ## [1.4.2] - 2026-07-30
 

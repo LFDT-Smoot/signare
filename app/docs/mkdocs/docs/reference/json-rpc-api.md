@@ -40,7 +40,18 @@ The following transaction types are supported. The type is inferred from the com
 | EIP-2930 (Type 1)     | `accessList` is set (an empty accessList is valid), together with `gasPrice` or with no gas fields at all |
 | EIP-1559 (Type 2)     | `maxFeePerGas` and `maxPriorityFeePerGas` are set; `accessList` is optional                               |
 
-Combining `gasPrice` with EIP-1559 fields (`maxFeePerGas`/`maxPriorityFeePerGas`) is ambiguous and is rejected with an invalid params error.
+Any other combination is rejected with an invalid params error. The checks are applied in this order, so
+the first row that matches decides the response:
+
+| Request | Response |
+|---------|----------|
+| `authorizationList` is set | `Not supported transaction type`: EIP-7702 (Type 4) signing is not supported |
+| `maxFeePerBlobGas` or `blobVersionedHashes` is set | `Not supported transaction type`: EIP-4844 (Type 3) signing is not supported |
+| `gasPrice` together with `maxFeePerGas` or `maxPriorityFeePerGas` | `Could not determine transaction type`: the request names both a legacy and an EIP-1559 gas price |
+| Only one of `maxFeePerGas` and `maxPriorityFeePerGas` | `Could not determine transaction type`: an EIP-1559 transaction needs both |
+
+Because the two unsupported types are checked first, a request that sets both an `accessList` and a blob
+or authorization field is rejected rather than signed as a type 1 transaction with that field dropped.
 
 !!! info
     If the ``gasPrice`` field of the request body is not informed, it is set to 0.
