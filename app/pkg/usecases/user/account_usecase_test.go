@@ -56,6 +56,7 @@ func TestDefaultUseCase_CreateAccount(t *testing.T) {
 
 	userID := uuid.NewString()
 	createUserInput := user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userID,
 		ApplicationID: applicationID,
 		Roles:         []string{"application-admin"},
@@ -150,6 +151,7 @@ func TestDefaultUseCase_ListAccounts(t *testing.T) {
 
 	userOneID := uuid.NewString()
 	createUserOneInput := user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userOneID,
 		ApplicationID: applicationOneID,
 		Roles:         []string{"application-admin"},
@@ -169,6 +171,7 @@ func TestDefaultUseCase_ListAccounts(t *testing.T) {
 
 	userTwoID := uuid.NewString()
 	createUserTwoInput := user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userTwoID,
 		ApplicationID: applicationTwoID,
 		Roles:         []string{"application-admin"},
@@ -260,6 +263,7 @@ func TestDefaultUseCase_GetAccount(t *testing.T) {
 
 	userID := uuid.NewString()
 	createUserInput := user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userID,
 		ApplicationID: applicationID,
 		Roles:         []string{"application-admin"},
@@ -353,6 +357,7 @@ func TestDefaultUseCase_DeleteAccount(t *testing.T) {
 
 	userID := uuid.NewString()
 	createUserInput := user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userID,
 		ApplicationID: applicationID,
 		Roles:         []string{"application-admin"},
@@ -452,6 +457,7 @@ func TestDefaultUseCase_DeleteAllAccountsForAddress(t *testing.T) {
 
 	userID := uuid.NewString()
 	createUserInput := user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userID,
 		ApplicationID: applicationID,
 		Roles:         []string{"application-admin"},
@@ -517,6 +523,7 @@ func TestDefaultUseCase_DeleteAllAccountsForAddress(t *testing.T) {
 		// Create another valid account
 		userTwoID := uuid.NewString()
 		createUserTwoInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userTwoID,
 			ApplicationID: applicationID,
 			Roles:         []string{"application-admin"},

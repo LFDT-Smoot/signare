@@ -41,8 +41,8 @@ type CreateUserInput struct {
 	// Roles of this User.
 	Roles []string `valid:"required"`
 	// Caller identifies the principal making the request, so the use case can refuse
-	// application-scoped self-service. See Caller.
-	Caller Caller `valid:"-"`
+	// application-scoped self-service. See entities.Caller.
+	Caller entities.Caller `valid:"-"`
 }
 
 // CreateUserOutput defines the output of the creation of a User.
@@ -62,36 +62,8 @@ type EditUserInput struct {
 	// Roles of this User.
 	Roles []string `valid:"optional"`
 	// Caller identifies the principal making the request, so the use case can refuse
-	// application-scoped self-service. See Caller.
-	Caller Caller `valid:"-"`
-}
-
-// Caller identifies the principal behind a request, as established by the authentication
-// middleware. The infrastructure layer reads it from the request context and passes it in, following
-// the same pattern the JSON-RPC handlers use for ApplicationID, so the use case stays free of HTTP
-// concerns.
-//
-// ApplicationID is the value of the authenticated application header. It is empty for a
-// signer-admin, who reaches application routes without that header, and non-empty for a principal
-// acting inside an application. That distinction is the only thing separating the two, since roles
-// themselves are not carried on the request.
-type Caller struct {
-	// ID is the authenticated principal's user identifier.
-	ID string
-	// ApplicationID is the application the principal is acting within, empty when acting as an
-	// administrator.
-	ApplicationID string
-}
-
-// IsApplicationScoped reports whether the caller is acting inside an application rather than as an
-// administrator.
-func (c Caller) IsApplicationScoped() bool {
-	return c.ApplicationID != ""
-}
-
-// IsSelf reports whether the caller is acting on their own user record within their own application.
-func (c Caller) IsSelf(target entities.ApplicationStandardID) bool {
-	return c.ID != "" && c.ID == target.ID && c.ApplicationID == target.ApplicationID
+	// application-scoped self-service. See entities.Caller.
+	Caller entities.Caller `valid:"-"`
 }
 
 // EditUserOutput defines the output for editing a User.

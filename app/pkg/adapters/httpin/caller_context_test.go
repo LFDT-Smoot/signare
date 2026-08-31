@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	generatedhttpinfra "github.com/lfdt-smoot/signare/app/pkg/infra/generated/httpinfra"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
@@ -52,14 +53,14 @@ func TestCallerFromContext(t *testing.T) {
 		name                 string
 		userID               string
 		applicationID        string
-		wantCaller           user.Caller
+		wantCaller           entities.Caller
 		wantApplicationScope bool
 	}{
 		{
 			name:                 "application-scoped caller carries both identifiers",
 			userID:               "alice",
 			applicationID:        "app1",
-			wantCaller:           user.Caller{ID: "alice", ApplicationID: "app1"},
+			wantCaller:           entities.Caller{ID: "alice", ApplicationID: "app1"},
 			wantApplicationScope: true,
 		},
 		{
@@ -67,12 +68,12 @@ func TestCallerFromContext(t *testing.T) {
 			// distinguishes them from an application-scoped caller.
 			name:                 "administrator has no application",
 			userID:               "root",
-			wantCaller:           user.Caller{ID: "root"},
+			wantCaller:           entities.Caller{ID: "root"},
 			wantApplicationScope: false,
 		},
 		{
 			name:                 "absent identifiers yield the zero caller",
-			wantCaller:           user.Caller{},
+			wantCaller:           entities.Caller{},
 			wantApplicationScope: false,
 		},
 	}
@@ -107,7 +108,7 @@ func TestAdaptApplicationUsersCreate_PopulatesCaller(t *testing.T) {
 	})
 	require.Nil(t, httpErr)
 
-	require.Equal(t, user.Caller{ID: "alice", ApplicationID: "app1"}, useCase.createInput.Caller,
+	require.Equal(t, entities.Caller{ID: "alice", ApplicationID: "app1"}, useCase.createInput.Caller,
 		"CreateUser must receive the authenticated caller, otherwise the self-service guard is inert")
 }
 
@@ -128,6 +129,6 @@ func TestAdaptApplicationUsersEdit_PopulatesCaller(t *testing.T) {
 	})
 	require.Nil(t, httpErr)
 
-	require.Equal(t, user.Caller{ID: "alice", ApplicationID: "app1"}, useCase.editInput.Caller,
+	require.Equal(t, entities.Caller{ID: "alice", ApplicationID: "app1"}, useCase.editInput.Caller,
 		"EditUser must receive the authenticated caller, otherwise the self-service guard is inert")
 }

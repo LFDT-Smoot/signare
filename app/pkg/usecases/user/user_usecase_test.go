@@ -30,6 +30,11 @@ import (
 var (
 	slotID string
 
+	// testAdminCaller stands in for a signer-admin: an authenticated principal acting without an
+	// application header, for whom the self-service guard does not apply. Tests that are not about
+	// the guard use it so the mandatory caller is stated without repeating the intent.
+	testAdminCaller = entities.Caller{ID: "test-signer-admin"}
+
 	chainID          = entities.NewInt256FromInt(44844)
 	slotPin          = signaturemanagertesthelper.SlotPin
 	hsmLoadedAddress = signaturemanagertesthelper.ImportedKeyAddress
@@ -90,6 +95,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 
 	t.Run("failure: invalid input arguments", func(t *testing.T) {
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ApplicationID: "",
 			Roles: []string{
 				"application-admin",
@@ -101,6 +107,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 		require.Nil(t, output)
 
 		input = user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ApplicationID: createdApplication.ID,
 			Roles:         []string{},
 		}
@@ -112,6 +119,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 
 	t.Run("success: if ID is not provided a random one is generated", func(t *testing.T) {
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
 				"application-admin",
@@ -126,6 +134,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		userID := uuid.New().String()
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -143,6 +152,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 		// Pins that the application-scope gate does not over-block the other application-scoped role.
 		userID := uuid.New().String()
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -158,6 +168,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 	t.Run("failure: invalid role", func(t *testing.T) {
 		userID := uuid.New().String()
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -173,6 +184,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 	t.Run("failure: signer-admin not assignable", func(t *testing.T) {
 		userID := uuid.New().String()
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -188,6 +200,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 	t.Run("failure: signer-admin not assignable alongside an application role", func(t *testing.T) {
 		userID := uuid.New().String()
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -204,6 +217,7 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 	t.Run("failure: already exists", func(t *testing.T) {
 		userID := uuid.New().String()
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -241,6 +255,7 @@ func TestDefaultUseCase_ListUsers(t *testing.T) {
 		userID := fmt.Sprint("user-", i)
 		testDesc := "my-description"
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication1.ID,
 			Description:   &testDesc,
@@ -267,6 +282,7 @@ func TestDefaultUseCase_ListUsers(t *testing.T) {
 		userID := fmt.Sprint("user-", i)
 		testDesc := "my-description"
 		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication2.ID,
 			Description:   &testDesc,
@@ -432,6 +448,7 @@ func TestDefaultUseCase_GetUser(t *testing.T) {
 		userID := uuid.New().String()
 		testDesc := "my-description"
 		createInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Description:   &testDesc,
@@ -476,6 +493,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 
 	t.Run("failure: invalid arguments", func(t *testing.T) {
 		input := user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            "my-id",
 				ApplicationID: "",
@@ -489,6 +507,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		require.Nil(t, output)
 
 		input = user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            "",
 				ApplicationID: createdApplication.ID,
@@ -501,6 +520,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		require.Nil(t, output)
 
 		input = user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            "",
 				ApplicationID: "",
@@ -516,6 +536,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 
 	t.Run("failure: user not found", func(t *testing.T) {
 		input := user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            uuid.New().String(),
 				ApplicationID: createdApplication.ID,
@@ -534,6 +555,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		userID := uuid.New().String()
 		testDesc := "my-description"
 		createInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Description:   &testDesc,
@@ -545,6 +567,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		require.NoError(t, err)
 
 		input := user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            *createInput.ID,
 				ApplicationID: createInput.ApplicationID,
@@ -563,6 +586,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		userID := uuid.New().String()
 		testDesc := "my-description"
 		createInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Description:   &testDesc,
@@ -574,6 +598,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		require.NoError(t, err)
 
 		input := user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            *createInput.ID,
 				ApplicationID: createInput.ApplicationID,
@@ -591,6 +616,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		userID := uuid.New().String()
 		testDesc := "my-description"
 		createInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Description:   &testDesc,
@@ -602,6 +628,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		require.NoError(t, err)
 
 		input := user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            *createInput.ID,
 				ApplicationID: createInput.ApplicationID,
@@ -620,6 +647,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		userID := uuid.New().String()
 		testDesc := "my-description"
 		createInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Description:   &testDesc,
@@ -632,6 +660,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 
 		// An application-admin must not be able to escalate an application user to signer-admin.
 		input := user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            *createInput.ID,
 				ApplicationID: createInput.ApplicationID,
@@ -650,6 +679,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 		userID := uuid.New().String()
 		testDesc := "my-description"
 		createInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Description:   &testDesc,
@@ -668,6 +698,7 @@ func TestDefaultUseCase_EditUser(t *testing.T) {
 			"transaction-signer",
 		}
 		input := user.EditUserInput{
+			Caller: testAdminCaller,
 			ApplicationStandardID: entities.ApplicationStandardID{
 				ID:            createdUser.ID,
 				ApplicationID: createdUser.ApplicationID,
@@ -742,6 +773,7 @@ func TestDefaultUseCase_DeleteUser(t *testing.T) {
 		// Create a valid user
 		userID := uuid.New().String()
 		createInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -876,6 +908,7 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 		// Create a valid User
 		userID := uuid.New().String()
 		createUserInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: currentTestApplication.ID,
 			Roles: []string{
@@ -903,6 +936,7 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 		// Create a valid User
 		userID := uuid.New().String()
 		createUserInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: currentTestApplication.ID,
 			Roles: []string{
@@ -950,6 +984,7 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 		// Create a valid User
 		userID := uuid.New().String()
 		createUserInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: currentTestApplication.ID,
 			Roles: []string{
@@ -1071,6 +1106,7 @@ func TestDefaultUseCase_RemoveUserAccount(t *testing.T) {
 		// Create a valid User
 		userID := uuid.New().String()
 		createUserInput := user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &userID,
 			ApplicationID: createdApplication.ID,
 			Roles: []string{
@@ -1221,6 +1257,7 @@ func TestDefaultUseCase_AddUserAccounts_AKVValidation(t *testing.T) {
 
 	userID := uuid.NewString()
 	_, createUserErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userID,
 		ApplicationID: applicationID,
 		Roles:         []string{"application-admin"},
@@ -1254,6 +1291,7 @@ func TestDefaultUseCase_AddUserAccounts_AKVValidation(t *testing.T) {
 		// at validation time. A fresh user keeps the asserted account count deterministic.
 		zeroByteUserID := uuid.NewString()
 		_, createErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &zeroByteUserID,
 			ApplicationID: applicationID,
 			Roles:         []string{"application-admin"},
@@ -1296,6 +1334,7 @@ func TestDefaultUseCase_AddUserAccounts_AKVEmptyConfig(t *testing.T) {
 
 	userID := uuid.NewString()
 	_, createUserErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &userID,
 		ApplicationID: applicationID,
 		Roles:         []string{"application-admin"},
@@ -1336,6 +1375,7 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 	// adminUser stands in for the application-admin doing the escalating.
 	adminUserID := uuid.NewString()
 	createdAdmin, createErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+		Caller:        testAdminCaller,
 		ID:            &adminUserID,
 		ApplicationID: createdApplication.ID,
 		Roles:         []string{"application-admin"},
@@ -1343,7 +1383,7 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 	require.NoError(t, createErr)
 	require.NotNil(t, createdAdmin)
 
-	selfCaller := user.Caller{ID: adminUserID, ApplicationID: createdApplication.ID}
+	selfCaller := entities.Caller{ID: adminUserID, ApplicationID: createdApplication.ID}
 
 	t.Run("failure: application-admin cannot grant themselves transaction-signer", func(t *testing.T) {
 		output, err := app.UserUseCase.EditUser(ctx, user.EditUserInput{
@@ -1356,7 +1396,7 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 			Caller:          selfCaller,
 		})
 		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
+		require.True(t, errors.IsPermissionDenied(err))
 		require.Nil(t, output)
 	})
 
@@ -1375,11 +1415,18 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 			Caller:          selfCaller,
 		})
 		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
+		require.True(t, errors.IsPermissionDenied(err))
 		require.Nil(t, output)
 	})
 
 	t.Run("failure: application-admin cannot create a user under their own id", func(t *testing.T) {
+		// Defence in depth rather than the load-bearing half of the fix. To be authorized for
+		// application.users.create inside an application the caller must already have a user record,
+		// since the policy decision point resolves an application caller's roles by reading it, so a
+		// real caller creating under their own id would collide on the (application_id, id) primary
+		// key anyway. Asserting PermissionDenied and not merely an error is what keeps this honest:
+		// without the guard the call still fails, but with AlreadyExists. The two Edit cases above are
+		// the ones that close the exploit.
 		output, err := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
 			ID:            &adminUserID,
 			ApplicationID: createdApplication.ID,
@@ -1387,8 +1434,35 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 			Caller:        selfCaller,
 		})
 		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
+		require.True(t, errors.IsPermissionDenied(err))
 		require.Nil(t, output)
+	})
+
+	t.Run("failure: an omitted caller is refused rather than read as not-self", func(t *testing.T) {
+		// The guard is opt-in per call site, so the failure mode that matters is a call site that never
+		// passes a caller. The zero caller must not fall through as "not application-scoped, therefore
+		// allowed": it is a wiring error and both paths say so.
+		editOutput, editErr := app.UserUseCase.EditUser(ctx, user.EditUserInput{
+			ApplicationStandardID: entities.ApplicationStandardID{
+				ID:            adminUserID,
+				ApplicationID: createdApplication.ID,
+			},
+			ResourceVersion: createdAdmin.ResourceVersion,
+			Roles:           []string{"application-admin", "transaction-signer"},
+		})
+		require.Error(t, editErr)
+		require.True(t, errors.IsInternal(editErr))
+		require.Nil(t, editOutput)
+
+		uncalledForID := uuid.NewString()
+		createOutput, createErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			ID:            &uncalledForID,
+			ApplicationID: createdApplication.ID,
+			Roles:         []string{"transaction-signer"},
+		})
+		require.Error(t, createErr)
+		require.True(t, errors.IsInternal(createErr))
+		require.Nil(t, createOutput)
 	})
 
 	t.Run("success: application-admin can still onboard a different signer", func(t *testing.T) {
@@ -1436,14 +1510,14 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 			},
 			ResourceVersion: current.ResourceVersion,
 			Roles:           []string{"application-admin", "transaction-signer"},
-			Caller:          user.Caller{ID: "some-signer-admin"},
+			Caller:          entities.Caller{ID: "some-signer-admin"},
 		})
 		require.NoError(t, err)
 		require.NotNil(t, output)
 		require.Contains(t, output.Roles, "transaction-signer")
 	})
 
-	t.Run("success: editing the same user id in a different application is not self", func(t *testing.T) {
+	t.Run("success: same user id in a different application is not self, on edit", func(t *testing.T) {
 		// The exploit in the issue uses the Edit path, so pin the per-application comparison there too
 		// and not only on Create: a future divergence in how the target is built would go unnoticed.
 		otherApplicationID := uuid.NewString()
@@ -1457,6 +1531,7 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 
 		targetID := uuid.NewString()
 		created, createTargetErr := app.UserUseCase.CreateUser(ctx, user.CreateUserInput{
+			Caller:        testAdminCaller,
 			ID:            &targetID,
 			ApplicationID: otherApplication.ID,
 			Roles:         []string{"transaction-signer"},
@@ -1471,13 +1546,13 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 			ResourceVersion: created.ResourceVersion,
 			Roles:           []string{"application-admin"},
 			// Same user id, different application: not the caller's own record.
-			Caller: user.Caller{ID: targetID, ApplicationID: createdApplication.ID},
+			Caller: entities.Caller{ID: targetID, ApplicationID: createdApplication.ID},
 		})
 		require.NoError(t, err)
 		require.NotNil(t, output)
 	})
 
-	t.Run("success: same user id in a different application is not self", func(t *testing.T) {
+	t.Run("success: same user id in a different application is not self, on create", func(t *testing.T) {
 		// Identifiers are only unique within an application, so the guard must compare the application
 		// too. A caller with a colliding id in another application must not be treated as the target.
 		otherApplicationID := uuid.NewString()
@@ -1494,7 +1569,7 @@ func TestDefaultUseCase_SelfServiceGuard(t *testing.T) {
 			ID:            &targetID,
 			ApplicationID: otherApplication.ID,
 			Roles:         []string{"transaction-signer"},
-			Caller:        user.Caller{ID: targetID, ApplicationID: createdApplication.ID},
+			Caller:        entities.Caller{ID: targetID, ApplicationID: createdApplication.ID},
 		})
 		require.NoError(t, err)
 		require.NotNil(t, output)

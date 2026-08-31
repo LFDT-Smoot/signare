@@ -11,28 +11,10 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	generatedhttpinfra "github.com/lfdt-smoot/signare/app/pkg/infra/generated/httpinfra"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
-	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
 )
 
 var _ generatedhttpinfra.ApplicationAPIAdapter = new(DefaultApplicationAPIAdapter)
-
-// callerFromContext reads the authenticated principal that the authentication middleware placed in
-// the request context, so use cases can apply caller-relative rules without reaching into HTTP.
-//
-// A missing value yields the zero Caller rather than an error. Authorization has already run by this
-// point, so a request that reaches an adapter has an authenticated user; and an absent application
-// header legitimately means the caller is a signer-admin, for whom ApplicationID is empty by design.
-func callerFromContext(ctx context.Context) user.Caller {
-	caller := user.Caller{}
-	if userID, err := requestcontext.UserFromContext(ctx); err == nil && userID != nil {
-		caller.ID = *userID
-	}
-	if applicationID, err := requestcontext.ApplicationFromContext(ctx); err == nil && applicationID != nil {
-		caller.ApplicationID = *applicationID
-	}
-	return caller
-}
 
 func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationAccountsCreate(ctx context.Context, data generatedhttpinfra.ApplicationAccountsCreateRequest) (*generatedhttpinfra.ApplicationAccountsCreateResponseWrapper, *httpinfra.HTTPError) {
 	addresses := make([]address.Address, len(*data.AccountCreation.Spec.Accounts))
