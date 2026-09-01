@@ -12,7 +12,12 @@ import (
 )
 
 // noopSignatureManager is a DigitalSignatureManager whose Open and Close succeed without touching a
-// backend, so the factory's concurrency behaviour can be exercised without an HSM.
+// backend, so the factory's concurrency behaviour can be exercised without an HSM. It holds no
+// mutable state, which is what makes it safe to share between the goroutines of the concurrency test.
+//
+// id is deliberate rather than dead weight: it makes the stub non-zero-sized. Go allows two distinct
+// zero-size variables to share an address, so with an empty struct a Reset that replaced the map entry
+// with a fresh instance would still satisfy the require.Same identity check below.
 type noopSignatureManager struct{ id string }
 
 func (*noopSignatureManager) Sign(_ context.Context, _ signaturemanager.SignInput) (*signaturemanager.SignOutput, error) {
@@ -45,6 +50,40 @@ func (*noopSignatureManager) Close(_ context.Context, _ signaturemanager.CloseIn
 
 func (*noopSignatureManager) IsAlive(_ context.Context, _ signaturemanager.IsAliveInput) (*signaturemanager.IsAliveOutput, error) {
 	return &signaturemanager.IsAliveOutput{}, nil
+}
+
+// recordingSignatureManager counts Open and Close, and can be made to fail either of them, so the
+// sequential tests can assert what Reset actually does rather than only what it returns.
+//
+// It is a separate type rather than counters on noopSignatureManager, and its counters are plain ints
+// rather than atomics, both deliberately. The concurrency test shares one stub between two goroutines:
+// plain counters there would be a data race, and atomic counters would be worse, because the atomic
+// operations create a happens-before edge between the two goroutines that hides the map race the test
+// exists to catch. Confirmed by re-adding the map write to Reset: with atomic counters on the shared
+// stub the race detector stays silent, without them it reports the race. So this type must never be
+// used from more than one goroutine.
+type recordingSignatureManager struct {
+	noopSignatureManager
+	openErr    error
+	closeErr   error
+	openCalls  int
+	closeCalls int
+}
+
+func (s *recordingSignatureManager) Open(_ context.Context, _ signaturemanager.OpenInput) (*signaturemanager.OpenOutput, error) {
+	s.openCalls++
+	if s.openErr != nil {
+		return nil, s.openErr
+	}
+	return &signaturemanager.OpenOutput{}, nil
+}
+
+func (s *recordingSignatureManager) Close(_ context.Context, _ signaturemanager.CloseInput) (*signaturemanager.CloseOutput, error) {
+	s.closeCalls++
+	if s.closeErr != nil {
+		return nil, s.closeErr
+	}
+	return &signaturemanager.CloseOutput{}, nil
 }
 
 // TestDigitalSignatureManagerFactory_ResetIsSafeAgainstConcurrentCreate is the regression guard for a
@@ -109,8 +148,8 @@ func TestDigitalSignatureManagerFactory_ResetIsSafeAgainstConcurrentCreate(t *te
 	require.Empty(t, createErrs)
 }
 
-// Reset must still do its job: the manager is closed and reopened, and remains resolvable afterwards.
-// Without this, deleting the map write could be "fixed" by deleting Reset's body entirely.
+// Reset must leave the same manager instance resolvable: it acts on the stored instance rather than
+// replacing or dropping the map entry.
 func TestDigitalSignatureManagerFactory_ResetKeepsTheManagerResolvable(t *testing.T) {
 	ctx := context.Background()
 	factory := &DefaultDigitalSignatureManagerFactory{
@@ -131,6 +170,23 @@ func TestDigitalSignatureManagerFactory_ResetKeepsTheManagerResolvable(t *testin
 	require.Same(t, before, after, "Reset acts on the stored instance; it must not replace or drop it")
 }
 
+// Reset must still do its job. Without these call counts, deleting the racing map write could be
+// "fixed" by deleting the body of Reset entirely and the rest of this file would stay green.
+func TestDigitalSignatureManagerFactory_ResetClosesAndReopensTheManager(t *testing.T) {
+	ctx := context.Background()
+	manager := &recordingSignatureManager{}
+	factory := &DefaultDigitalSignatureManagerFactory{
+		digitalSignatureManagerMap: map[ModuleKind]signaturemanager.DigitalSignatureManager{
+			SoftHSMModuleKind: manager,
+		},
+	}
+
+	require.NoError(t, factory.Reset(ctx, SoftHSMModuleKind))
+
+	require.Equal(t, 1, manager.closeCalls, "Reset must close the stored manager")
+	require.Equal(t, 1, manager.openCalls, "Reset must reopen the stored manager")
+}
+
 func TestDigitalSignatureManagerFactory_ResetRejectsUnsupportedKind(t *testing.T) {
 	factory := &DefaultDigitalSignatureManagerFactory{
 		digitalSignatureManagerMap: map[ModuleKind]signaturemanager.DigitalSignatureManager{
@@ -139,4 +195,30 @@ func TestDigitalSignatureManagerFactory_ResetRejectsUnsupportedKind(t *testing.T
 	}
 
 	require.Error(t, factory.Reset(context.Background(), AKVModuleKind))
+}
+
+// Reset reports a failure to close, and does not go on to reopen.
+func TestDigitalSignatureManagerFactory_ResetPropagatesCloseFailure(t *testing.T) {
+	manager := &recordingSignatureManager{closeErr: errors.New("close failed")}
+	factory := &DefaultDigitalSignatureManagerFactory{
+		digitalSignatureManagerMap: map[ModuleKind]signaturemanager.DigitalSignatureManager{
+			SoftHSMModuleKind: manager,
+		},
+	}
+
+	require.Error(t, factory.Reset(context.Background(), SoftHSMModuleKind))
+	require.Equal(t, 0, manager.openCalls, "Reset must not reopen after Close failed")
+}
+
+// Reset reports a failure to reopen rather than returning nil.
+func TestDigitalSignatureManagerFactory_ResetPropagatesOpenFailure(t *testing.T) {
+	manager := &recordingSignatureManager{openErr: errors.New("open failed")}
+	factory := &DefaultDigitalSignatureManagerFactory{
+		digitalSignatureManagerMap: map[ModuleKind]signaturemanager.DigitalSignatureManager{
+			SoftHSMModuleKind: manager,
+		},
+	}
+
+	require.Error(t, factory.Reset(context.Background(), SoftHSMModuleKind))
+	require.Equal(t, 1, manager.closeCalls)
 }

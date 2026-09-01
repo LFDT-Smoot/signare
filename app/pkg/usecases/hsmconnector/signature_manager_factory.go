@@ -37,10 +37,7 @@ func (u *DefaultDigitalSignatureManagerFactory) Reset(ctx context.Context, kind 
 		return signererrors.Internal().WithMessage("error opening digital signature manager connection '%s'. Error: %v", kind, openErr)
 	}
 
-	// The manager is deliberately not written back into the map. Close and Open act on the instance
-	// read above, which is never reassigned, so storing it again would be m[kind] = m[kind]: no effect
-	// on the map, but a write racing every Create below. digitalSignatureManagerMap is populated once
-	// in ProvideDefaultDigitalSignatureManagerFactory and must stay read-only afterwards.
+	// Deliberately no write back into the map here: see the field comment on digitalSignatureManagerMap.
 	return nil
 }
 
