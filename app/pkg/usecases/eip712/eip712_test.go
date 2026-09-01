@@ -550,8 +550,8 @@ func TestHashTypedData_RejectsExponentialTypeExpansion(t *testing.T) {
 	require.Contains(t, hashErr.Error(), "struct encodings")
 }
 
-// The depth cap backstops nesting that comes from the message rather than the type graph, which the
-// cycle check cannot see.
+// The depth cap backstops array nesting, whose level count lives in the bracket-pair suffix of the
+// declared field type rather than in the type graph, so the cycle walk strips it off and cannot see it.
 func TestHashTypedData_RejectsExcessiveArrayNesting(t *testing.T) {
 	const depth = 40
 
@@ -621,8 +621,8 @@ func fanoutChain(types eip712.Types, prefix string, levels, fanout int) string {
 // domain and the message each carry an identical expansion. If the state were created per hashStruct
 // rather than per HashTypedData, both halves would fit and no error would be raised.
 func TestHashTypedData_BudgetIsSharedAcrossDomainAndMessage(t *testing.T) {
-	// (9^6-1)/8 = 66430 struct encodings per half: under maxStructEncodings alone, over it combined.
-	const levels, fanout = 5, 9
+	// (11^6-1)/10 = 177156 struct encodings per half: under maxStructEncodings alone, over it combined.
+	const levels, fanout = 5, 11
 
 	// One half on its own must succeed, otherwise the combined case proves nothing.
 	t.Run("one half alone is under the budget", func(t *testing.T) {
@@ -719,4 +719,245 @@ func TestHashTypedData_RepeatedTypeEncodesConsistently(t *testing.T) {
 
 	require.NotEqual(t, hex.EncodeToString(singleDigest), hex.EncodeToString(repeatedDigest),
 		"a second element must change the digest; equality would mean the cache elided real work")
+}
+
+// The per-name type-hash memo makes a repeated type free but not a distinct one. A payload can declare
+// many distinct names over one large shared dependency graph, making every name a cache miss that pays
+// a full canonical-type build whose length grows with the whole graph. That is quadratic in the
+// type-definition size while staying acyclic, shallow, and far inside the struct-encoding budget, so
+// only maxTypeEncodingBytes stops it.
+func TestHashTypedData_RejectsExcessiveTypeEncodingWork(t *testing.T) {
+	const distinct, chain = 4000, 4000
+
+	types := eip712.Types{"EIP712Domain": []eip712.Type{{Name: "name", Type: "string"}}}
+	// A shared chain every wrapper type pulls in, so each canonical type string is as long as the graph.
+	for level := 0; level < chain; level++ {
+		types[fmt.Sprintf("D%d", level)] = []eip712.Type{{Name: "n", Type: fmt.Sprintf("D%d[]", level+1)}}
+	}
+	types[fmt.Sprintf("D%d", chain)] = []eip712.Type{}
+
+	primaryFields := make([]eip712.Type, distinct)
+	message := eip712.EIP712Message{}
+	for i := 0; i < distinct; i++ {
+		name := fmt.Sprintf("W%d", i)
+		types[name] = []eip712.Type{{Name: "n", Type: "D0[]"}}
+		primaryFields[i] = eip712.Type{Name: fmt.Sprintf("f%d", i), Type: name}
+		// An empty inner array stops the struct walk one level down, so the struct-encoding budget and
+		// the depth cap both stay far from their limits and the type budget is the only control left.
+		message[fmt.Sprintf("f%d", i)] = map[string]interface{}{"n": []interface{}{}}
+	}
+	types["P"] = primaryFields
+
+	data, err := hashTypedDataFor(types, "P", message)
+	require.NoError(t, err, "the graph is acyclic and shallow; the type budget is what stops it")
+
+	_, _, hashErr := eip712.HashTypedData(data)
+	require.Error(t, hashErr)
+	require.Contains(t, hashErr.Error(), "canonical type encoding")
+}
+
+// The type budget must not reject a payload that repeats one type over a large graph, since the memo
+// charges each distinct name once. Without that, the budget would double as a second, much tighter
+// struct-encoding cap.
+func TestHashTypedData_TypeBudgetChargesEachNameOnce(t *testing.T) {
+	const chain = 2000
+	const repeats = 5000
+
+	types := eip712.Types{"EIP712Domain": []eip712.Type{{Name: "name", Type: "string"}}}
+	for level := 0; level < chain; level++ {
+		types[fmt.Sprintf("D%d", level)] = []eip712.Type{{Name: "n", Type: fmt.Sprintf("D%d[]", level+1)}}
+	}
+	types[fmt.Sprintf("D%d", chain)] = []eip712.Type{}
+	types["Bag"] = []eip712.Type{{Name: "items", Type: "D0[]"}}
+
+	items := make([]interface{}, repeats)
+	for i := range items {
+		items[i] = map[string]interface{}{"n": []interface{}{}}
+	}
+
+	data, err := hashTypedDataFor(types, "Bag", eip712.EIP712Message{"items": items})
+	require.NoError(t, err)
+
+	_, _, hashErr := eip712.HashTypedData(data)
+	require.NoError(t, hashErr, "one distinct type encoded %d times must be charged once, not %d times", repeats, repeats)
+}
+
+// A flat array of small structs is a legitimate shape, and its element count is bounded only by the
+// entrypoint body cap. This pins maxStructEncodings above what a body under that cap can ask for: at
+// eight wire bytes per element, 1 MiB carries roughly 130000 of them.
+func TestHashTypedData_AllowsLargeStructArray(t *testing.T) {
+	const items = 130000
+
+	types := domainOnlyTypes()
+	types["Item"] = []eip712.Type{{Name: "v", Type: "uint256"}}
+	types["Bag"] = []eip712.Type{{Name: "items", Type: "Item[]"}}
+
+	values := make([]interface{}, items)
+	for i := range values {
+		values[i] = map[string]interface{}{"v": json.Number("1")}
+	}
+
+	data, err := hashTypedDataFor(types, "Bag", eip712.EIP712Message{"items": values})
+	require.NoError(t, err)
+
+	_, digest, hashErr := eip712.HashTypedData(data)
+	require.NoError(t, hashErr, "a flat array of %d small structs fits inside the body cap and must still sign", items)
+	require.Len(t, digest, 32)
+}
+
+// A declared type name carrying array notation has no canonical encoding. encodeField checks the
+// literal name before it checks for array notation, so it hashes such a type as a struct, while
+// findDependencies resolves the same field to its base type and leaves the definition out of the
+// canonical type string. Before the guard, Validate passed this and HashTypedData returned a digest
+// built from "Msg(Node[] x)", which omits Node[](string v), so no conforming implementation could
+// reproduce it from the same definitions.
+func TestTypedDataValidate_RejectsBracketedTypeName(t *testing.T) {
+	t.Run("reachable through a field", func(t *testing.T) {
+		types := domainOnlyTypes()
+		types["Msg"] = []eip712.Type{{Name: "x", Type: "Node[]"}}
+		types["Node[]"] = []eip712.Type{{Name: "v", Type: "string"}}
+
+		_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{
+			"x": map[string]interface{}{"v": "hi"},
+		})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must not contain array notation")
+		require.Contains(t, err.Error(), "Node[]")
+	})
+
+	t.Run("self-referencing", func(t *testing.T) {
+		types := domainOnlyTypes()
+		types["Msg"] = []eip712.Type{{Name: "x", Type: "Node[]"}}
+		types["Node[]"] = []eip712.Type{{Name: "self", Type: "Node[]"}}
+
+		_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must not contain array notation")
+	})
+
+	// The encoder peels one array suffix at a time and re-checks the literal name, so a bracketed name
+	// can sit part way down a multi-dimensional field type rather than at the top. Resolving straight
+	// to the base type would walk past this one.
+	t.Run("reachable part way down a multi-dimensional type", func(t *testing.T) {
+		types := domainOnlyTypes()
+		types["Msg"] = []eip712.Type{{Name: "x", Type: "Item[2][]"}}
+		types["Item[2]"] = []eip712.Type{{Name: "v", Type: "string"}}
+
+		_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{
+			"x": []interface{}{map[string]interface{}{"v": "hi"}},
+		})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must not contain array notation")
+		require.Contains(t, err.Error(), "Item[2]")
+	})
+
+	t.Run("as the primary type", func(t *testing.T) {
+		types := domainOnlyTypes()
+		types["Node[]"] = []eip712.Type{{Name: "v", Type: "string"}}
+
+		_, err := hashTypedDataFor(types, "Node[]", eip712.EIP712Message{"v": "hi"})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must not contain array notation")
+	})
+
+	// A bracketed name nothing encodes is left alone, matching how an unreachable cyclic definition is
+	// treated: Validate rejects the graph the digest walks, not every declaration in the payload.
+	t.Run("unreachable bracketed name is allowed", func(t *testing.T) {
+		types := domainOnlyTypes()
+		types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
+		types["Orphan[]"] = []eip712.Type{{Name: "v", Type: "string"}}
+
+		data, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+		require.NoError(t, err)
+
+		_, _, hashErr := eip712.HashTypedData(data)
+		require.NoError(t, hashErr)
+	})
+}
+
+// A field type ending in brackets whose base type is declared is ordinary array notation and must keep
+// working, so the bracketed-name guard cannot be a blanket rejection of every type string with brackets.
+func TestTypedDataValidate_AllowsOrdinaryArrayNotation(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Item"] = []eip712.Type{{Name: "v", Type: "string"}}
+	types["Bag"] = []eip712.Type{{Name: "items", Type: "Item[2][]"}, {Name: "tags", Type: "string[]"}}
+
+	data, err := hashTypedDataFor(types, "Bag", eip712.EIP712Message{
+		"items": []interface{}{[]interface{}{
+			map[string]interface{}{"v": "a"},
+			map[string]interface{}{"v": "b"},
+		}},
+		"tags": []interface{}{"x", "y"},
+	})
+	require.NoError(t, err)
+
+	_, _, hashErr := eip712.HashTypedData(data)
+	require.NoError(t, hashErr)
+}
+
+// The depth cap is documented as the backstop for the paths that reach the encoder without Validate,
+// and those paths are reachable: HashTypedData does not call Validate, and HashStruct, EncodeData and
+// EncodeField are exported. Without the cap a cycle here is a fatal stack overflow that recover cannot
+// intercept, so this is the guard for the headline failure mode of the issue, independent of any
+// caller remembering to validate first.
+func TestEncoderBoundsCycleWithoutValidate(t *testing.T) {
+	cyclicTypes := func() eip712.Types {
+		types := domainOnlyTypes()
+		types["Loop"] = []eip712.Type{{Name: "self", Type: "Loop"}}
+		return types
+	}
+
+	t.Run("HashTypedData", func(t *testing.T) {
+		data := eip712.TypedData{
+			Types:       cyclicTypes(),
+			PrimaryType: "Loop",
+			Domain:      eip712.EIP712Domain{Name: "test"},
+			Message:     eip712.EIP712Message{},
+		}
+		// Deliberately not calling data.Validate(): the encoder must stand on its own.
+		_, _, err := eip712.HashTypedData(data)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum depth")
+	})
+
+	t.Run("HashStruct", func(t *testing.T) {
+		_, err := cyclicTypes().HashStruct("Loop", map[string]interface{}{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum depth")
+	})
+
+	t.Run("EncodeData", func(t *testing.T) {
+		_, err := cyclicTypes().EncodeData("Loop", map[string]interface{}{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum depth")
+	})
+
+	t.Run("EncodeField", func(t *testing.T) {
+		_, err := cyclicTypes().EncodeField("Loop", map[string]interface{}{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "maximum depth")
+	})
+}
+
+// The reported cycle is bounded, so a long attacker-supplied type chain cannot inflate the error
+// message. The acyclic prefix leading into the cycle is dropped and the hops are capped.
+func TestTypedDataValidate_CycleErrorIsBounded(t *testing.T) {
+	const chain = 5000
+
+	types := domainOnlyTypes()
+	for i := 0; i < chain; i++ {
+		types[fmt.Sprintf("t%d", i)] = []eip712.Type{{Name: "n", Type: fmt.Sprintf("t%d", i+1)}}
+	}
+	types[fmt.Sprintf("t%d", chain)] = []eip712.Type{{Name: "n", Type: "t0"}}
+
+	_, err := hashTypedDataFor(types, "t0", eip712.EIP712Message{})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cyclic definition")
+	require.Less(t, len(err.Error()), 512,
+		"the cycle path must be capped, not rendered in full: %d types were declared", chain)
 }
