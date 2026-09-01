@@ -1,9 +1,12 @@
 package user_test
 
 import (
+	"bytes"
 	"context"
+	"os"
 	"testing"
 
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
@@ -534,6 +537,19 @@ func TestDefaultUseCase_DeleteAllAccountsForAddress(t *testing.T) {
 		_, createAccountTwoErr := app.AccountUseCase.CreateAccount(ctx, createAccountTwoInput)
 		require.NoError(t, createAccountTwoErr)
 
+		// Capture the log across the delete. This path used to hand the whole slot entity to the tracer,
+		// so the PIN that unlocks the signing keys was written out with it. The tracer accumulates
+		// properties, so the leak was not confined to the debug statement: the info record emitted after
+		// the removal carried the same property. The type guards cover this too, but only this assertion
+		// exercises the path the leak actually happened on.
+		var logOutput bytes.Buffer
+		debugLevel := logger.LevelDebug
+		logger.RegisterLogger(logger.Options{Level: &debugLevel, LogOutput: &logOutput})
+		t.Cleanup(func() {
+			infoLevel := logger.LevelInfo
+			logger.RegisterLogger(logger.Options{Level: &infoLevel, LogOutput: os.Stdout})
+		})
+
 		// Delete both accounts
 		deleteInput := user.DeleteAllAccountsForAddressInput{
 			Address:       address.MustNewFromHexString(hsmLoadedAddress),
@@ -543,6 +559,12 @@ func TestDefaultUseCase_DeleteAllAccountsForAddress(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, deletedAccounts)
 		require.Len(t, deletedAccounts.Items, 2)
+
+		record := logOutput.String()
+		require.Contains(t, record, "removing address from HSM", "the record under test must have been emitted")
+		require.Contains(t, record, "removed address from HSM", "the info record reusing the same tracer must have been emitted")
+		require.NotContains(t, record, slotPin, "the slot PIN must never reach a log record")
+		require.Contains(t, record, slotID, "the slot identifier must still be logged")
 
 		// Retrieve deleted accounts
 		getOutput, err := app.AccountUseCase.GetAccount(ctx, user.GetAccountInput(createAccountInputOne))

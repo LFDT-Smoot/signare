@@ -3,6 +3,7 @@ package hsmslot_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -39,17 +40,35 @@ func slotWithSecrets() hsmslot.HSMSlot {
 	}
 }
 
-// handlers returns the two stock slog handlers the service actually configures.
+// jsonHandler is the handler the service configures outside local mode, and the one an unguarded
+// struct leaks through: it marshals every exported field.
+func jsonHandler(b *bytes.Buffer) slog.Handler {
+	return slog.NewJSONHandler(b, &slog.HandlerOptions{Level: slog.LevelDebug})
+}
+
+// textHandler is the handler local mode configures. It renders an unguarded value through %+v, which
+// is why a type carrying a key store by value, such as LocalKeyVaultConfig, leaks through it while the
+// JSON handler fails to marshal the same value and hides the leak behind an !ERROR placeholder.
+func textHandler(b *bytes.Buffer) slog.Handler {
+	return slog.NewTextHandler(b, &slog.HandlerOptions{Level: slog.LevelDebug})
+}
+
+// handlers returns the two stock slog handlers the service actually configures. Both are covered
+// everywhere, because an unguarded value renders differently under each.
 func handlers() map[string]func(*bytes.Buffer) slog.Handler {
 	return map[string]func(*bytes.Buffer) slog.Handler{
-		"json": func(b *bytes.Buffer) slog.Handler {
-			return slog.NewJSONHandler(b, &slog.HandlerOptions{Level: slog.LevelDebug})
-		},
-		// The text handler is the one that would otherwise render the key store verbatim.
-		"text": func(b *bytes.Buffer) slog.Handler {
-			return slog.NewTextHandler(b, &slog.HandlerOptions{Level: slog.LevelDebug})
-		},
+		"json": jsonHandler,
+		"text": textHandler,
 	}
+}
+
+// renderedAttr returns how the named handler writes an integer attribute, so a count assertion checks
+// the reported value and not just the presence of the key.
+func renderedAttr(handlerName string, key string, value int) string {
+	if handlerName == "json" {
+		return fmt.Sprintf("%q:%d", key, value)
+	}
+	return fmt.Sprintf("%s=%d", key, value)
 }
 
 // logged renders value through a real slog handler, which is what resolves slog.LogValuer.
@@ -85,14 +104,24 @@ func TestHSMSlot_LogValueRedactsCredentials(t *testing.T) {
 
 // A pointer to the slot must redact too. slog resolves LogValuer on a *T when the method has a value
 // receiver, but pinning it stops a future change to a pointer receiver from silently reopening this.
+//
+// The Contains assertions are what make this a guard. Without them, deleting every LogValue still
+// passes: the JSON handler cannot marshal the key store's map[address.Address]string key type, so the
+// record collapses to an !ERROR placeholder that contains no slot data and therefore no secret either.
 func TestHSMSlot_LogValueRedactsThroughPointer(t *testing.T) {
-	slot := slotWithSecrets()
-	output := logged(t, func(b *bytes.Buffer) slog.Handler {
-		return slog.NewJSONHandler(b, &slog.HandlerOptions{Level: slog.LevelDebug})
-	}, "slot", &slot)
+	for name, handler := range handlers() {
+		t.Run(name, func(t *testing.T) {
+			slot := slotWithSecrets()
+			output := logged(t, handler, "slot", &slot)
 
-	require.NotContains(t, output, secretPin)
-	require.NotContains(t, output, secretPrivateKey)
+			require.NotContains(t, output, secretPin)
+			require.NotContains(t, output, secretPrivateKey)
+
+			require.Contains(t, output, "slot-1")
+			require.Contains(t, output, "app-1")
+			require.Contains(t, output, "module-1")
+		})
+	}
 }
 
 // SlotConfig can be logged on its own, so it carries its own guard. Both handlers, because a
@@ -103,44 +132,90 @@ func TestSlotConfig_LogValueRedactsKeyStore(t *testing.T) {
 			output := logged(t, handler, "config", slotWithSecrets().Config)
 
 			require.NotContains(t, output, secretPrivateKey)
-			require.Contains(t, output, "localKeyVaultEntries")
+			// The count must be reported accurately, otherwise the redaction passes by emitting nothing.
+			require.Contains(t, output, renderedAttr(name, "localKeyVaultEntries", 1))
+			require.Contains(t, output, renderedAttr(name, "akvEntries", 0))
 		})
 	}
 }
 
-// The redaction is on the attribute value, not on values nested inside one. slog resolves LogValuer
-// on what is passed to the handler and not on slice elements or struct fields, so a slot reached
-// through a container is marshalled raw and its PIN is exposed.
-//
-// This test records that boundary rather than asserting the desired behaviour: it is why the guidance
-// is to log a slot directly, and why HSMConnection carries its own LogValue. If a future Go release
-// resolves LogValuer through containers this test will fail, which is the moment to relax the rule.
-func TestHSMSlot_LogValueDoesNotExtendIntoContainers(t *testing.T) {
-	type enclosing struct{ Slot hsmslot.HSMSlot }
+// LocalKeyVaultConfig carries the key store, and SlotConfig holds it as a pointer, so it needs a guard
+// of its own: slog resolves LogValuer on the attribute value, not on a struct field. Without this the
+// text handler renders the whole map, addresses and private keys, through %+v.
+func TestLocalKeyVaultConfig_LogValueRedactsKeyStore(t *testing.T) {
+	for name, handler := range handlers() {
+		t.Run(name, func(t *testing.T) {
+			config := *slotWithSecrets().Config.LocalKeyVault
 
+			output := logged(t, handler, "localKeyVault", config)
+			require.NotContains(t, output, secretPrivateKey, "key material must never reach a log record")
+			require.Contains(t, output, renderedAttr(name, "entries", 1))
+
+			pointerOutput := logged(t, handler, "localKeyVault", &config)
+			require.NotContains(t, pointerOutput, secretPrivateKey)
+			require.Contains(t, pointerOutput, renderedAttr(name, "entries", 1))
+		})
+	}
+}
+
+// A collection carries slots as slice elements, which slog does not resolve, so it needs a guard of
+// its own. ListHSMSlotsByApplicationOutput and ListHSMSlotsByHSMModuleOutput embed it and inherit it.
+func TestHSMSlotCollection_LogValueRedactsItems(t *testing.T) {
+	for name, handler := range handlers() {
+		t.Run(name, func(t *testing.T) {
+			collection := hsmslot.HSMSlotCollection{
+				Items:                  []hsmslot.HSMSlot{slotWithSecrets()},
+				StandardCollectionPage: entities.StandardCollectionPage{Limit: 10, Offset: 0, MoreItems: false},
+			}
+
+			output := logged(t, handler, "slots", collection)
+			require.NotContains(t, output, secretPin, "no slot in the page may expose its PIN")
+			require.NotContains(t, output, secretPrivateKey)
+			require.Contains(t, output, renderedAttr(name, "items", 1))
+			require.Contains(t, output, renderedAttr(name, "limit", 10))
+
+			embedded := hsmslot.ListHSMSlotsByApplicationOutput{HSMSlotCollection: collection}
+			require.NotContains(t, logged(t, handler, "output", embedded), secretPin,
+				"the embedding output type inherits the guard")
+		})
+	}
+}
+
+// The redaction is on the attribute value, not on values nested inside one. slog resolves LogValuer on
+// what is passed to the handler and not on slice elements, so a bare slice of slots is marshalled raw
+// and every PIN in it is exposed.
+//
+// This test records that boundary rather than asserting the desired behaviour. It is inherent to how a
+// KindAny value is handed to a handler and marshalled, not a Go version detail, so the remedy is not to
+// wait for it to change: log a slot directly, and give any type that carries slots its own LogValue, as
+// HSMConnection and HSMSlotCollection do. Every named carrier in the repository is guarded, so this is
+// reachable only by constructing an unnamed container at the call site.
+func TestHSMSlot_LogValueDoesNotExtendIntoABareSlice(t *testing.T) {
 	// A slot with no Local Key Vault, so the JSON handler can marshal it rather than failing on the
 	// unsupported key-store map type, which would mask the leak.
 	slot := slotWithSecrets()
 	slot.Config = hsmslot.SlotConfig{}
 
-	jsonHandler := func(b *bytes.Buffer) slog.Handler {
-		return slog.NewJSONHandler(b, &slog.HandlerOptions{Level: slog.LevelDebug})
-	}
-
 	require.NotContains(t, logged(t, jsonHandler, "slot", slot), secretPin,
 		"the direct form must stay redacted")
 	require.Contains(t, logged(t, jsonHandler, "slots", []hsmslot.HSMSlot{slot}), secretPin,
-		"known limitation: a slot inside a slice is marshalled raw")
-	require.Contains(t, logged(t, jsonHandler, "wrapper", enclosing{Slot: slot}), secretPin,
-		"known limitation: a slot inside a struct is marshalled raw")
+		"known limitation: a slot inside a bare slice is marshalled raw")
+
+	// The named carrier for the same shape is guarded, which is the supported way to log slots.
+	require.NotContains(t, logged(t, jsonHandler, "slots",
+		hsmslot.HSMSlotCollection{Items: []hsmslot.HSMSlot{slot}}), secretPin,
+		"HSMSlotCollection must not inherit the bare-slice limitation")
 }
 
-// A slot with no Local Key Vault configuration must not panic on a nil pointer.
+// A slot with no Local Key Vault configuration must not panic on a nil pointer, and must report the
+// count as zero rather than omitting it.
 func TestSlotConfig_LogValueHandlesAbsentLocalKeyVault(t *testing.T) {
-	require.NotPanics(t, func() {
-		output := logged(t, func(b *bytes.Buffer) slog.Handler {
-			return slog.NewJSONHandler(b, &slog.HandlerOptions{Level: slog.LevelDebug})
-		}, "config", hsmslot.SlotConfig{})
-		require.Contains(t, output, "localKeyVaultEntries")
-	})
+	for name, handler := range handlers() {
+		t.Run(name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				output := logged(t, handler, "config", hsmslot.SlotConfig{})
+				require.Contains(t, output, renderedAttr(name, "localKeyVaultEntries", 0))
+			})
+		})
+	}
 }
