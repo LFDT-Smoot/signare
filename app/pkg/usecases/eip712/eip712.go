@@ -27,16 +27,18 @@ const (
 	maxTypeDepth = 32
 	// maxStructEncodings bounds the total number of struct encodings performed for one digest. A type
 	// graph can be acyclic and shallow yet expand exponentially: a type with N struct-typed fields
-	// repeated to depth D encodes N^D structs, which a cycle check and a depth cap both pass. A few
-	// kilobytes of type definitions are enough to make that expansion effectively unbounded, so the
-	// total work has to be capped in its own right.
+	// repeated to depth D encodes N^D structs, which a cycle check and a depth cap both pass. The
+	// primary defence against that is in encodeField, which requires an object in the message for
+	// every struct-typed field, so the encoding count cannot outrun the message size. This is the
+	// backstop for the paths that reach the encoder without that check having bounded them, and for
+	// callers of the exported API that are not behind the entrypoint body cap.
 	//
 	// Each encoding is cheap because the type hash is memoized per digest (see encodeState.typeHashes),
-	// so the ceiling bounds total work rather than merely the count: reaching it costs roughly 0.2s of
-	// CPU, against the billions of encodings the exponential case asks for. It is a work ceiling and not
-	// a claim about valid input. Every encoded struct costs message bytes, so no ordinary payload comes
-	// close, but a message carrying a few hundred thousand struct entries is rejected rather than
-	// signed, which is the intended trade.
+	// so the ceiling bounds total work rather than merely the count. The cheapest an encoded struct can
+	// be in the message is the three bytes of "{},", so a body has to be around 800 KB before it can
+	// reach this ceiling, and reaching it costs roughly 0.2s of CPU. That leaves the cap above anything
+	// a request under the default 1 MiB body cap can legitimately ask for, while keeping the worst case
+	// proportionate to the body that bought it.
 	maxStructEncodings = 1 << 18
 	// maxTypeEncodingBytes bounds the total canonical type-string bytes built for one digest. The type
 	// hash is memoized per name, which makes a repeated type cheap but does nothing for a payload that
@@ -453,6 +455,20 @@ func (t Types) encodeField(fieldType string, value interface{}, state *encodeSta
 			if err := json.Unmarshal(j, &m); err != nil {
 				return nil, err
 			}
+		}
+		// A struct-typed field with no value in the message is rejected rather than encoded as an
+		// all-defaults struct. Every scalar type already rejects a nil value, so this makes struct
+		// fields consistent with the rest of the encoder, and it matches implementations that require
+		// a value for every declared member.
+		//
+		// It is also what bounds the walk by the message rather than by the type graph. A nil value
+		// used to marshal to "null" and unmarshal back to a nil map, so the walk descended into a
+		// struct nothing in the message asked for. That terminated cleanly whenever the branch ended
+		// in a zero-field struct, which let a few hundred bytes of type definitions and an empty
+		// message drive the entire maxStructEncodings budget. With this check every struct encoding
+		// needs an object in the message, so the count cannot outrun the message size.
+		if m == nil {
+			return nil, fmt.Errorf("struct field of type %s requires an object value, got %T", fieldType, value)
 		}
 		return t.hashStruct(fieldType, m, state)
 	}

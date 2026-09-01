@@ -521,8 +521,15 @@ func TestTypedDataValidate_AllowsDiamondDependency(t *testing.T) {
 }
 
 // The headline vector the cycle check does not catch: an acyclic, shallow type graph whose encoding
-// still expands exponentially. Eleven types with a fanout of eight is roughly 8^10 struct encodings
-// from about 2.4 KB of type definitions. Only the total-work budget stops this.
+// expands exponentially. Eleven types with a fanout of eight is roughly 8^10 struct encodings from
+// about 2.4 KB of type definitions and an empty message.
+//
+// What made it expand is that the message never had to grow with it. A nil value for a struct-typed
+// field used to marshal to "null" and unmarshal back to a nil map, so the walk descended into a
+// struct nothing had asked for, and a zero-field struct at the bottom let every branch terminate
+// cleanly instead of erroring at the first scalar leaf. Requiring an object per struct-typed field
+// closes the vector at the source: the walk stops at the first absent value, in microseconds,
+// instead of spending the whole struct-encoding budget first.
 func TestHashTypedData_RejectsExponentialTypeExpansion(t *testing.T) {
 	const levels = 10
 	const fanout = 8
@@ -538,16 +545,74 @@ func TestHashTypedData_RejectsExponentialTypeExpansion(t *testing.T) {
 		}
 		types[fmt.Sprintf("T%d", level)] = fields
 	}
-	// A zero-field struct is a legal type and, unlike every scalar, encodes successfully from a nil
-	// value. That is what lets all 8^10 branches bottom out instead of erroring at the first leaf.
 	types[fmt.Sprintf("T%d", levels)] = []eip712.Type{}
 
 	data, err := hashTypedDataFor(types, "T0", eip712.EIP712Message{})
-	require.NoError(t, err, "an acyclic graph must pass validation; the budget is what stops it")
+	require.NoError(t, err, "the graph is acyclic and shallow; validation is not what stops it")
 
 	_, _, hashErr := eip712.HashTypedData(data)
 	require.Error(t, hashErr)
-	require.Contains(t, hashErr.Error(), "struct encodings")
+	require.Contains(t, hashErr.Error(), "requires an object value")
+}
+
+// A struct-typed field with no value in the message must be rejected, not encoded as an all-defaults
+// struct. Every scalar already rejects nil, and this is the check that keeps the number of struct
+// encodings tied to the size of the message.
+func TestEncodeField_RejectsMissingStructValue(t *testing.T) {
+	types := eip712.Types{
+		"EIP712Domain": []eip712.Type{{Name: "name", Type: "string"}},
+		"Inner":        []eip712.Type{{Name: "v", Type: "string"}},
+		"Outer":        []eip712.Type{{Name: "inner", Type: "Inner"}},
+		"Empty":        []eip712.Type{},
+		"HasEmpty":     []eip712.Type{{Name: "e", Type: "Empty"}},
+	}
+
+	t.Run("field absent from the message", func(t *testing.T) {
+		_, err := types.HashStruct("Outer", map[string]interface{}{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "requires an object value")
+	})
+
+	t.Run("field explicitly nil", func(t *testing.T) {
+		_, err := types.HashStruct("Outer", map[string]interface{}{"inner": nil})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "requires an object value")
+	})
+
+	t.Run("field is a nil map of the right type", func(t *testing.T) {
+		// This one asserts successfully as map[string]interface{}, so the nil has to be caught after
+		// the assertion rather than before it.
+		var absent map[string]interface{}
+		_, err := types.HashStruct("Outer", map[string]interface{}{"inner": absent})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "requires an object value")
+	})
+
+	// The zero-field struct is what let the expansion terminate cleanly. It stays legal when the
+	// message actually supplies it, so the check is about the absent value and not about the type.
+	t.Run("zero-field struct supplied explicitly still encodes", func(t *testing.T) {
+		got, err := types.HashStruct("HasEmpty", map[string]interface{}{
+			"e": map[string]interface{}{},
+		})
+		require.NoError(t, err)
+		require.Len(t, got, 32)
+	})
+
+	t.Run("zero-field struct omitted is rejected", func(t *testing.T) {
+		_, err := types.HashStruct("HasEmpty", map[string]interface{}{})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "requires an object value")
+	})
+
+	// An empty object is not the same as an absent one: it is a real value that happens to have no
+	// members, so a struct with fields still fails on the fields themselves.
+	t.Run("empty object for a struct with fields fails on its fields", func(t *testing.T) {
+		_, err := types.HashStruct("Outer", map[string]interface{}{
+			"inner": map[string]interface{}{},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "string field")
+	})
 }
 
 // The depth cap backstops array nesting, whose level count lives in the bracket-pair suffix of the
@@ -595,61 +660,65 @@ func TestEncodeField_MalformedArrayTypeReturnsError(t *testing.T) {
 	}
 }
 
-// fanoutChain adds a chain of types named prefix0..prefixN where each level has `fanout` fields of
-// the next, and the last level is a zero-field struct. Encoding prefix0 from a nil value costs
-// (fanout^(levels+1) - 1) / (fanout - 1) struct encodings, so it is a way to spend a chosen,
-// calculable amount of the budget.
-func fanoutChain(types eip712.Types, prefix string, levels, fanout int) string {
-	for level := 0; level < levels; level++ {
-		fields := make([]eip712.Type, fanout)
-		for field := 0; field < fanout; field++ {
-			fields[field] = eip712.Type{
-				Name: fmt.Sprintf("f%d", field),
-				Type: fmt.Sprintf("%s%d", prefix, level+1),
-			}
-		}
-		types[fmt.Sprintf("%s%d", prefix, level)] = fields
-	}
-	types[fmt.Sprintf("%s%d", prefix, levels)] = []eip712.Type{}
-	return prefix + "0"
-}
-
-// The budget spans a whole digest rather than resetting per struct, so it cannot be doubled by
-// splitting the work across the domain separator and the message.
+// The struct-encoding budget still has to fire, and now that every struct encoding needs an object in
+// the message, the only way to reach it is a message that actually carries that many objects. A
+// zero-field struct is the cheapest one to carry, at the three bytes of "{}," each, which is what sets
+// how large a body has to be before the ceiling is reachable at all.
 //
-// This is built so each half alone stays under the budget while the two together exceed it: the
-// domain and the message each carry an identical expansion. If the state were created per hashStruct
-// rather than per HashTypedData, both halves would fit and no error would be raised.
-func TestHashTypedData_BudgetIsSharedAcrossDomainAndMessage(t *testing.T) {
-	// (11^6-1)/10 = 177156 struct encodings per half: under maxStructEncodings alone, over it combined.
-	const levels, fanout = 5, 11
+// The boundary is pinned from both sides, and it also pins that the domain separator is charged to the
+// same budget: the totals below only line up if EIP712Domain and the primary type each cost one.
+func TestHashTypedData_StructBudgetBoundary(t *testing.T) {
+	// maxStructEncodings is 1 << 18. The digest spends one encoding on EIP712Domain and one on Bag, so
+	// the array can carry maxStructEncodings-2 elements and no more.
+	const budget = 1 << 18
+	const atLimit = budget - 2
 
-	// One half on its own must succeed, otherwise the combined case proves nothing.
-	t.Run("one half alone is under the budget", func(t *testing.T) {
-		types := eip712.Types{"EIP712Domain": []eip712.Type{{Name: "name", Type: "string"}}}
-		primary := fanoutChain(types, "M", levels, fanout)
+	build := func(items int) eip712.TypedData {
+		types := domainOnlyTypes()
+		types["Empty"] = []eip712.Type{}
+		types["Bag"] = []eip712.Type{{Name: "items", Type: "Empty[]"}}
 
-		data, err := hashTypedDataFor(types, primary, eip712.EIP712Message{})
-		require.NoError(t, err)
+		values := make([]interface{}, items)
+		for i := range values {
+			values[i] = map[string]interface{}{}
+		}
+		return eip712.TypedData{
+			Types:       types,
+			PrimaryType: "Bag",
+			Domain:      eip712.EIP712Domain{Name: "test"},
+			Message:     eip712.EIP712Message{"items": values},
+		}
+	}
 
-		_, _, hashErr := eip712.HashTypedData(data)
-		require.NoError(t, hashErr, "one half must fit within the budget on its own")
+	t.Run("at the limit it still encodes", func(t *testing.T) {
+		data := build(atLimit)
+		require.NoError(t, data.Validate())
+
+		_, digest, hashErr := eip712.HashTypedData(data)
+		require.NoError(t, hashErr, "%d elements plus the domain and the primary type is exactly the budget", atLimit)
+		require.Len(t, digest, 32)
 	})
 
-	t.Run("both halves together exceed it", func(t *testing.T) {
-		types := eip712.Types{}
-		domainHeavy := fanoutChain(types, "D", levels, fanout)
-		primary := fanoutChain(types, "M", levels, fanout)
-		// The domain separator hashes EIP712Domain, and toFieldMap never supplies this field, so it
-		// expands from a nil value exactly like the message half does.
-		types["EIP712Domain"] = []eip712.Type{{Name: "heavy", Type: domainHeavy}}
-
-		data, err := hashTypedDataFor(types, primary, eip712.EIP712Message{})
-		require.NoError(t, err)
+	t.Run("one past the limit is rejected", func(t *testing.T) {
+		data := build(atLimit + 1)
+		require.NoError(t, data.Validate())
 
 		_, _, hashErr := eip712.HashTypedData(data)
-		require.Error(t, hashErr, "a shared budget must reject what two independent budgets would allow")
+		require.Error(t, hashErr)
 		require.Contains(t, hashErr.Error(), "struct encodings")
+	})
+
+	// If the state were created per hashStruct rather than per HashTypedData, the domain separator would
+	// not be charged and the at-limit case above would have a spare encoding, so this pins the sharing
+	// from the other direction: one element fewer must leave exactly one encoding unspent.
+	t.Run("the domain separator is charged to the same budget", func(t *testing.T) {
+		data := build(atLimit)
+		data.Types["EIP712Domain"] = []eip712.Type{{Name: "name", Type: "string"}, {Name: "version", Type: "string"}}
+		data.Domain.Version = "1"
+		require.NoError(t, data.Validate())
+
+		_, _, hashErr := eip712.HashTypedData(data)
+		require.NoError(t, hashErr, "extra scalar domain fields must not cost struct encodings")
 	})
 }
 
@@ -899,11 +968,15 @@ func TestTypedDataValidate_AllowsOrdinaryArrayNotation(t *testing.T) {
 	require.NoError(t, hashErr)
 }
 
-// The depth cap is documented as the backstop for the paths that reach the encoder without Validate,
-// and those paths are reachable: HashTypedData does not call Validate, and HashStruct, EncodeData and
-// EncodeField are exported. Without the cap a cycle here is a fatal stack overflow that recover cannot
-// intercept, so this is the guard for the headline failure mode of the issue, independent of any
-// caller remembering to validate first.
+// A cycle reaching the encoder without Validate must error rather than overflow the stack, and those
+// paths are reachable: HashTypedData does not call Validate, and HashStruct, EncodeData and EncodeField
+// are exported. Without a bound a cycle here is a fatal stack overflow that recover cannot intercept,
+// so this is the guard for the headline failure mode of the issue, independent of any caller
+// remembering to validate first.
+//
+// Two bounds stop it now, at different points. An empty message stops at the first absent struct value.
+// A message nested deeply enough to keep feeding the walk gets to the depth cap instead, so both are
+// exercised rather than assuming which one fires.
 func TestEncoderBoundsCycleWithoutValidate(t *testing.T) {
 	cyclicTypes := func() eip712.Types {
 		types := domainOnlyTypes()
@@ -911,35 +984,64 @@ func TestEncoderBoundsCycleWithoutValidate(t *testing.T) {
 		return types
 	}
 
-	t.Run("HashTypedData", func(t *testing.T) {
-		data := eip712.TypedData{
-			Types:       cyclicTypes(),
-			PrimaryType: "Loop",
-			Domain:      eip712.EIP712Domain{Name: "test"},
-			Message:     eip712.EIP712Message{},
+	// nestedLoopValue builds {self: {self: ... {}}} so the walk is fed real objects all the way past
+	// the depth cap, which is the only way a cycle still reaches it.
+	nestedLoopValue := func(depth int) map[string]interface{} {
+		value := map[string]interface{}{}
+		for i := 0; i < depth; i++ {
+			value = map[string]interface{}{"self": value}
 		}
-		// Deliberately not calling data.Validate(): the encoder must stand on its own.
-		_, _, err := eip712.HashTypedData(data)
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "maximum depth")
-	})
+		return value
+	}
 
-	t.Run("HashStruct", func(t *testing.T) {
+	t.Run("empty message stops at the absent value", func(t *testing.T) {
 		_, err := cyclicTypes().HashStruct("Loop", map[string]interface{}{})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "maximum depth")
+		require.Contains(t, err.Error(), "requires an object value")
 	})
 
-	t.Run("EncodeData", func(t *testing.T) {
-		_, err := cyclicTypes().EncodeData("Loop", map[string]interface{}{})
+	t.Run("deeply nested message stops at the depth cap", func(t *testing.T) {
+		_, err := cyclicTypes().HashStruct("Loop", nestedLoopValue(40))
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "maximum depth")
 	})
 
-	t.Run("EncodeField", func(t *testing.T) {
-		_, err := cyclicTypes().EncodeField("Loop", map[string]interface{}{})
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "maximum depth")
+	// Whichever bound fires, no exported entry point may recurse without limit. These assert only that
+	// an error comes back, so the test does not have to track which bound wins for each shape.
+	t.Run("every exported entry point is bounded", func(t *testing.T) {
+		for name, call := range map[string]func(eip712.Types, map[string]interface{}) error{
+			"HashTypedData": func(types eip712.Types, message map[string]interface{}) error {
+				// Deliberately not calling Validate: the encoder must stand on its own.
+				_, _, err := eip712.HashTypedData(eip712.TypedData{
+					Types:       types,
+					PrimaryType: "Loop",
+					Domain:      eip712.EIP712Domain{Name: "test"},
+					Message:     message,
+				})
+				return err
+			},
+			"HashStruct": func(types eip712.Types, message map[string]interface{}) error {
+				_, err := types.HashStruct("Loop", message)
+				return err
+			},
+			"EncodeData": func(types eip712.Types, message map[string]interface{}) error {
+				_, err := types.EncodeData("Loop", message)
+				return err
+			},
+			"EncodeField": func(types eip712.Types, message map[string]interface{}) error {
+				_, err := types.EncodeField("Loop", message)
+				return err
+			},
+		} {
+			for shape, message := range map[string]map[string]interface{}{
+				"empty message":  {},
+				"nested message": nestedLoopValue(40),
+			} {
+				t.Run(name+", "+shape, func(t *testing.T) {
+					require.Error(t, call(cyclicTypes(), message))
+				})
+			}
+		}
 	})
 }
 
