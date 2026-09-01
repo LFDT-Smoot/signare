@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
 
 ### Security
-- Return a copy from `signaturemanager.Error.WithMessage` rather than mutating the receiver, so the shared PKCS#11 error instances can no longer race between concurrent requests or surface one request's error detail, which carries slot information, to another (#16).
+- Stop `signaturemanager.Error.WithMessage` mutating its receiver, so concurrent requests can no longer race on, or read each other's, PKCS#11 error detail (#16).
 
 ## [1.4.2] - 2026-07-30
 

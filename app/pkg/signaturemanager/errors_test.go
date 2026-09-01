@@ -1,6 +1,8 @@
 package signaturemanager_test
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -50,13 +52,8 @@ func TestError_Description(t *testing.T) {
 
 }
 
-// TestWithMessage_DoesNotMutateReceiver is the regression guard for a cross-request information leak.
-//
-// pkcs11hsm keeps a package-level translator map holding one *Error per PKCS#11 return code, built
-// once at initialisation and returned to every caller that hits that code. While WithMessage assigned
-// to the receiver, two concurrent requests hitting the same code both mutated that one instance:
-// a data race on description, and one request could read the other's error text, which carries slot
-// detail.
+// Regression guard for a cross-request information leak: a shared Error must survive a derivation
+// unchanged, so one request cannot observe another's error text.
 func TestWithMessage_DoesNotMutateReceiver(t *testing.T) {
 	shared := signaturemanager.NewPinIncorrectError()
 	original := shared.Error()
@@ -90,4 +87,29 @@ func TestWithMessage_DerivationsAreIndependent(t *testing.T) {
 	require.Contains(t, first.Error(), "first request")
 	require.NotContains(t, first.Error(), "second request")
 	require.Contains(t, second.Error(), "second request")
+}
+
+// Deriving from a shared instance while another goroutine reads it must be race-free. The
+// assertions above catch the same bug deterministically; this is the guard that -race can fail.
+func TestWithMessage_ConcurrentDerivationsAreRaceFree(t *testing.T) {
+	shared := signaturemanager.NewInvalidSlotError()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = shared.WithMessage(fmt.Sprintf("request %d", i)).Error()
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			_ = shared.Error()
+		}
+	}()
+	wg.Wait()
+
+	require.Equal(t, "invalid slot", shared.Error())
 }
