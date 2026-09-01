@@ -228,8 +228,8 @@ type PersonalSignOutput struct {
 	// SignedData is the hex-encoded 65-byte [R || S || V] signature over the EIP-191 digest, signed with
 	// the private key of the Ethereum account corresponding to the given address.
 	SignedData string
-	// Digest is the hex-encoded EIP-191 digest that was signed, returned so a caller can verify the
-	// signature without reconstructing the prefix themselves.
+	// Digest is a hex-encoded EIP-191 digest of the message, after adding the personal message prefix
+	// and before signing it.
 	Digest string
 }
 

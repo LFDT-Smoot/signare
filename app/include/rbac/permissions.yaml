@@ -46,9 +46,12 @@ permissions:
       - rpc.method.eth_importAccount
       - rpc.method.eth_accounts
   - id: allow-user-transaction-sign-actions
-    description: Grants access to sign transactions, EIP-712 typed data and EIP-191 personal messages
+    description: Grants access to sign transactions and EIP-712 typed data
     actions:
       - rpc.method.eth_signTransaction
       - rpc.method.eth_signTypedData
+  - id: allow-user-personal-sign-actions
+    description: Grants access to sign EIP-191 personal messages
+    actions:
       - rpc.method.personal_sign
 

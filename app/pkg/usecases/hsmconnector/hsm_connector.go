@@ -552,7 +552,7 @@ func (d DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, f
 	}
 	digitalSignatureManager, createErr := d.digitalSignatureManagerFactory.Create(ctx, createInput)
 	if createErr != nil {
-		return nil, errors.InternalFromErr(createErr).WithMessage("error signing typed data: %s", createErr.Error())
+		return nil, errors.InternalFromErr(createErr).WithMessage("error creating the signature manager: %s", createErr.Error())
 	}
 
 	signInput := signaturemanager.SignInput{
@@ -594,8 +594,9 @@ func (d DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, f
 		return nil, err
 	}
 
-	// EIP-712 off-chain signatures use V=27 or V=28, not the EIP-155 transaction formula.
-	tracer.Debug("generated typed data signature")
+	// Off-chain signatures, EIP-712 and EIP-191 alike, use V=27 or V=28, not the EIP-155 transaction
+	// formula. This helper is shared by every caller that signs a digest rather than a transaction.
+	tracer.Debug("generated signature")
 	return &EthereumSignature{
 		V: entities.Int256{Int: *new(big.Int).SetBytes(signatureWithV[0:1])},
 		R: entities.Int256{Int: *new(big.Int).SetBytes(signatureWithV[1:33])},

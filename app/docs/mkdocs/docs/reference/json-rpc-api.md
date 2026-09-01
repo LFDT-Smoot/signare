@@ -22,6 +22,7 @@ for implementation-defined server errors. Signare defines the following ones:
 | -32097 | Precondition failed | The request can not be executed in the current system state |
 | -32098 | Not found           | The specified resource was not found.                       |
 | -32099 | Unauthorized        | The request was not authorized.                             |
+| -32604 | Bad gateway         | An upstream dependency, such as the HSM, returned a fault.  |
 | -32605 | Already exists      | The specified resource already exists.                      |
 
 ## Ethereum JSON RPC API supported methods

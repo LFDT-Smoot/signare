@@ -40,7 +40,7 @@ func accountSigningField(actionID string) (usesAddressParam bool, requiresAuthor
 }
 
 // AuthorizeAccount checks if a user is authorized to use an account when performing an account
-// signing action (eth_signTransaction or eth_signTypedData).
+// signing action (any method listed in accountSigningMethods).
 func (policyEnforcementPoint *RPCPolicyEnforcementPoint) AuthorizeAccount(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

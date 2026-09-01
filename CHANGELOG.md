@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
-- Add the `personal_sign` JSON-RPC method, signing an arbitrary message under the EIP-191 personal message prefix so an identity whose key is custodied in the HSM can produce a Sign-In With Ethereum signature. Granted to the `transaction-signer` role and subject to the same per-account authorization as the other signing methods (#14).
+- Add the `personal_sign` JSON-RPC method, signing an arbitrary message under the EIP-191 personal message prefix so an identity whose key is custodied in the HSM can produce a Sign-In With Ethereum signature. Granted by a new `message-signer` role, separate from `transaction-signer`, and subject to the same per-account authorization as the other signing methods (#14).
 
 ## [1.4.2] - 2026-07-30
 

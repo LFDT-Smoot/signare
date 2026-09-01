@@ -470,6 +470,13 @@ func (p *SignTypedDataRequestParams) SetParamsFrom(params []any) error {
 	return errors.New("could not decode eth_signTypedData params; expected a single object with [address] and [typedData]")
 }
 
+func (p *SignTypedDataRequestParams) ValidateParams() error {
+	if len(p.Address) == 0 {
+		return errors.New("[address] cannot be nil")
+	}
+	return p.TypedData.Validate()
+}
+
 // PersonalSignRequestParams request definition for personal_sign.
 //
 // The shape is a named object, matching eth_signTransaction and eth_signTypedData, rather than the
@@ -531,11 +538,4 @@ func (p *PersonalSignRequestParams) ValidateParams() error {
 		return errors.New("[message] cannot be empty")
 	}
 	return nil
-}
-
-func (p *SignTypedDataRequestParams) ValidateParams() error {
-	if len(p.Address) == 0 {
-		return errors.New("[address] cannot be nil")
-	}
-	return p.TypedData.Validate()
 }

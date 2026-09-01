@@ -100,10 +100,13 @@ Move over to ``/app/include/rbac`` and by editing the file ``permissions.yaml`` 
 
 ```YAML
   - id: allow-user-transaction-sign-actions
-    description: Grants access to sign transactions, EIP-712 typed data and EIP-191 personal messages
+    description: Grants access to sign transactions and EIP-712 typed data
     actions:
       - rpc.method.eth_signTransaction
       - rpc.method.eth_signTypedData
+  - id: allow-user-personal-sign-actions
+    description: Grants access to sign EIP-191 personal messages
+    actions:
       - rpc.method.personal_sign
 ```
 
@@ -139,7 +142,12 @@ The default RBAC configuration consists of the following roles and allowed actio
 |------------------------|-----------|-------------------------------------------------------|------------------------------------------------------|
 | **signer-admin**       | Admin     | Admins, Users, Accounts, Applications, Modules, Slots | ✗                                                    |
 | **application-admin**  | User      | Users, Accounts                                       | eth_generateAccount, eth_importAccount, eth_removeAccount, eth_accounts |
-| **transaction-signer** | User      | ✗                                                     | eth_signTransaction, eth_signTypedData, personal_sign |
+| **transaction-signer** | User      | ✗                                                     | eth_signTransaction, eth_signTypedData               |
+| **message-signer**     | User      | ✗                                                     | personal_sign                                        |
+
+``personal_sign`` is granted by its own role rather than bundled into ``transaction-signer``, so an identity that
+only needs to authenticate (for example via Sign-In With Ethereum) can be given ``message-signer`` without also
+being able to sign transactions. A user that needs both is assigned both roles.
 
 ### Transaction signing
 
