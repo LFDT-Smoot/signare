@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Stop writing to the digital signature manager map after construction, so adding an HSM slot can no longer crash the signer through a concurrent map access (#15).
 
+### Security
+- Stop `signaturemanager.Error.WithMessage` mutating its receiver, so concurrent requests can no longer race on, or read each other's, PKCS#11 error detail (#16).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed

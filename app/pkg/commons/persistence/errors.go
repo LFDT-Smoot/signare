@@ -35,6 +35,13 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.err.Error(), e.description)
 }
 
+// WithMessage sets the description on e and returns it.
+//
+// Note that this mutates the receiver, unlike signaturemanager.Error.WithMessage, which returns a
+// copy. The dialect error maps hold one shared *Error per code and TranslateError hands that
+// instance out directly, so chaining WithMessage onto a translated error would write into state
+// shared by every concurrent request. No caller does that today. Converting this to copy needs
+// TranslateError to stop handing out the shared instance as well, so the two go together.
 func (e *Error) WithMessage(message string) *Error {
 	e.description = message
 	return e
