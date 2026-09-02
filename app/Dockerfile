@@ -1,6 +1,6 @@
 # Go toolchain base for the build stages. Keep in lockstep with the `go` directive in
 # app/go.mod and deployment/go.mod. Pinned by digest for reproducible builds.
-ARG BUILD_BASE_IMAGE=golang:1.25.11-bookworm@sha256:b96f24a8d7d010ea0acb9c3ba99064740f02b6b984612b28bd3c9c5ab9453e38
+ARG BUILD_BASE_IMAGE=golang:1.25.14-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437
 # Final runtime base. scratch keeps the image minimal; it has no digest to pin.
 ARG BASE_IMAGE=scratch
 
