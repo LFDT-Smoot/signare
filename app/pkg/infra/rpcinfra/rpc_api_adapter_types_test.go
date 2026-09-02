@@ -66,6 +66,32 @@ func TestProcessParams_ObjectPositionalParamSucceeds(t *testing.T) {
 	})
 }
 
+func TestSignTXRequestParams_AccessListPresenceIsPreserved(t *testing.T) {
+	const mandatoryFields = `"from":"0xabc","data":"0x","nonce":"0x1"`
+
+	t.Run("omitted accessList stays nil", func(t *testing.T) {
+		params := &rpcinfra.SignTXRequestParams{}
+		require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{`+mandatoryFields+`}]`), params))
+		require.Nil(t, params.AccessList)
+	})
+
+	t.Run("empty accessList becomes a non-nil empty slice", func(t *testing.T) {
+		params := &rpcinfra.SignTXRequestParams{}
+		require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{`+mandatoryFields+`,"accessList":[]}]`), params))
+		require.NotNil(t, params.AccessList)
+		require.Empty(t, params.AccessList)
+	})
+
+	t.Run("populated accessList keeps its entries", func(t *testing.T) {
+		params := &rpcinfra.SignTXRequestParams{}
+		raw := json.RawMessage(`[{` + mandatoryFields + `,"accessList":[{"address":"0xcccccccccccccccccccccccccccccccccccccccc","storageKeys":["0x0000000000000000000000000000000000000000000000000000000000000001"]}]}]`)
+		require.Nil(t, rpcinfra.ProcessParams(raw, params))
+		require.Len(t, params.AccessList, 1)
+		require.Equal(t, "0xcccccccccccccccccccccccccccccccccccccccc", params.AccessList[0].Address)
+		require.Equal(t, []string{"0x0000000000000000000000000000000000000000000000000000000000000001"}, params.AccessList[0].StorageKeys)
+	})
+}
+
 // TestSignTypedDataRequestParams_ValidateParams guards the validation surface exposed to the handler:
 // the account address is mandatory and the typed data must declare the structure eip712 requires.
 func TestSignTypedDataRequestParams_ValidateParams(t *testing.T) {

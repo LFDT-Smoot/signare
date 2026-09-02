@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
+- Add signing for EIP-2930 (type 1, access list) transactions, emitted as a `0x01`-prefixed envelope (#5).
+
+### Changed
+- An `eth_signTransaction` request carrying both EIP-1559 fee fields and no `accessList` is now signed as type 2, where it was previously rejected. An access list is optional for EIP-1559 (#5).
+- Reworded the rejection message for an unsupported transaction type from `Could not determine transaction type` to `Not supported transaction type`. This appears in the server log only, since the JSON-RPC response is `-32602 Invalid params` either way (#5).
+
+### Fixed
+- Fixed `eth_signTransaction` signing a request as a legacy transaction, silently discarding `maxFeePerBlobGas`, `blobVersionedHashes` or `authorizationList`, when the request carried one of those fields and neither a `gasPrice` nor any EIP-1559 fee field. Such a request is now rejected as an unsupported transaction type (#5).
 
 ### Changed
 - Adapt `rbac-validator` to the `kin-openapi` API change that made `openapi3.T.Paths` a struct rather than a map, by iterating `spec.Paths.Map()`. The validator reads the same set of operation IDs from the bundled API spec as before.

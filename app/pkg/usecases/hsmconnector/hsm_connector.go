@@ -226,7 +226,6 @@ func (d *DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTx
 	}
 
 	txType, err := identifyTxType(input)
-
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("Could not determine transaction type")
 	}
@@ -235,37 +234,77 @@ func (d *DefaultUseCase) SignTx(ctx context.Context, input SignTxInput) (*SignTx
 	tracer.AddProperty("slot", input.Slot)
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "SignTx")
-
-	switch txType {
-	case entities.TransactionType0Legacy:
-		return d.signLegacyTx(ctx, input, tracer)
-	case entities.TransactionType2EIP1559:
-		return d.signEIP1559Tx(ctx, input, tracer)
-	default:
-		return nil, errors.InvalidArgument().SetHumanReadableMessage("Not supported transaction type")
-	}
-
-}
-
-func (d *DefaultUseCase) signLegacyTx(ctx context.Context, input SignTxInput, tracer logger.Tracer) (*SignTxOutput, error) {
-	gas := entities.NewHexUInt64(90000) // as defined in https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_signtransaction
-	if input.Gas != nil {
-		gas = *input.Gas
-	}
-
-	defaultGasPrice := entities.NewHexInt256(big.NewInt(0))
-	gasPrice := *defaultGasPrice
-	if input.GasPrice != nil {
-		gasPrice = *input.GasPrice
-	}
-
-	chainID := entities.NewHexInt256(input.ChainID.BigInt())
-
+	tracer.AddProperty("txType", txType)
 	if input.To == nil {
 		tracer.AddProperty("to", "null")
 	} else {
 		tracer.AddProperty("to", input.To.String())
 	}
+
+	var output *SignTxOutput
+	switch txType {
+	case entities.TransactionType0Legacy:
+		output, err = d.signLegacyTx(ctx, input, tracer)
+	case entities.TransactionType1EIP2930:
+		output, err = d.signEIP2930Tx(ctx, input, tracer)
+	case entities.TransactionType2EIP1559:
+		output, err = d.signEIP1559Tx(ctx, input, tracer)
+	default:
+		return nil, errors.InvalidArgument().SetHumanReadableMessage("Not supported transaction type")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Labelled here rather than in each signer so the reported type is by construction the one that
+	// selected the signer.
+	output.TxType = txType
+
+	return output, nil
+}
+
+// gasOrDefault returns the requested gas limit, defaulting to the value eth_signTransaction defines
+// when the request omits it: https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_signtransaction
+func gasOrDefault(gas *entities.HexUInt64) entities.HexUInt64 {
+	if gas != nil {
+		return *gas
+	}
+	return entities.NewHexUInt64(90000)
+}
+
+func gasPriceOrZero(gasPrice *entities.HexInt256) entities.HexInt256 {
+	if gasPrice != nil {
+		return *gasPrice
+	}
+	return *entities.NewHexInt256(big.NewInt(0))
+}
+
+func (d *DefaultUseCase) signTypedTx(ctx context.Context, input SignTxInput, tracer logger.Tracer, envelope typedTxEnvelope) (string, *YParityTransactionSignature, error) {
+	hashedTx, err := hashTypedTx(envelope)
+	if err != nil {
+		return "", nil, err
+	}
+
+	signatureWithV, err := d.signAndRecover(ctx, input, tracer, hashedTx)
+	if err != nil {
+		return "", nil, err
+	}
+
+	signature := generateYParityTransactionSignature(signatureWithV)
+	tracer.Debugf("generated type %d transaction signature", envelope.prefix)
+
+	encoded, err := encodeTypedTx(envelope, signature)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return encoded.Encode(), signature, nil
+}
+
+func (d *DefaultUseCase) signLegacyTx(ctx context.Context, input SignTxInput, tracer logger.Tracer) (*SignTxOutput, error) {
+	gas := gasOrDefault(input.Gas)
+	gasPrice := gasPriceOrZero(input.GasPrice)
+	chainID := entities.NewHexInt256(input.ChainID.BigInt())
 
 	transaction := EthereumTransaction{
 		From:     input.From,
@@ -304,62 +343,66 @@ func (d *DefaultUseCase) signLegacyTx(ctx context.Context, input SignTxInput, tr
 	}, nil
 }
 
+func (d *DefaultUseCase) signEIP2930Tx(ctx context.Context, input SignTxInput, tracer logger.Tracer) (*SignTxOutput, error) {
+	transaction := EIP2930Transaction{
+		From:       input.From,
+		To:         input.To,
+		Gas:        gasOrDefault(input.Gas),
+		GasPrice:   gasPriceOrZero(input.GasPrice),
+		Value:      input.Value,
+		Data:       input.Data,
+		Nonce:      input.Nonce,
+		ChainID:    *entities.NewHexInt256(input.ChainID.BigInt()),
+		AccessList: input.AccessList,
+	}
+
+	envelope, err := transaction.envelope()
+	if err != nil {
+		return nil, err
+	}
+
+	signedTx, signature, err := d.signTypedTx(ctx, input, tracer, *envelope)
+	if err != nil {
+		return nil, err
+	}
+	transaction.Signature = signature
+
+	return &SignTxOutput{
+		SignedTx:    signedTx,
+		Transaction: transaction,
+	}, nil
+}
+
 func (d *DefaultUseCase) signEIP1559Tx(ctx context.Context, input SignTxInput, tracer logger.Tracer) (*SignTxOutput, error) {
-
-	gas := entities.NewHexUInt64(90000)
-	if input.Gas != nil {
-		gas = *input.Gas
-	}
-
-	maxPriorityFeePerGas := *input.MaxPriorityFeePerGas
-
-	chainID := entities.NewHexInt256(input.ChainID.BigInt())
-
-	accessList := input.AccessList
-
-	if input.To == nil {
-		tracer.AddProperty("to", "null")
-	} else {
-		tracer.AddProperty("to", input.To.String())
-	}
-
+	// MaxFeePerGas and MaxPriorityFeePerGas are both guaranteed non-nil: identifyTxType only selects this
+	// type when they are set, and rejects the request otherwise.
 	transaction := EIP1559Transaction{
 		From:                 input.From,
 		To:                   input.To,
-		Gas:                  gas,
+		Gas:                  gasOrDefault(input.Gas),
 		MaxFeePerGas:         *input.MaxFeePerGas,
-		MaxPriorityFeePerGas: maxPriorityFeePerGas,
+		MaxPriorityFeePerGas: *input.MaxPriorityFeePerGas,
 		Value:                input.Value,
 		Data:                 input.Data,
 		Nonce:                input.Nonce,
-		ChainID:              *chainID,
-		AccessList:           accessList,
+		ChainID:              *entities.NewHexInt256(input.ChainID.BigInt()),
+		AccessList:           input.AccessList,
 	}
 
-	payload, err := transaction.Hash()
+	envelope, err := transaction.envelope()
 	if err != nil {
 		return nil, err
 	}
 
-	signatureWithV, err := d.signAndRecover(ctx, input, tracer, payload)
+	signedTx, signature, err := d.signTypedTx(ctx, input, tracer, *envelope)
 	if err != nil {
 		return nil, err
 	}
-
-	txSignature := generateEIP1559TransactionSignature(signatureWithV)
-	transaction.Signature = txSignature
-
-	tracer.Debug("generated EIP-1559 transaction signature")
-
-	transactionRLPEncode, err := transaction.RLPEncode()
-	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("error signing EIP-1559 transaction: failed to RLP encode transaction with '%v'", err.Error())
-	}
-	result := transactionRLPEncode.Encode()
+	transaction.Signature = signature
 
 	return &SignTxOutput{
-		SignedTx:  result,
-		EIP1559Tx: &transaction,
+		SignedTx:    signedTx,
+		Transaction: transaction,
 	}, nil
 }
 
@@ -407,7 +450,7 @@ func assembleRecoverableSignature(rawSig []byte, from address.Address, data []by
 }
 
 // signAndRecover signs the payload via HSM and performs EC recovery to determine the V value.
-func (d DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, tracer logger.Tracer, payload *entities.HexBytes) ([]byte, error) {
+func (d *DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, tracer logger.Tracer, payload *entities.HexBytes) ([]byte, error) {
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
@@ -458,7 +501,7 @@ func (d DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, t
 	return signatureWithV, nil
 }
 
-func (d DefaultUseCase) SignTypedData(ctx context.Context, input SignTypedDataInput) (*SignTypedDataOutput, error) {
+func (d *DefaultUseCase) SignTypedData(ctx context.Context, input SignTypedDataInput) (*SignTypedDataOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
@@ -502,7 +545,7 @@ func (d DefaultUseCase) SignTypedData(ctx context.Context, input SignTypedDataIn
 	}, nil
 }
 
-func (d DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, from address.Address, data []byte, tracer logger.Tracer) (*EthereumSignature, error) {
+func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, from address.Address, data []byte, tracer logger.Tracer) (*EthereumSignature, error) {
 	createInput := CreateInput{
 		ModuleKind: slotData.ModuleKind,
 	}
@@ -655,33 +698,30 @@ func ProvideDefaultHSMConnector(options DefaultUseCaseOptions) (*DefaultUseCase,
 
 func identifyTxType(input SignTxInput) (string, error) {
 
-	if input.GasPrice != nil {
+	if input.AuthorizationList != nil {
+		// Not supported transaction type
+		return entities.TransactionType4EIP7702, nil
+	}
 
-		if input.MaxFeePerGas != nil || input.MaxPriorityFeePerGas != nil || input.MaxFeePerBlobGas != nil || input.BlobVersionedHashes != nil || input.AuthorizationList != nil {
-			return "Unknown", errors.InvalidArgument().WithMessage("Ambiguous transaction type")
-		}
-
-		if input.AccessList != nil {
-			// Not supported transaction type
-			return entities.TransactionType1EIP2930, nil
-		}
-
-		return entities.TransactionType0Legacy, nil
-
+	if input.MaxFeePerBlobGas != nil || input.BlobVersionedHashes != nil {
+		// Not supported transaction type
+		return entities.TransactionType3EIP4844, nil
 	}
 
 	if input.MaxFeePerGas != nil || input.MaxPriorityFeePerGas != nil {
-		if input.MaxFeePerGas != nil && input.MaxPriorityFeePerGas != nil && input.AccessList != nil {
-			if input.MaxFeePerBlobGas != nil || input.BlobVersionedHashes != nil || input.AuthorizationList != nil {
-				// Not supported transaction type
-				return entities.TransactionType3EIP4844, nil
-			}
-			return entities.TransactionType2EIP1559, nil
+		if input.GasPrice != nil {
+			return "Unknown", errors.InvalidArgument().WithMessage("Ambiguous transaction type")
 		}
-		return "Unknown", errors.InvalidArgument().WithMessage("Missing mandatory field")
+		if input.MaxFeePerGas == nil || input.MaxPriorityFeePerGas == nil {
+			return "Unknown", errors.InvalidArgument().WithMessage("Missing mandatory field")
+		}
 
+		return entities.TransactionType2EIP1559, nil
+	}
+
+	if input.AccessList != nil {
+		return entities.TransactionType1EIP2930, nil
 	}
 
 	return entities.TransactionType0Legacy, nil
-
 }
