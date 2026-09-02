@@ -14,6 +14,7 @@ const (
 	ListAccountsMethod    = "eth_accounts"
 	SignTransactionMethod = "eth_signTransaction"
 	SignTypedDataMethod   = "eth_signTypedData"
+	PersonalSignMethod    = "personal_sign"
 )
 
 // SupportedMethods lists every JSON-RPC method the signare publishes. It is the single source of
@@ -26,6 +27,7 @@ var SupportedMethods = []string{
 	ListAccountsMethod,
 	SignTransactionMethod,
 	SignTypedDataMethod,
+	PersonalSignMethod,
 }
 
 // JSONRPCAPIPublisherOptions options to create a JSONRPCAPIRoutesPublished.
@@ -69,6 +71,10 @@ func ProvideJSONRPCMethods(options JSONRPCAPIPublisherOptions) (JSONRPCAPIRoutes
 		return 0, err
 	}
 	err = options.RPCRouter.RegisterRPCHandlerFunc(SignTypedDataMethod, options.Handler.HandleSignTypedData)
+	if err != nil {
+		return 0, err
+	}
+	err = options.RPCRouter.RegisterRPCHandlerFunc(PersonalSignMethod, options.Handler.HandlePersonalSign)
 	if err != nil {
 		return 0, err
 	}

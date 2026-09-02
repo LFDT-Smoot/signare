@@ -1,6 +1,8 @@
 package hsmslot
 
 import (
+	"log/slog"
+
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 )
@@ -22,10 +24,44 @@ type HSMSlot struct {
 	Config SlotConfig `valid:"required"`
 }
 
+// LogValue implements slog.LogValuer so that logging an HSMSlot emits only its identifying fields.
+//
+// Pin is the code that unlocks the signing keys, and Config may hold Local Key Vault private key
+// material, so neither is emitted. This is a guard on the type rather than a fix at one call site: a
+// tracer property or a wrapped error anywhere can otherwise put the whole struct in front of a
+// handler, and the JSON handler would marshal every field.
+//
+// It protects the value and pointer forms, which is what log call sites use. It does NOT extend to an
+// HSMSlot reached inside a bare slice or map: slog resolves LogValuer on the attribute value itself,
+// not on values nested inside it, so a handler marshals the raw struct in those cases.
+// TestHSMSlot_LogValueDoesNotExtendIntoABareSlice pins that boundary. Log a slot directly, and give any
+// type that carries one its own LogValue, as HSMConnection and HSMSlotCollection do.
+func (s HSMSlot) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("id", s.ID),
+		slog.String("applicationId", s.ApplicationID),
+		slog.String("hsmModuleId", s.HSMModuleID),
+		slog.String("slot", s.Slot),
+	)
+}
+
 // SlotConfig defines the configuration for a particular slot.
 type SlotConfig struct {
 	AKV           []AKVConfig          `valid:"optional"`
 	LocalKeyVault *LocalKeyVaultConfig `valid:"optional"`
+}
+
+// LogValue implements slog.LogValuer so slot configuration cannot leak key material into a log
+// record. Only the shape is reported, never the Local Key Vault key store.
+func (c SlotConfig) LogValue() slog.Value {
+	localKeys := 0
+	if c.LocalKeyVault != nil {
+		localKeys = len(c.LocalKeyVault.KeyStore)
+	}
+	return slog.GroupValue(
+		slog.Int("akvEntries", len(c.AKV)),
+		slog.Int("localKeyVaultEntries", localKeys),
+	)
 }
 
 // AKVConfig defines possible configurations for Azure Key Vault.
@@ -42,6 +78,17 @@ type AKVConfig struct {
 type LocalKeyVaultConfig struct {
 	// KeyStore holds the stored addresses and its private keys
 	KeyStore map[address.Address]string `valid:"-"`
+}
+
+// LogValue implements slog.LogValuer so the key store cannot reach a log record. Only the entry count
+// is reported, never an address or its private key.
+//
+// SlotConfig holds this as a pointer, and slog does not resolve LogValuer on a struct field, so the
+// guard has to live here as well for it to hold when the config is logged on its own.
+func (c LocalKeyVaultConfig) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("entries", len(c.KeyStore)),
+	)
 }
 
 // CreateHSMSlotInput configures the creation of an HSMSlot.
@@ -199,4 +246,16 @@ type HSMSlotCollection struct {
 	Items []HSMSlot
 	// StandardCollectionPage is the page data of the collection.
 	entities.StandardCollectionPage
+}
+
+// LogValue implements slog.LogValuer so that logging a collection does not print the slots it carries.
+// HSMSlot redacts itself when logged directly, but slog does not resolve LogValuer on slice elements,
+// so without this every slot in the page, including its PIN, would be marshalled.
+func (c HSMSlotCollection) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("items", len(c.Items)),
+		slog.Int("limit", c.Limit),
+		slog.Int("offset", c.Offset),
+		slog.Bool("moreItems", c.MoreItems),
+	)
 }

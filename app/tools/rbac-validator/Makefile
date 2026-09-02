@@ -9,7 +9,7 @@ tools.run_default:
       --rolesFilePath $(SIGNARE_DIR)/include/rbac/roles.yaml \
       --permissionsFilePath $(SIGNARE_DIR)/include/rbac/permissions.yaml \
       --actionsFilesPath $(SIGNARE_DIR)/include/rbac/actions-generated.yaml,$(SIGNARE_DIR)/include/rbac/actions-manual.yaml \
-      --operationIdInclusions rpc.method.eth_generateAccount,rpc.method.eth_removeAccount,rpc.method.eth_accounts,rpc.method.eth_signTransaction
+      --operationIdInclusions rpc.method.eth_generateAccount,rpc.method.eth_importAccount,rpc.method.eth_removeAccount,rpc.method.eth_accounts,rpc.method.eth_signTransaction,rpc.method.eth_signTypedData,rpc.method.personal_sign
 
 .PHONY: tools.help
 tools.help:

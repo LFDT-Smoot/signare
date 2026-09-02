@@ -6,3 +6,4 @@ actions:
   - rpc.method.eth_accounts
   - rpc.method.eth_signTransaction
   - rpc.method.eth_signTypedData
+  - rpc.method.personal_sign

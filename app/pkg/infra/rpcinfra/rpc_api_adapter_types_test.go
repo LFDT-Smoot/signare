@@ -66,6 +66,32 @@ func TestProcessParams_ObjectPositionalParamSucceeds(t *testing.T) {
 	})
 }
 
+func TestSignTXRequestParams_AccessListPresenceIsPreserved(t *testing.T) {
+	const mandatoryFields = `"from":"0xabc","data":"0x","nonce":"0x1"`
+
+	t.Run("omitted accessList stays nil", func(t *testing.T) {
+		params := &rpcinfra.SignTXRequestParams{}
+		require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{`+mandatoryFields+`}]`), params))
+		require.Nil(t, params.AccessList)
+	})
+
+	t.Run("empty accessList becomes a non-nil empty slice", func(t *testing.T) {
+		params := &rpcinfra.SignTXRequestParams{}
+		require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{`+mandatoryFields+`,"accessList":[]}]`), params))
+		require.NotNil(t, params.AccessList)
+		require.Empty(t, params.AccessList)
+	})
+
+	t.Run("populated accessList keeps its entries", func(t *testing.T) {
+		params := &rpcinfra.SignTXRequestParams{}
+		raw := json.RawMessage(`[{` + mandatoryFields + `,"accessList":[{"address":"0xcccccccccccccccccccccccccccccccccccccccc","storageKeys":["0x0000000000000000000000000000000000000000000000000000000000000001"]}]}]`)
+		require.Nil(t, rpcinfra.ProcessParams(raw, params))
+		require.Len(t, params.AccessList, 1)
+		require.Equal(t, "0xcccccccccccccccccccccccccccccccccccccccc", params.AccessList[0].Address)
+		require.Equal(t, []string{"0x0000000000000000000000000000000000000000000000000000000000000001"}, params.AccessList[0].StorageKeys)
+	})
+}
+
 // TestSignTypedDataRequestParams_ValidateParams guards the validation surface exposed to the handler:
 // the account address is mandatory and the typed data must declare the structure eip712 requires.
 func TestSignTypedDataRequestParams_ValidateParams(t *testing.T) {
@@ -121,4 +147,99 @@ func TestSignTypedData_RawJSONToEncodedWord(t *testing.T) {
 	copy(want[32-len(exactBytes):], exactBytes)
 	require.Equal(t, want, word)
 	require.Equal(t, byte(0x01), word[31], "last byte must be 0x01; 0x00 would mean the value was rounded down to 2^53")
+}
+
+func TestPersonalSignRequestParams_ValidateParams(t *testing.T) {
+	const validAddress = "0x970e8128ab834e8eac17ab8e3812f010678cf791"
+
+	tests := []struct {
+		name    string
+		params  rpcinfra.PersonalSignRequestParams
+		wantErr string
+	}{
+		{
+			name:   "valid",
+			params: rpcinfra.PersonalSignRequestParams{Address: validAddress, Message: "0x48656c6c6f"},
+		},
+		{
+			name:    "missing address",
+			params:  rpcinfra.PersonalSignRequestParams{Message: "0x48656c6c6f"},
+			wantErr: "[address] cannot be nil",
+		},
+		{
+			name:    "missing message",
+			params:  rpcinfra.PersonalSignRequestParams{Address: validAddress},
+			wantErr: "[message] cannot be nil",
+		},
+		{
+			// The 0x prefix is required rather than inferred. entities.NewHexBytesFromString accepts hex
+			// with or without it, so a plain-text message that happens to be valid hex would otherwise be
+			// silently decoded to bytes and the caller would sign something they did not write.
+			name:    "message without the 0x prefix is rejected",
+			params:  rpcinfra.PersonalSignRequestParams{Address: validAddress, Message: "cafe"},
+			wantErr: "must be a 0x-prefixed hex string",
+		},
+		{
+			name:    "bare 0x is an empty message",
+			params:  rpcinfra.PersonalSignRequestParams{Address: validAddress, Message: "0x"},
+			wantErr: "[message] cannot be empty",
+		},
+		{
+			// Only the lowercase prefix is accepted. Ethereum tooling emits 0x, and accepting both would
+			// widen what counts as "prefixed" for no benefit.
+			name:    "uppercase 0X prefix is rejected",
+			params:  rpcinfra.PersonalSignRequestParams{Address: validAddress, Message: "0X48656c6c6f"},
+			wantErr: "must be a 0x-prefixed hex string",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			params := test.params
+			err := params.ValidateParams()
+			if test.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), test.wantErr)
+		})
+	}
+}
+
+// Malformed params must be rejected rather than panicking or silently signing the wrong thing. The
+// non-object element is the shape that previously panicked an unchecked type assertion elsewhere in
+// this file, so it is worth pinning for the new method too.
+func TestPersonalSignRequestParams_RejectsMalformedParams(t *testing.T) {
+	for name, raw := range map[string]string{
+		"two objects":        `[{"address":"0xaa","message":"0xbb"},{"address":"0xcc","message":"0xdd"}]`,
+		"non-object element": `["justastring"]`,
+		"empty array":        `[]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			params := rpcinfra.PersonalSignRequestParams{}
+			require.NotPanics(t, func() {
+				require.NotNil(t, rpcinfra.ProcessParams(json.RawMessage(raw), &params))
+			})
+		})
+	}
+}
+
+// personal_sign params must decode from both the bare object and the single-element array form, the
+// two shapes the other signing methods accept.
+func TestPersonalSignRequestParams_DecodesBothParamShapes(t *testing.T) {
+	const validAddress = "0x970e8128ab834e8eac17ab8e3812f010678cf791"
+
+	for name, raw := range map[string]string{
+		"bare object":          `{"address":"` + validAddress + `","message":"0x48656c6c6f"}`,
+		"single-element array": `[{"address":"` + validAddress + `","message":"0x48656c6c6f"}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			params := rpcinfra.PersonalSignRequestParams{}
+			require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(raw), &params))
+			require.NoError(t, params.ValidateParams())
+			require.Equal(t, validAddress, params.Address)
+			require.Equal(t, "0x48656c6c6f", params.Message)
+		})
+	}
 }

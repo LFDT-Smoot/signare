@@ -22,6 +22,7 @@ for implementation-defined server errors. Signare defines the following ones:
 | -32097 | Precondition failed | The request can not be executed in the current system state |
 | -32098 | Not found           | The specified resource was not found.                       |
 | -32099 | Unauthorized        | The request was not authorized.                             |
+| -32604 | Bad gateway         | An upstream dependency, such as the HSM, returned a fault.  |
 | -32605 | Already exists      | The specified resource already exists.                      |
 
 ## Ethereum JSON RPC API supported methods
@@ -31,6 +32,27 @@ for implementation-defined server errors. Signare defines the following ones:
 The `eth_signTransaction` method is supported following the [Ethereum JSON-RPC API](https://ethereum.org/developers/docs/apis/json-rpc/#eth_signtransaction) specification.
 
 Please, refer to Ethereum's documentation for details about its input and output parameters.
+
+The following transaction types are supported. The type is inferred from the combination of fields present in the request body (there is no explicit `type` field):
+
+| Transaction type      | How it is inferred                                                                                        |
+|-----------------------|-----------------------------------------------------------------------------------------------------------|
+| Legacy (Type 0)       | `gasPrice` is set (or no gas fields are set) and no `accessList` is set                                   |
+| EIP-2930 (Type 1)     | `accessList` is set (an empty accessList is valid), together with `gasPrice` or with no gas fields at all |
+| EIP-1559 (Type 2)     | `maxFeePerGas` and `maxPriorityFeePerGas` are set; `accessList` is optional                               |
+
+Any other combination is rejected with an invalid params error. The checks are applied in this order, so
+the first row that matches decides the response:
+
+| Request | Response |
+|---------|----------|
+| `authorizationList` is set | `Not supported transaction type`: EIP-7702 (Type 4) signing is not supported |
+| `maxFeePerBlobGas` or `blobVersionedHashes` is set | `Not supported transaction type`: EIP-4844 (Type 3) signing is not supported |
+| `gasPrice` together with `maxFeePerGas` or `maxPriorityFeePerGas` | `Could not determine transaction type`: the request names both a legacy and an EIP-1559 gas price |
+| Only one of `maxFeePerGas` and `maxPriorityFeePerGas` | `Could not determine transaction type`: an EIP-1559 transaction needs both |
+
+Because the two unsupported types are checked first, a request that sets both an `accessList` and a blob
+or authorization field is rejected rather than signed as a type 1 transaction with that field dropped.
 
 !!! info
     If the ``gasPrice`` field of the request body is not informed, it is set to 0.
@@ -89,6 +111,57 @@ If the `typedData` `domain` declares a `chainId`, it must equal the application'
     ```
     {"jsonrpc":"2.0","id":1,"result":"0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c"}
     ```
+
+### personal_sign
+
+Calculates an Ethereum specific signature over an arbitrary message under the EIP-191 personal message
+prefix: `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))`. This is the
+signature format Sign-In With Ethereum (EIP-4361) verifiers expect, so it allows an identity whose key
+is custodied only in the HSM to authenticate.
+
+Unlike `eth_signTransaction` and `eth_signTypedData` there is no chain binding: EIP-191 carries no
+chain id, and the recovery byte is the plain 27/28 form rather than the EIP-155 one. Binding a personal
+signature to a chain is the verifier's job, normally through the message text.
+
+> **Parameter shape.** Signare takes a **named object**, consistent with its other signing methods,
+> rather than the positional `[message, address]` form wallets use for `personal_sign`. Naming the
+> fields removes the argument-order confusion between `personal_sign` and `eth_sign`, which take their
+> two arguments in opposite orders.
+
+* Request:
+
+  Input parameters:
+
+  | Name    | Type   | Required | Notes                                                       |
+  |---------|--------|----------|-------------------------------------------------------------|
+  | address | string | ✔        | The account that signs. Must be authorized for the caller.  |
+  | message | string | ✔        | The message to sign, as a **`0x`-prefixed** hex string.     |
+
+  The `0x` prefix is required rather than optional, so that a plain-text message which happens to be
+  valid hex cannot be silently decoded into different bytes than the caller intended. An empty message
+  is rejected.
+
+  Example, signing the message `Hello` (`0x48656c6c6f`):
+    ```
+    curl -X POST -H "X-Auth-UserId: <user>" -H "X-Auth-ApplicationId: <application>" --data '{"jsonrpc":"2.0","method":"personal_sign","params":[{"address":"0xcc753268336A33e56Da47500D9C786077CC24311","message":"0x48656c6c6f"}], "id":1}' http://localhost:4545
+    ```
+
+* Success response:
+
+  The hex-encoded 65-byte `r || s || v` signature, with `v` being 27 or 28.
+
+    ```
+    {"jsonrpc":"2.0","id":1,"result":"0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c"}
+    ```
+
+* Error responses:
+
+  | Code   | Message             |
+  |--------|---------------------|
+  | -32602 | Invalid params      |
+  | -32603 | Internal error      |
+  | -32604 | Bad gateway         |
+  | -32099 | Unauthorized        |
 
 ## Custom RPC methods
 

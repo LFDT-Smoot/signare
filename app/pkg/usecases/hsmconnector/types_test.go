@@ -276,7 +276,7 @@ func TestEIP1559TransactionRLPEncode(t *testing.T) {
 			Gas:                  gas,
 			To:                   &to,
 			Data:                 data,
-			Signature: &hsmconnector.EIP1559TransactionSignature{
+			Signature: &hsmconnector.YParityTransactionSignature{
 				YParity: *yParity,
 				R:       *r,
 				S:       *s,
@@ -296,6 +296,165 @@ func TestEIP1559TransactionRLPEncode(t *testing.T) {
 			Gas:                  gas,
 			To:                   &to,
 			Data:                 data,
+		}
+		_, err := tx.RLPEncode()
+		require.Error(t, err)
+	})
+}
+
+func TestEIP2930TransactionHash(t *testing.T) {
+	chainID, err := entities.NewHexInt256FromString("0x1")
+	require.NoError(t, err)
+	gasPrice, err := entities.NewHexInt256FromString("0x3B9ACA00") // 1 gwei
+	require.NoError(t, err)
+	gas, err := entities.NewHexUInt64FromString("0x5208") // 21000
+	require.NoError(t, err)
+	to, err := address.NewFromHexString("0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC")
+	require.NoError(t, err)
+	data, err := entities.NewHexBytesFromString("0x")
+	require.NoError(t, err)
+	nonce, err := entities.NewHexUInt64FromString("0x0")
+	require.NoError(t, err)
+
+	t.Run("ETH transfer hashes to expected value", func(t *testing.T) {
+		// keccak256(0x01 || rlp([chainId, nonce, gasPrice, gas, to, value, data, accessList]))
+		// payload: 0x01e20180843b9aca0082520894cccccccccccccccccccccccccccccccccccccccc8080c0
+		const wantHash = "0x8f14a43195e5e99802d959e1bfa1f578afc8f84733169b11962422f77d38d450"
+
+		tx := hsmconnector.EIP2930Transaction{
+			ChainID:  *chainID,
+			Nonce:    nonce,
+			GasPrice: *gasPrice,
+			Gas:      gas,
+			To:       &to,
+			Data:     data,
+		}
+		hash, errHash := tx.Hash()
+		require.NoError(t, errHash)
+		require.Equal(t, wantHash, hash.Encode())
+	})
+
+	t.Run("contract deployment (nil To) produces hash of correct length", func(t *testing.T) {
+		tx := hsmconnector.EIP2930Transaction{
+			ChainID:  *chainID,
+			Nonce:    nonce,
+			GasPrice: *gasPrice,
+			Gas:      gas,
+			To:       nil,
+			Data:     data,
+		}
+		hash, errHash := tx.Hash()
+		require.NoError(t, errHash)
+		require.Equal(t, 32, len(hash.Bytes()))
+	})
+
+	t.Run("access list is committed to the hash", func(t *testing.T) {
+		// Same fixture as above with a single access list entry holding one zero storage key.
+		// payload: 0x01f85b0180843b9aca0082520894cccc…cccc8080f838f794cccc…cccce1a00000…0000
+		const wantHash = "0x60bc54fe452a8194f17ef77c3223387dc6444526025ed5c87f384d92626e84db"
+
+		base := hsmconnector.EIP2930Transaction{
+			ChainID:  *chainID,
+			Nonce:    nonce,
+			GasPrice: *gasPrice,
+			Gas:      gas,
+			To:       &to,
+			Data:     data,
+		}
+		withAccessList := base
+		withAccessList.AccessList = hsmconnector.AccessList{
+			{
+				Address:     to,
+				StorageKeys: []entities.HexBytes32{{}},
+			},
+		}
+
+		baseHash, errHash := base.Hash()
+		require.NoError(t, errHash)
+		withHash, errHash := withAccessList.Hash()
+		require.NoError(t, errHash)
+		require.Equal(t, wantHash, withHash.Encode())
+		require.NotEqual(t, baseHash.Encode(), withHash.Encode())
+	})
+}
+
+func TestEIP2930TransactionRLPEncode(t *testing.T) {
+	chainID, err := entities.NewHexInt256FromString("0x1")
+	require.NoError(t, err)
+	gasPrice, err := entities.NewHexInt256FromString("0x3B9ACA00") // 1 gwei
+	require.NoError(t, err)
+	gas, err := entities.NewHexUInt64FromString("0x5208") // 21000
+	require.NoError(t, err)
+	to, err := address.NewFromHexString("0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC")
+	require.NoError(t, err)
+	data, err := entities.NewHexBytesFromString("0x")
+	require.NoError(t, err)
+	nonce, err := entities.NewHexUInt64FromString("0x0")
+	require.NoError(t, err)
+
+	t.Run("signed ETH transfer encodes to expected bytes", func(t *testing.T) {
+		// Expected value: 0x01 || rlp([chainId, nonce, gasPrice, gas, to, value, data, [], yParity, R, S])
+		// Derived from RLP encoding rules for these exact fields.
+		const wantEncoded = "0x01e50180843b9aca0082520894cccccccccccccccccccccccccccccccccccccccc8080c0800102"
+
+		yParity := entities.NewInt256(big.NewInt(0))
+		r := entities.NewInt256(big.NewInt(1))
+		s := entities.NewInt256(big.NewInt(2))
+
+		tx := hsmconnector.EIP2930Transaction{
+			ChainID:  *chainID,
+			Nonce:    nonce,
+			GasPrice: *gasPrice,
+			Gas:      gas,
+			To:       &to,
+			Data:     data,
+			Signature: &hsmconnector.YParityTransactionSignature{
+				YParity: *yParity,
+				R:       *r,
+				S:       *s,
+			},
+		}
+		encoded, errEncode := tx.RLPEncode()
+		require.NoError(t, errEncode)
+		require.Equal(t, wantEncoded, encoded.Encode())
+	})
+
+	t.Run("signed transfer with a populated access list encodes to expected bytes", func(t *testing.T) {
+		// 0x01 || rlp([chainId, nonce, gasPrice, gas, to, value, data, [[to, [0x00…00]]], yParity, R, S]).
+		const wantEncoded = "0x01f85e0180843b9aca0082520894cccccccccccccccccccccccccccccccccccccccc8080f838f794cccccccccccccccccccccccccccccccccccccccce1a00000000000000000000000000000000000000000000000000000000000000000800102"
+
+		tx := hsmconnector.EIP2930Transaction{
+			ChainID:  *chainID,
+			Nonce:    nonce,
+			GasPrice: *gasPrice,
+			Gas:      gas,
+			To:       &to,
+			Data:     data,
+			AccessList: hsmconnector.AccessList{
+				{
+					Address:     to,
+					StorageKeys: []entities.HexBytes32{{}},
+				},
+			},
+			Signature: &hsmconnector.YParityTransactionSignature{
+				YParity: *entities.NewInt256(big.NewInt(0)),
+				R:       *entities.NewInt256(big.NewInt(1)),
+				S:       *entities.NewInt256(big.NewInt(2)),
+			},
+		}
+		encoded, errEncode := tx.RLPEncode()
+		require.NoError(t, errEncode)
+		require.Equal(t, wantEncoded, encoded.Encode())
+	})
+
+	t.Run("RLPEncode without signature returns error", func(t *testing.T) {
+		tx := hsmconnector.EIP2930Transaction{
+			ChainID:  *chainID,
+			Nonce:    nonce,
+			GasPrice: *gasPrice,
+			Gas:      gas,
+			To:       &to,
+			Data:     data,
 		}
 		_, err := tx.RLPEncode()
 		require.Error(t, err)

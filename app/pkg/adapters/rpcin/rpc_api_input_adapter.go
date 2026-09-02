@@ -315,6 +315,46 @@ func (adapter *DefaultAPIAdapter) AdaptSignTypedData(ctx context.Context, data r
 	return &response, nil
 }
 
+func (adapter *DefaultAPIAdapter) AdaptPersonalSign(ctx context.Context, data rpcinfra.PersonalSignRequestParams) (*string, *rpcerrors.RPCError) {
+	byApplicationInput := hsmconnection.ByApplicationInput{
+		ApplicationID: data.ApplicationID,
+	}
+	hsmConnection, err := adapter.hsmConnectionResolver.ByApplication(ctx, byApplicationInput)
+	if err != nil {
+		return nil, adaptError(err)
+	}
+
+	slotConnectionData, moduleErr := adaptSlotConnectionData(hsmConnection.ModuleKind, hsmConnection)
+	if moduleErr != nil {
+		return nil, moduleErr
+	}
+
+	signer, err := address.NewFromHexString(data.Address)
+	if err != nil {
+		return nil, rpcerrors.NewInvalidParamsFromErr(fmt.Errorf("invalid [address]: %w", err))
+	}
+
+	message, err := entities.NewHexBytesFromString(data.Message)
+	if err != nil {
+		return nil, rpcerrors.NewInvalidParamsFromErr(fmt.Errorf("invalid [message]: %w", err))
+	}
+
+	// No chain id: EIP-191 has no chain binding, so unlike the typed data path there is nothing to
+	// reconcile against the application's default chain.
+	personalSignInput := hsmconnector.PersonalSignInput{
+		SlotConnectionData: *slotConnectionData,
+		Address:            signer,
+		Message:            message,
+	}
+
+	out, err := adapter.hsmConnector.PersonalSign(ctx, personalSignInput)
+	if err != nil {
+		return nil, adaptError(err)
+	}
+	response := out.SignedData
+	return &response, nil
+}
+
 func adaptHSMModule(moduleKind hsmconnector.ModuleKind, hsmConnection *hsmconnection.HSMConnection) (*hsmconnector.SignTxInput, *rpcerrors.RPCError) {
 	slotConnectionData, err := adaptSlotConnectionData(moduleKind, hsmConnection)
 	if err != nil {

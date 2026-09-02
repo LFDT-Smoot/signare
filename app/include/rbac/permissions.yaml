@@ -50,4 +50,8 @@ permissions:
     actions:
       - rpc.method.eth_signTransaction
       - rpc.method.eth_signTypedData
+  - id: allow-user-personal-sign-actions
+    description: Grants access to sign EIP-191 personal messages
+    actions:
+      - rpc.method.personal_sign
 

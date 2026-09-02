@@ -34,6 +34,11 @@ unit_test:
 	gotestsum --jsonfile ${ARTIFACTS_DIR}/unit_tests_results.json --format short-verbose --junitfile ${ARTIFACTS_DIR}/junit.xml -- -p 1 -tags=unit -timeout=5m -coverpkg=github.com/lfdt-smoot/signare/app/pkg/... -coverprofile=${ARTIFACTS_DIR}/signare.coverage.out github.com/lfdt-smoot/signare/app/pkg/...
 	$(call postProcess, signare, github.com/lfdt-smoot/signare/app, app)
 
+.PHONY: race_test
+race_test:
+	@echo "Executing tests with the race detector"
+	go test -race -p 1 -timeout=10m github.com/lfdt-smoot/signare/app/pkg/...
+
 .PHONY: integration_test
 integration_test:
 	@echo "Not applicable"

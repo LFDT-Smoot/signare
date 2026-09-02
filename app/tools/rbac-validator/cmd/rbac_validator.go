@@ -245,7 +245,7 @@ func getOperationIds(paths []string, operationIdExclusions map[string]string) ([
 		if err != nil {
 			return nil, err
 		}
-		for _, apiPath := range spec.Paths {
+		for _, apiPath := range spec.Paths.Map() {
 			operations := apiPath.Operations()
 			for _, operation := range operations {
 				// Only add the operationID if it is not defined as an exclusion
