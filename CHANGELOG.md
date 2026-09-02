@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clear all open Dependabot alerts across the three Go modules. `golang.org/x/crypto` moves to `v0.52.0` in `/app` and `/deployment`, and `github.com/getkin/kin-openapi` moves to `v0.144.0` in the `rbac-validator` tool. Neither vulnerable code path was reachable: only `x/crypto/sha3` and `x/crypto/pkcs12` are linked in (every advisory is in `x/crypto/ssh`), and the tool imports only `openapi3` (every advisory is in `openapi3filter`).
 - Clear all reachable `govulncheck` findings, which Dependabot does not report. The Go toolchain moves to `v1.25.14`, fixing reachable issues in `crypto/tls`, `net/http`, `net/url`, `encoding/xml` and `encoding/asn1`, and `golang.org/x/text` moves to `v0.39.0`, fixing an infinite loop reachable through the Azure Key Vault signing path and database driver initialisation. All three modules now report zero reachable vulnerabilities.
 
+### Security
+- Refuse an application-scoped caller creating or editing their own user record, closing a separation-of-duties bypass where an application-admin could assign themselves the `transaction-signer` role and then sign with any of the application's keys (#12).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed

@@ -73,6 +73,9 @@ func (u *DefaultUserUseCase) CreateUser(ctx context.Context, input CreateUserInp
 	if validateErr := u.validateApplicationScopedRoles(ctx, input.Roles); validateErr != nil {
 		return nil, validateErr
 	}
+	if selfErr := validateNotSelfService(input.Caller, user.ApplicationStandardID); selfErr != nil {
+		return nil, selfErr
+	}
 
 	user.InternalResourceID = entities.NewInternalResourceID()
 	addUserToApplicationDependencyErr := u.addUserToApplicationDependency(ctx, user)
@@ -92,6 +95,47 @@ func (u *DefaultUserUseCase) CreateUser(ctx context.Context, input CreateUserInp
 	return &CreateUserOutput{
 		User: *addedUser,
 	}, nil
+}
+
+// validateNotSelfService refuses an application-scoped caller acting on their own user record.
+//
+// validateApplicationScopedRoles keeps an application-admin from assigning an admin-scoped role, but
+// application-admin and transaction-signer are both application-scoped, so it cannot tell them apart.
+// Without this check an application-admin could add transaction-signer to their own user and then bind
+// any of the application's keys to themselves, collapsing the separation of duties between the
+// principal who hands out signing rights and the principal who uses them.
+//
+// The guard is deliberately broader than "do not change your own roles": it refuses the whole
+// self-directed write to the user record. There is no self-service endpoint in this API, so nothing
+// legitimate is lost, and it avoids reading the stored roles to compare them, which would open a
+// window between the read and the write. Deleting your own record and binding accounts to it stay
+// uncovered on purpose: a caller who deletes their own record can no longer authorize anything, since
+// an application caller's roles are resolved by reading that record, and an account binding confers
+// nothing on its own because the signing actions live only in the transaction-signer role.
+//
+// A signer-admin is unaffected, by design rather than by omission. They reach application routes
+// without an application header, so the caller is not application-scoped. That includes creating an
+// application user under their own id with the transaction-signer role and then signing with it,
+// which is in fact the only way a signer-admin can reach the signing API at all, since that API
+// authorizes every caller as an application user. A signer-admin already decides which keys an
+// application can reach and who its users are, so they sit outside this separation of duties rather
+// than inside it. The two-person control here is the one within an application, between
+// application-admin and transaction-signer, and it guards against unilateral action, not against two
+// principals who choose to collude.
+func validateNotSelfService(caller entities.Caller, target entities.ApplicationStandardID) error {
+	// Every routed request carries an authenticated user, so a caller with no id means a call site
+	// failed to pass one. Treating that as "not self" would silently disable the guard.
+	if caller.ID == "" {
+		return errors.Internal().WithMessage("caller was not provided, the self-service guard cannot be evaluated")
+	}
+	// IsApplicationScoped is redundant while IsSelf compares the application and the target's
+	// application is a required field. It is kept so the rule this guard enforces is stated here
+	// rather than resting on a validation tag on another type.
+	if !caller.IsApplicationScoped() || !caller.IsSelf(target) {
+		return nil
+	}
+	return errors.PermissionDenied().
+		WithMessage("user [%s] attempted to modify their own record in application [%s]", caller.ID, caller.ApplicationID)
 }
 
 // validateApplicationScopedRoles ensures every requested role is supported and assignable to an
@@ -210,6 +254,9 @@ func (u *DefaultUserUseCase) EditUser(ctx context.Context, input EditUserInput) 
 
 	if validateErr := u.validateApplicationScopedRoles(ctx, input.Roles); validateErr != nil {
 		return nil, validateErr
+	}
+	if selfErr := validateNotSelfService(input.Caller, input.ApplicationStandardID); selfErr != nil {
+		return nil, selfErr
 	}
 
 	user := User{
