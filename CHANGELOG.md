@@ -9,7 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
+- Add signing for EIP-2930 (type 1, access list) transactions, emitted as a `0x01`-prefixed envelope (#5).
 - Add the `personal_sign` JSON-RPC method, signing an arbitrary message under the EIP-191 personal message prefix so an identity whose key is custodied in the HSM can produce a Sign-In With Ethereum signature. Granted by a new `message-signer` role, separate from `transaction-signer`, and subject to the same per-account authorization as the other signing methods (#14).
+
+### Changed
+- An `eth_signTransaction` request carrying both EIP-1559 fee fields and no `accessList` is now signed as type 2, where it was previously rejected. An access list is optional for EIP-1559 (#5).
+- Reworded the rejection message for an unsupported transaction type from `Could not determine transaction type` to `Not supported transaction type`. This appears in the server log only, since the JSON-RPC response is `-32602 Invalid params` either way (#5).
+
+### Fixed
+- Fixed `eth_signTransaction` signing a request as a legacy transaction, silently discarding `maxFeePerBlobGas`, `blobVersionedHashes` or `authorizationList`, when the request carried one of those fields and neither a `gasPrice` nor any EIP-1559 fee field. Such a request is now rejected as an unsupported transaction type (#5).
+
+### Changed
+- Adapt `rbac-validator` to the `kin-openapi` API change that made `openapi3.T.Paths` a struct rather than a map, by iterating `spec.Paths.Map()`. The validator reads the same set of operation IDs from the bundled API spec as before.
+- Bump the pinned `golang` build base image in `app/Dockerfile` to `1.25.14-bookworm` with a re-resolved digest, and align the `go` directive in the three `go.mod` files and the `run.go` setting in `.golangci.yaml`, keeping the toolchain version in lockstep across the repository.
+
+### Fixed
+- Fix `make tools.run_default` in the `rbac-validator` tool, which failed because `eth_importAccount` and `eth_signTypedData` were missing from the `--operationIdInclusions` list. Both are RBAC-checked JSON-RPC methods that are declared in `actions-manual.yaml` and granted in `permissions.yaml`, but no JSON-RPC method appears in the OpenAPI spec, so all six have to be listed as inclusions for the one-to-one action check to hold. All seven validation steps now pass.
+
+### Security
+- Clear all open Dependabot alerts across the three Go modules. `golang.org/x/crypto` moves to `v0.52.0` in `/app` and `/deployment`, and `github.com/getkin/kin-openapi` moves to `v0.144.0` in the `rbac-validator` tool. Neither vulnerable code path was reachable: only `x/crypto/sha3` and `x/crypto/pkcs12` are linked in (every advisory is in `x/crypto/ssh`), and the tool imports only `openapi3` (every advisory is in `openapi3filter`).
+- Clear all reachable `govulncheck` findings, which Dependabot does not report. The Go toolchain moves to `v1.25.14`, fixing reachable issues in `crypto/tls`, `net/http`, `net/url`, `encoding/xml` and `encoding/asn1`, and `golang.org/x/text` moves to `v0.39.0`, fixing an infinite loop reachable through the Azure Key Vault signing path and database driver initialisation. All three modules now report zero reachable vulnerabilities.
+
+### Security
+- Refuse an application-scoped caller creating or editing their own user record, closing a separation-of-duties bypass where an application-admin could assign themselves the `transaction-signer` role and then sign with any of the application's keys (#12).
+
+### Security
+- Reject EIP-712 typed data whose type definitions are cyclic, require an object in the message for every struct-typed field, and bound the depth, the struct-encoding count and the canonical type-encoding size of the encoding walk. Together these close a denial of service where a crafted message either crashed the signer with an unrecoverable stack overflow or, from a payload of barely a kilobyte, expanded to effectively unbounded work. A malformed array type string now returns an error instead of panicking, and a declared type name carrying array notation is rejected because it has no canonical encoding. Two payload classes that previously produced a signature are now rejected: a self-referencing type whose array happened to be empty, and a struct-typed field omitted from the message, which was encoded as an all-defaults struct even though every scalar field already required a value (#13).
 
 ## [1.4.2] - 2026-07-30
 

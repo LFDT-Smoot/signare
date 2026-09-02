@@ -40,6 +40,9 @@ type CreateUserInput struct {
 	Description *string `valid:"optional"`
 	// Roles of this User.
 	Roles []string `valid:"required"`
+	// Caller identifies the principal making the request, so the use case can refuse
+	// application-scoped self-service. See entities.Caller.
+	Caller entities.Caller `valid:"-"`
 }
 
 // CreateUserOutput defines the output of the creation of a User.
@@ -58,6 +61,9 @@ type EditUserInput struct {
 	Description *string `valid:"optional"`
 	// Roles of this User.
 	Roles []string `valid:"optional"`
+	// Caller identifies the principal making the request, so the use case can refuse
+	// application-scoped self-service. See entities.Caller.
+	Caller entities.Caller `valid:"-"`
 }
 
 // EditUserOutput defines the output for editing a User.

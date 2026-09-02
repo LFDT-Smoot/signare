@@ -100,7 +100,7 @@ type SignTXRequestParams struct {
 	To *string `json:"to"`
 	// Gas amount to use for transaction execution
 	Gas *string `json:"gas"`
-	// GasPrice to use for each paid gas. Legacy (Type 0) only.
+	// GasPrice to use for each paid gas. Legacy (Type 0) and EIP-2930 (Type 1) only.
 	GasPrice *string `json:"gasPrice"`
 	// Value amount sent with this transaction
 	Value *string `json:"value"`
@@ -114,7 +114,7 @@ type SignTXRequestParams struct {
 	MaxFeePerGas *string `json:"maxFeePerGas"`
 	// MaxPriorityFeePerGas is the maximum priority fee per gas (tip). EIP-1559 (Type 2) only.
 	MaxPriorityFeePerGas *string `json:"maxPriorityFeePerGas"`
-	// AccessList is a list of addresses and storage keys. EIP-1559 (Type 2) only.
+	// AccessList is a list of addresses and storage keys. EIP-2930 (Type 1) and EIP-1559 (Type 2) only.
 	AccessList []AccessListParamEntry `json:"accessList"`
 	// MaxFeePerBlobGas is the maximum fee per blob gas the sender is willing to pay. EIP-4844 (Type 3) only.
 	MaxFeePerBlobGas *string `json:"maxFeePerBlobGas"`
