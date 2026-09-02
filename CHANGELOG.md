@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stop writing to the digital signature manager map after construction, so adding an HSM slot can no longer crash the signer through a concurrent map access (#15).
 - Stop `signaturemanager.Error.WithMessage` mutating its receiver, so concurrent requests can no longer race on, or read each other's, PKCS#11 error detail (#16).
 - Stop the remove-account path handing the whole slot entity to the tracer, which wrote the PIN that unlocks the signing keys to the log at the default level, and redact the PIN and Local Key Vault key material from log records via `slog.LogValuer` on the slot, its configuration, the key store and every type that carries them (#17).
+- Sign with `btcec` rather than `crypto/ecdsa` in the Local Key Vault backend. The standard library routes secp256k1 to a `math/big` path documented as being for deprecated custom curves, which is not constant time and is refused outright in FIPS 140-only mode; `btcec`, already the library the connector recovers signatures with, is constant time and emits RFC 6979 deterministic, low-S signatures (#35).
 
 ## [1.4.2] - 2026-07-30
 
