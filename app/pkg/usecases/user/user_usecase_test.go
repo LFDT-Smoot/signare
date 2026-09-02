@@ -165,6 +165,26 @@ func TestDefaultUseCase_CreateUser(t *testing.T) {
 		require.Equal(t, []string{"transaction-signer"}, output.Roles)
 	})
 
+	t.Run("success: message-signer is assignable alongside transaction-signer", func(t *testing.T) {
+		// message-signer grants personal_sign on its own, so an identity that only authenticates never
+		// needs transaction signing. Pins that it is application-scoped, and that a user needing both
+		// can hold both rather than the two roles being mutually exclusive.
+		userID := uuid.New().String()
+		input := user.CreateUserInput{
+			Caller:        testAdminCaller,
+			ID:            &userID,
+			ApplicationID: createdApplication.ID,
+			Roles: []string{
+				"message-signer",
+				"transaction-signer",
+			},
+		}
+		output, err := app.UserUseCase.CreateUser(ctx, input)
+		require.NoError(t, err)
+		require.NotNil(t, output)
+		require.ElementsMatch(t, []string{"message-signer", "transaction-signer"}, output.Roles)
+	})
+
 	t.Run("failure: invalid role", func(t *testing.T) {
 		userID := uuid.New().String()
 		input := user.CreateUserInput{

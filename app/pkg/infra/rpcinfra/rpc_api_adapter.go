@@ -20,4 +20,6 @@ type JSONRPCAPIAdapter interface {
 	AdaptSignTx(ctx context.Context, data SignTXRequestParams) (*string, *rpcerrors.RPCError)
 	// AdaptSignTypedData adapts the signature of EIP-712 typed data with an Ethereum account.
 	AdaptSignTypedData(ctx context.Context, data SignTypedDataRequestParams) (*string, *rpcerrors.RPCError)
+	// AdaptPersonalSign adapts the EIP-191 signature of an arbitrary message with an Ethereum account.
+	AdaptPersonalSign(ctx context.Context, data PersonalSignRequestParams) (*string, *rpcerrors.RPCError)
 }
