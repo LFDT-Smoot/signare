@@ -30,9 +30,17 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%s: %s", e.err.Error(), e.description)
 }
 
+// WithMessage returns a copy of e carrying the given description.
+//
+// It deliberately does not mutate the receiver: Error values may be shared across concurrent
+// requests, so mutating one would race and let one request observe another's error text.
 func (e *Error) WithMessage(message string) *Error {
-	e.description = message
-	return e
+	// Copy the whole value rather than naming its fields, so a field added to Error later is carried
+	// across instead of being silently dropped. The copy is shallow: today both fields are safe to
+	// share, but a field added later that points at mutable state must be deep-copied here.
+	derived := *e
+	derived.description = message
+	return &derived
 }
 
 func NewNotImplementedError() *Error {
