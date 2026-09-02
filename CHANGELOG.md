@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Reject EIP-712 typed data whose type definitions are cyclic, require an object in the message for every struct-typed field, and bound the depth, the struct-encoding count and the canonical type-encoding size of the encoding walk. Together these close a denial of service where a crafted message either crashed the signer with an unrecoverable stack overflow or, from a payload of barely a kilobyte, expanded to effectively unbounded work. A malformed array type string now returns an error instead of panicking, and a declared type name carrying array notation is rejected because it has no canonical encoding. Two payload classes that previously produced a signature are now rejected: a self-referencing type whose array happened to be empty, and a struct-typed field omitted from the message, which was encoded as an all-defaults struct even though every scalar field already required a value (#13).
 
+### Security
+- Stop writing to the digital signature manager map after construction, so adding an HSM slot can no longer crash the signer through a concurrent map access (#15).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed
