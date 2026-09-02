@@ -166,6 +166,71 @@ func TestDefaultUseCase_SignTypedData_InvalidTypedData(t *testing.T) {
 	require.True(t, errors.IsInvalidArgument(err))
 }
 
+// TestDefaultUseCase_SignTypedData_EncoderErrorIsInvalidArgument covers the branch that classifies a
+// HashTypedData failure. TestDefaultUseCase_SignTypedData_InvalidTypedData does not reach it: an empty
+// TypedData is caught by the Validate call above, so encoding never starts. These payloads pass Validate
+// and fail inside the encoder, which is the only way into that branch.
+//
+// Every failure there is caused by the caller's own types or message, so the classification has to be
+// InvalidArgument. Returning the encoder error unwrapped would fall through adaptError to -32603
+// Internal error and report attacker-controlled input as a signer fault.
+func TestDefaultUseCase_SignTypedData_EncoderErrorIsInvalidArgument(t *testing.T) {
+	// deepArrayType nests array notation past the encoder's depth cap, with a message to match.
+	deepArrayType := func(depth int) (string, interface{}) {
+		fieldType := "string"
+		var value interface{} = "leaf"
+		for i := 0; i < depth; i++ {
+			fieldType += "[]"
+			value = []interface{}{value}
+		}
+		return fieldType, value
+	}
+
+	testCases := map[string]func() eip712.TypedData{
+		"value of the wrong shape for its declared type": func() eip712.TypedData {
+			typedData := etherMailTypedData()
+			// Mail.contents is declared as string, so a number fails the encoder's type assertion.
+			typedData.Message["contents"] = 42
+			return typedData
+		},
+		"unsupported field type": func() eip712.TypedData {
+			typedData := etherMailTypedData()
+			typedData.Types["Mail"] = append(typedData.Types["Mail"], eip712.Type{Name: "extra", Type: "tuple"})
+			typedData.Message["extra"] = "anything"
+			return typedData
+		},
+		"nesting beyond the depth cap": func() eip712.TypedData {
+			typedData := etherMailTypedData()
+			fieldType, value := deepArrayType(40)
+			typedData.Types["Mail"] = append(typedData.Types["Mail"], eip712.Type{Name: "deep", Type: fieldType})
+			typedData.Message["deep"] = value
+			return typedData
+		},
+	}
+
+	for name, buildTypedData := range testCases {
+		t.Run(name, func(t *testing.T) {
+			typedData := buildTypedData()
+			require.NoError(t, typedData.Validate(), "the payload must pass Validate, otherwise the encoder branch is not reached")
+
+			signTypedDataOutput, err := app.HSMConnector.SignTypedData(ctx, hsmconnector.SignTypedDataInput{
+				SlotConnectionData: hsmconnector.SlotConnectionData{
+					Slot:       slotID,
+					Pin:        slotPin,
+					ModuleKind: hsmconnector.SoftHSMModuleKind,
+				},
+				ChainID:   entities.HexInt256{Int256: entities.Int256{Int: *big.NewInt(1)}},
+				Address:   address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+				TypedData: typedData,
+			})
+
+			require.Error(t, err)
+			require.Nil(t, signTypedDataOutput)
+			require.True(t, errors.IsInvalidArgument(err), "encoder failures are caused by the caller's input, got %v", err)
+		})
+	}
+}
+
 func TestDefaultUseCase_SignTypedData_MalformedBackendSignature(t *testing.T) {
 	signTypedDataInput := func() hsmconnector.SignTypedDataInput {
 		return hsmconnector.SignTypedDataInput{
