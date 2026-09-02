@@ -148,7 +148,7 @@ func (u *DefaultUserUseCase) DeleteAllAccountsForAddress(ctx context.Context, in
 	tracer := logger.NewTracer(ctx)
 	tracer.AddProperty("address", input.Address.String())
 	tracer.AddProperty("moduleKind", hsmConnection.ModuleKind)
-	tracer.AddProperty("slot", hsmConnection.Slot)
+	tracer.AddProperty("slot", hsmConnection.Slot.Slot)
 	tracer.Debug("removing address from HSM")
 
 	// 1. Remove it from the HSM

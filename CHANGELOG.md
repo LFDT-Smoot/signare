@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Stop `signaturemanager.Error.WithMessage` mutating its receiver, so concurrent requests can no longer race on, or read each other's, PKCS#11 error detail (#16).
 
+### Security
+- Stop the remove-account path handing the whole slot entity to the tracer, which wrote the PIN that unlocks the signing keys to the log at the default level, and redact the PIN and Local Key Vault key material from log records via `slog.LogValuer` on the slot, its configuration, the key store and every type that carries them (#17).
+
 ## [1.4.2] - 2026-07-30
 
 ### Changed
