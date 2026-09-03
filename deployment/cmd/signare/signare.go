@@ -159,7 +159,7 @@ func startServer(_ *cobra.Command, _ []string) {
 		logger.LogEntry(ctxMainWithCancellation).Error(setInitialASignerAdministratorErr.Error())
 		panic(setInitialASignerAdministratorErr)
 	}
-	logger.LogEntry(ctxMainWithCancellation).Infof(responseMessage)
+	logger.LogEntry(ctxMainWithCancellation).Info(responseMessage)
 
 	maxBodyBytes, maxHeaderBytes := staticConfig.ServerLimits()
 
