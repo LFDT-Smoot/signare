@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
 - Add signing for EIP-2930 (type 1, access list) transactions, emitted as a `0x01`-prefixed envelope (#5).
 - Add the `personal_sign` JSON-RPC method, signing an arbitrary message under the EIP-191 personal message prefix so an identity whose key is custodied in the HSM can produce a Sign-In With Ethereum signature. Granted by a new `message-signer` role, separate from `transaction-signer`, and subject to the same per-account authorization as the other signing methods (#14).
+- Add a Dependabot configuration for the Go modules, the OpenAPI generator Maven plugin, the Docker base images and GitHub Actions, with grouped update pull requests and a 30-day cooldown on version updates.
 
 ### Changed
 - An `eth_signTransaction` request carrying both EIP-1559 fee fields and no `accessList` is now signed as type 2, where it was previously rejected. An access list is optional for EIP-1559 (#5).
