@@ -1,6 +1,6 @@
 module github.com/lfdt-smoot/signare/app
 
-go 1.25.14
+go 1.27.1
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.9.0

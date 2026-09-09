@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reworded the rejection message for an unsupported transaction type from `Could not determine transaction type` to `Not supported transaction type`. This appears in the server log only, since the JSON-RPC response is `-32602 Invalid params` either way (#5).
 - Adapt `rbac-validator` to the `kin-openapi` API change that made `openapi3.T.Paths` a struct rather than a map, by iterating `spec.Paths.Map()`. The validator reads the same set of operation IDs from the bundled API spec as before.
 - Bump the pinned `golang` build base image in `app/Dockerfile` to `1.25.14-bookworm` with a re-resolved digest, and align the `go` directive in the three `go.mod` files and the `run.go` setting in `.golangci.yaml`, keeping the toolchain version in lockstep across the repository.
+- Move the Go toolchain off the end-of-life `1.25` line to `1.27.1`, across the `go` directive in the three `go.mod` files, the `run.go` setting in `.golangci.yaml` and the pinned build base image in `app/Dockerfile`, bring the `rbac-validator` module's `golang.org/x/text` and `golang.org/x/sys` up to the versions the other two already carry, and pass a non-constant string to `Info` rather than `Infof` at startup, which the new toolchain's `printf` check rejects. The contributor tool matrix moves to `golangci-lint` 2.13.2 and gains a `govulncheck` row, since both analyse the source and must be built with a Go at least as new as the `go` directive (#35).
 
 ### Fixed
 - Fixed `eth_signTransaction` signing a request as a legacy transaction, silently discarding `maxFeePerBlobGas`, `blobVersionedHashes` or `authorizationList`, when the request carried one of those fields and neither a `gasPrice` nor any EIP-1559 fee field. Such a request is now rejected as an unsupported transaction type (#5).
@@ -31,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stop writing to the digital signature manager map after construction, so adding an HSM slot can no longer crash the signer through a concurrent map access (#15).
 - Stop `signaturemanager.Error.WithMessage` mutating its receiver, so concurrent requests can no longer race on, or read each other's, PKCS#11 error detail (#16).
 - Stop the remove-account path handing the whole slot entity to the tracer, which wrote the PIN that unlocks the signing keys to the log at the default level, and redact the PIN and Local Key Vault key material from log records via `slog.LogValuer` on the slot, its configuration, the key store and every type that carries them (#17).
+- Sign with `btcec` rather than `crypto/ecdsa` in the Local Key Vault backend. The standard library routes secp256k1 to a `math/big` path documented as being for deprecated custom curves, which is not constant time and is refused outright in FIPS 140-only mode; `btcec`, already the library the connector recovers signatures with, is constant time and emits RFC 6979 deterministic, low-S signatures (#35).
 
 ## [1.4.2] - 2026-07-30
 

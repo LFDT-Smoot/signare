@@ -2,16 +2,14 @@ package localkeyvault
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/rand"
 	"fmt"
-	"math/big"
 
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 
 	curves "github.com/btcsuite/btcd/btcec/v2"
+	btcececdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 )
 
 const privateKeyLengthBytes = 32
@@ -40,23 +38,16 @@ func (sm *LKVSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, in
 		return nil, signaturemanager.NewInvalidArgumentError().WithMessage(fmt.Sprintf("invalid private key length '%v'", len(input.PrivateKey)))
 	}
 
-	curve := curves.S256()
-	d := new(big.Int).SetBytes(input.PrivateKey)
-	// validate that D < N. btcec.PrivKeyFromBytes silently reduces an out-of-range
-	// scalar mod N, so this rejection must happen before deriving the public key.
-	if d.Cmp(curve.Params().N) >= 0 {
-		return nil, errors.Internal().WithMessage("invalid private key: D >= N")
+	privateKey, err := parsePrivateKeyScalar(input.PrivateKey)
+	if err != nil {
+		return nil, err
 	}
-	// D cannot be zero or negative
-	if d.Sign() <= 0 {
-		return nil, errors.Internal().WithMessage("invalid private key: D is zero or negative")
-	}
+	defer privateKey.Zero()
 
 	// Derive the address from the fixed-width uncompressed public key via the shared
 	// helper, the same path PKCS#11 uses. Hand-rolling X||Y with big.Int.Bytes() drops
 	// leading zero bytes and misaligns the coordinates (CRY-1).
-	_, publicKey := curves.PrivKeyFromBytes(input.PrivateKey)
-	derivedAddress, err := signaturemanager.DeriveAddressFromPublicKey(publicKey.SerializeUncompressed())
+	derivedAddress, err := signaturemanager.DeriveAddressFromPublicKey(privateKey.PubKey().SerializeUncompressed())
 	if err != nil {
 		return nil, errors.Internal().WithMessage("failed deriving address from public key: %v", err)
 	}
@@ -89,39 +80,29 @@ func (sm *LKVSignatureManager) Sign(_ context.Context, input signaturemanager.Si
 		return nil, errors.InternalFromErr(err)
 	}
 
-	curve := curves.S256()
-	privateKey := new(ecdsa.PrivateKey)
-	privateKey.Curve = curve
-	privateKey.D = new(big.Int).SetBytes(privateKeyBytes)
-	// validate that privateKey.D < N
-	if privateKey.D.Cmp(curve.Params().N) >= 0 {
-		return nil, errors.Internal().WithMessage("invalid private key: D >= N")
+	if len(privateKeyBytes) != privateKeyLengthBytes {
+		return nil, errors.Internal().WithMessage("invalid private key length '%v'", len(privateKeyBytes))
 	}
-	// privateKey.D cannot be zero or negative
-	if privateKey.D.Sign() <= 0 {
-		return nil, errors.Internal().WithMessage("invalid private key: D is zero or negative")
-	}
-	privateKey.X, privateKey.Y = curve.ScalarBaseMult(privateKeyBytes)
-	if privateKey.X == nil {
-		return nil, errors.Internal().WithMessage("invalid private key: X has no value")
-	}
-	r, s, err := ecdsa.Sign(rand.Reader, privateKey, input.Data)
+
+	privateKey, err := parsePrivateKeyScalar(privateKeyBytes)
 	if err != nil {
-		return nil, errors.InternalFromErr(err)
+		return nil, err
 	}
+	defer privateKey.Zero()
 
-	rBytes := r.Bytes()
-	rPadded := make([]byte, 32-len(rBytes))
-	rPadded = append(rPadded, rBytes...)
+	// Sign on secp256k1 via btcec, the same library the connector uses to recover the
+	// signature. crypto/ecdsa routes every non-NIST curve to its math/big legacy path,
+	// which is documented as being for deprecated custom curves, is not constant time,
+	// and is refused outright in FIPS 140-only mode.
+	signature := btcececdsa.Sign(privateKey, input.Data)
 
-	sBytes := s.Bytes()
-	sPadded := make([]byte, 32-len(sBytes))
-	sPadded = append(sPadded, sBytes...)
-
-	signature := append(rPadded, sPadded...)
+	// Serialize as fixed-width r||s. The connector prepends the recovery byte and
+	// normalises S; btcec already emits the low-S form.
+	r, s := signature.R(), signature.S()
+	rBytes, sBytes := r.Bytes(), s.Bytes()
 
 	return &signaturemanager.SignOutput{
-		Signature: signature,
+		Signature: append(rBytes[:], sBytes[:]...),
 	}, nil
 }
 
@@ -137,4 +118,18 @@ func (sm *LKVSignatureManager) IsAlive(_ context.Context, _ signaturemanager.IsA
 	return &signaturemanager.IsAliveOutput{
 		IsAlive: true,
 	}, nil
+}
+
+// parsePrivateKeyScalar parses a fixed-width big-endian private key into a secp256k1
+// scalar, rejecting the two out-of-range cases. SetByteSlice reports overflow, meaning
+// D >= N, in constant time; PrivKeyFromBytes would silently reduce such a scalar mod N
+// and sign with a key other than the one supplied. Callers own the length check, because
+// the classification differs: an operator's slot configuration is an internal error, a
+// caller-supplied key on the import path is an invalid argument.
+func parsePrivateKeyScalar(privateKey entities.HexBytes) (*curves.PrivateKey, error) {
+	var scalar curves.ModNScalar
+	if overflow := scalar.SetByteSlice(privateKey); overflow || scalar.IsZero() {
+		return nil, errors.Internal().WithMessage("invalid private key: D is zero or not less than N")
+	}
+	return curves.PrivKeyFromScalar(&scalar), nil
 }

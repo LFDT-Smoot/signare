@@ -181,7 +181,7 @@ func TestHexInt256MarshalJSON(t *testing.T) {
 			continue
 		}
 		if test.expected != "" && !bytes.Equal(m, []byte(test.expected)) {
-			t.Errorf("HexInt256(%q).MarshalJSON -> %s, want %s", test.input, m, test.expected)
+			t.Errorf("HexInt256(%d).MarshalJSON -> %s, want %s", test.input, m, test.expected)
 		}
 	}
 }
