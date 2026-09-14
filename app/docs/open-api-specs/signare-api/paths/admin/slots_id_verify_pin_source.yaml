@@ -23,5 +23,7 @@ post:
       $ref: '../../components/_index.yaml#/responses/PermissionDeniedResponse'
     '404':
       $ref: '../../components/_index.yaml#/responses/NotFoundResponse'
+    '412':
+      $ref: '../../components/_index.yaml#/responses/FailedPreconditionResponse'
     '500':
       $ref: '../../components/_index.yaml#/responses/InternalServerErrorResponse'

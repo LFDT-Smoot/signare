@@ -104,7 +104,7 @@ func TestPinBreaker(t *testing.T) {
 
 	// Login happens per operation and concurrent requests share one connector, so the breaker is
 	// exercised from several goroutines at once.
-	t.Run("is safe under concurrent use", func(_ *testing.T) {
+	t.Run("concurrent trips leave it open", func(t *testing.T) {
 		breaker := newPinBreaker(newRecordingGauge())
 		var wg sync.WaitGroup
 		for i := 0; i < 50; i++ {
@@ -113,10 +113,31 @@ func TestPinBreaker(t *testing.T) {
 				defer wg.Done()
 				breaker.trip(key, "wrong")
 				breaker.blocked(key, "wrong")
-				breaker.clear(key)
 			}()
 		}
 		wg.Wait()
+
+		require.True(t, breaker.blocked(key, "wrong"), "concurrent failures must still leave the slot blocked")
+		require.False(t, breaker.blocked(key, "corrected"))
+	})
+
+	// The breaker bounds retries, not a simultaneous burst: pinFor checks blocked and the matching trip
+	// only happens once the login returns, so requests already in flight when the first failure lands
+	// all reach the HSM. Closing that needs admission control around the attempt itself, which is a
+	// separate change; this pins the current bound rather than asserting a guarantee that does not hold.
+	t.Run("a burst that starts before the first failure is not bounded", func(t *testing.T) {
+		breaker := newPinBreaker(newRecordingGauge())
+
+		admitted := 0
+		for i := 0; i < 10; i++ {
+			if !breaker.blocked(key, "wrong") {
+				admitted++
+			}
+		}
+		require.Equal(t, 10, admitted, "nothing is recorded until an attempt returns")
+
+		breaker.trip(key, "wrong")
+		require.True(t, breaker.blocked(key, "wrong"), "every later attempt is refused")
 	})
 }
 

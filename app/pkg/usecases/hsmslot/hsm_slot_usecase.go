@@ -72,6 +72,11 @@ func (u *DefaultUseCase) CreateHSMSlot(ctx context.Context, input CreateHSMSlotI
 
 	// A PIN only means anything to a PKCS#11 module, so a source is mandatory for one and refused for the
 	// others rather than stored and never read.
+	if getHSMOutput.Kind != hsmmodule.SoftHSMModuleKind && len(input.PinSource) > 0 {
+		msg := fmt.Sprintf("a 'pinSource' cannot be set for a slot in the HSM module '%s', which is of kind %s", input.HSMModuleID, getHSMOutput.Kind)
+		return nil, errors.InvalidArgument().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+
 	if getHSMOutput.Kind == hsmmodule.SoftHSMModuleKind {
 		if len(input.PinSource) == 0 {
 			msg := fmt.Sprintf("a 'pinSource' is required for a slot in the HSM module '%s'", input.HSMModuleID)
@@ -80,12 +85,7 @@ func (u *DefaultUseCase) CreateHSMSlot(ctx context.Context, input CreateHSMSlotI
 		if validateErr := hsmconnector.ValidatePinSource(input.PinSource); validateErr != nil {
 			return nil, validateErr
 		}
-	} else if len(input.PinSource) > 0 {
-		msg := fmt.Sprintf("a 'pinSource' cannot be set for a slot in the HSM module '%s', which is of kind %s", input.HSMModuleID, getHSMOutput.Kind)
-		return nil, errors.InvalidArgument().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-	}
 
-	if getHSMOutput.Kind == hsmmodule.SoftHSMModuleKind {
 		resetInput := hsmconnector.ResetInput{
 			ModuleKind: hsmconnector.ModuleKind(getHSMOutput.Kind),
 		}

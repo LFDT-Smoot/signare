@@ -170,12 +170,14 @@ rotated secret therefore takes effect without a restart.
 Vault modules does not need it. A configured directory must exist at startup, or the process fails.
 
 A `pinSource` is a single name: no path separators, no `..`, and only letters, digits, `.`, `_` and `-`.
-Anything else is rejected, so a slot cannot be pointed at a file outside the directory. Symlinks inside
-the directory are followed, which is what makes a Kubernetes secret projection work.
+Anything else is rejected, so a slot cannot *name* a file outside the directory. Symlinks inside the
+directory are followed, which is what makes a Kubernetes secret projection work, and a symlink placed
+there can point anywhere. Write access to `pinSourceDirectory` is therefore equivalent to control of
+every slot PIN: grant it to nothing but the process that populates the secrets.
 
-Each file holds the PIN and nothing else. A single trailing newline is stripped, so
-`echo -n 'mypin' > slot-1-pin` and `echo 'mypin' > slot-1-pin` are equivalent; any other whitespace is
-part of the PIN. A file over 1 KiB is rejected.
+Each file holds the PIN and nothing else. A single trailing line ending is stripped, `\n`, `\r\n` or a
+lone `\r`, so `echo -n 'mypin' > slot-1-pin` and `echo 'mypin' > slot-1-pin` are equivalent; any other
+whitespace, including a trailing space or tab, is part of the PIN. A file over 1 KiB is rejected.
 
 The files must be readable by the Signare process and by nothing else. In Kubernetes, mount a Secret at
 `pinSourceDirectory` with `defaultMode: 0400` and set the pod's `fsGroup` to the group Signare runs as.

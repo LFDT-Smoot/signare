@@ -63,9 +63,9 @@ func (r *Resolver) Resolve(_ context.Context, source string) (string, error) {
 	return pin, nil
 }
 
-// trimOneLineEnding removes a single trailing newline and nothing else. `echo pin > file` leaves one,
-// and the HSM then refuses the PIN in a way that looks like a wrong secret. Trimming all whitespace
-// would be wrong the other way: a PIN may end in a space.
+// trimOneLineEnding removes a single trailing line ending, "\n", "\r\n" or a lone "\r", and nothing
+// else. `echo pin > file` leaves one, and the HSM then refuses the PIN in a way that looks like a wrong
+// secret. Trimming all whitespace would be wrong the other way: a PIN may end in a space.
 func trimOneLineEnding(content string) string {
 	trimmed := strings.TrimSuffix(content, "\n")
 	return strings.TrimSuffix(trimmed, "\r")

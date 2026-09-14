@@ -18,6 +18,10 @@ type pinBreakerKey struct {
 // operation, so without it one wrong secret fails every signature and the HSM locks the user PIN. It
 // holds a digest of the refused value, never the value: a different digest means the secret was
 // corrected.
+//
+// It bounds retries, not a simultaneous burst: the check and the trip are separated by the login
+// itself, so requests already in flight when the first failure lands still reach the HSM. Bounding
+// those needs admission control around the attempt.
 type pinBreaker struct {
 	mu     sync.Mutex
 	failed map[pinBreakerKey][sha256.Size]byte

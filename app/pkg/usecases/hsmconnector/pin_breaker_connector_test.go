@@ -20,21 +20,31 @@ import (
 type refusingSignatureManager struct {
 	malformedSignatureManager
 	attempts atomic.Int32
+	err      error
+}
+
+// err is returned by every operation. It defaults to a refused PIN; set it to something else to stand
+// in for a return code the PKCS#11 translator does not map, such as CKR_PIN_LOCKED.
+func (m *refusingSignatureManager) failure() error {
+	if m.err != nil {
+		return m.err
+	}
+	return signaturemanager.NewPinIncorrectError()
 }
 
 func (m *refusingSignatureManager) Sign(_ context.Context, _ signaturemanager.SignInput) (*signaturemanager.SignOutput, error) {
 	m.attempts.Add(1)
-	return nil, signaturemanager.NewPinIncorrectError()
+	return nil, m.failure()
 }
 
 func (m *refusingSignatureManager) ListKeys(_ context.Context, _ signaturemanager.ListKeysInput) (*signaturemanager.ListKeysOutput, error) {
 	m.attempts.Add(1)
-	return nil, signaturemanager.NewPinIncorrectError()
+	return nil, m.failure()
 }
 
 func (m *refusingSignatureManager) IsAlive(_ context.Context, _ signaturemanager.IsAliveInput) (*signaturemanager.IsAliveOutput, error) {
 	m.attempts.Add(1)
-	return nil, signaturemanager.NewPinIncorrectError()
+	return nil, m.failure()
 }
 
 type refusingFactory struct {
@@ -163,6 +173,55 @@ func TestConnectorStopsRetryingARefusedPin(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, errors.IsPreconditionFailed(err))
 		require.Equal(t, int32(2), manager.attempts.Load(), "verify must reach the HSM even with the breaker open")
+	})
+
+	// The PKCS#11 translator maps three return codes, so CKR_PIN_LOCKED and CKR_DEVICE_ERROR reach the
+	// connector as generic errors. If one of those closed the breaker, a locked token would be retried
+	// on every request, which is the failure the breaker exists to prevent.
+	t.Run("an error that is not about the PIN leaves an open breaker open", func(t *testing.T) {
+		directory := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "slot-pin"), []byte("wrong"), 0o600))
+		connector, manager := newConnector(t, directory)
+
+		_, err := connector.ListAddresses(context.Background(), listInput())
+		require.Error(t, err)
+		require.Equal(t, int32(1), manager.attempts.Load())
+
+		// The token is now locked, or briefly unreachable: a code the translator does not map.
+		manager.err = errors.Internal().WithMessage("CKR_PIN_LOCKED")
+
+		_, err = connector.IsAlive(context.Background(), hsmconnector.IsAliveInput{
+			Slot:       slot,
+			PinSource:  "slot-pin",
+			ModuleKind: hsmconnector.SoftHSMModuleKind,
+		})
+		require.Error(t, err)
+		require.Equal(t, int32(2), manager.attempts.Load(), "verify reaches the HSM even with the breaker open")
+
+		_, err = connector.ListAddresses(context.Background(), listInput())
+		require.Error(t, err)
+		require.Equal(t, int32(2), manager.attempts.Load(), "a non-PIN error must not reopen the slot")
+	})
+
+	t.Run("a failed verify does not close the breaker", func(t *testing.T) {
+		directory := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "slot-pin"), []byte("wrong"), 0o600))
+		connector, manager := newConnector(t, directory)
+
+		_, err := connector.ListAddresses(context.Background(), listInput())
+		require.Error(t, err)
+
+		_, err = connector.IsAlive(context.Background(), hsmconnector.IsAliveInput{
+			Slot:       slot,
+			PinSource:  "slot-pin",
+			ModuleKind: hsmconnector.SoftHSMModuleKind,
+		})
+		require.Error(t, err, "the PIN is still wrong")
+
+		before := manager.attempts.Load()
+		_, err = connector.ListAddresses(context.Background(), listInput())
+		require.Error(t, err)
+		require.Equal(t, before, manager.attempts.Load(), "only a verify that succeeds clears the breaker")
 	})
 
 	t.Run("a slot with neither a source nor a stored pin is refused without a login", func(t *testing.T) {

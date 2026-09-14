@@ -821,6 +821,13 @@ func mapSlot(slot hsmslot.HSMSlot) generatedhttpinfra.SlotDetail {
 		collectionToReturn = append(collectionToReturn, item)
 	}
 
+	// The source is a name, not a secret, and an operator needs it to find the file behind a slot that
+	// stops signing. Omitted when unset so a slot on a module kind with no PIN does not report one.
+	var pinSource *string
+	if len(slot.PinSource) > 0 {
+		pinSource = &slot.PinSource
+	}
+
 	return generatedhttpinfra.SlotDetail{
 		Meta: &generatedhttpinfra.ResourceMetaDetail{
 			Id:              &slot.ID,
@@ -832,6 +839,7 @@ func mapSlot(slot hsmslot.HSMSlot) generatedhttpinfra.SlotDetail {
 			HardwareSecurityModuleId: &slot.HSMModuleID,
 			ApplicationId:            &slot.ApplicationID,
 			Slot:                     &slot.Slot,
+			PinSource:                pinSource,
 			Config:                   &collectionToReturn,
 		},
 	}

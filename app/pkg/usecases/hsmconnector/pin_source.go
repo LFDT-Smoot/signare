@@ -74,17 +74,23 @@ func pinIncorrectError(err error, slot string) error {
 	return errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 }
 
-// recordLoginOutcome opens the breaker on a refused PIN and closes it on any other outcome. Anything
-// else says nothing about the PIN, so it must not leave a breaker open.
+// recordLoginOutcome opens the breaker on a refused PIN and closes it on a successful login. Any other
+// error is evidence about the HSM, not about the PIN, so it leaves the breaker as it found it: only a
+// login that got through proves the PIN is right.
+//
+// This matters because the PKCS#11 translator maps three return codes, so CKR_PIN_LOCKED and
+// CKR_DEVICE_ERROR both arrive here as generic errors. Clearing on those would reopen a slot whose PIN
+// the HSM has already refused, and would keep reopening it against a locked token.
 func (d *DefaultUseCase) recordLoginOutcome(pin *slotPin, err error) {
 	if pin == nil || !pin.guarded {
 		return
 	}
-	if err != nil && signaturemanager.IsPinIncorrectError(err) {
+	switch {
+	case err == nil:
+		d.breaker.clear(pin.key)
+	case signaturemanager.IsPinIncorrectError(err):
 		d.breaker.trip(pin.key, pin.value)
-		return
 	}
-	d.breaker.clear(pin.key)
 }
 
 // ValidatePinSource enforces that a PIN source is a single name, not a path. The name is resolved under
