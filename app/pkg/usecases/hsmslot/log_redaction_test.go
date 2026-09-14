@@ -19,6 +19,10 @@ import (
 // record whatever handler is configured.
 const secretPrivateKey = "4c0883a69102937d6231471b5dbb6204fe512961708279f2e3e8a5d4b8e3e3ab"
 
+// notEmittedByLogValue is a field LogValue leaves out, so its presence in a record proves the struct
+// was marshalled raw rather than through the guard. PinSource cannot serve: it is emitted on purpose.
+const notEmittedByLogValue = "internal-resource-id-1"
+
 func slotWithSecrets() hsmslot.HSMSlot {
 	return hsmslot.HSMSlot{
 		StandardResourceMeta: entities.StandardResourceMeta{
@@ -26,10 +30,11 @@ func slotWithSecrets() hsmslot.HSMSlot {
 				StandardID: entities.StandardID{ID: "slot-1"},
 			},
 		},
-		ApplicationID: "app-1",
-		HSMModuleID:   "module-1",
-		Slot:          "0",
-		PinSource:     "slot-1-pin",
+		InternalResourceID: notEmittedByLogValue,
+		ApplicationID:      "app-1",
+		HSMModuleID:        "module-1",
+		Slot:               "0",
+		PinSource:          "slot-1-pin",
 		Config: hsmslot.SlotConfig{
 			LocalKeyVault: &hsmslot.LocalKeyVaultConfig{
 				KeyStore: map[address.Address]string{
@@ -91,13 +96,16 @@ func TestHSMSlot_LogValueRedactsCredentials(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			output := logged(t, handler, "slot", slotWithSecrets())
 
-			require.NotContains(t, output, secretPrivateKey, "slot key material must never reach a log record")
 			require.NotContains(t, output, secretPrivateKey, "Local Key Vault key material must never reach a log record")
 
 			// The identifying fields must survive, otherwise the redaction destroys the diagnostic value.
 			require.Contains(t, output, "slot-1")
 			require.Contains(t, output, "app-1")
 			require.Contains(t, output, "module-1")
+
+			// PinSource names a secret rather than holding one, and the API returns it on SlotDetail. It is
+			// emitted on purpose: it is what an operator needs to act on a slot that cannot open its token.
+			require.Contains(t, output, "slot-1-pin", "the pin source must be logged, it is not a credential")
 		})
 	}
 }
@@ -114,7 +122,6 @@ func TestHSMSlot_LogValueRedactsThroughPointer(t *testing.T) {
 			slot := slotWithSecrets()
 			output := logged(t, handler, "slot", &slot)
 
-			require.NotContains(t, output, secretPrivateKey)
 			require.NotContains(t, output, secretPrivateKey)
 
 			require.Contains(t, output, "slot-1")
@@ -170,7 +177,6 @@ func TestHSMSlotCollection_LogValueRedactsItems(t *testing.T) {
 
 			output := logged(t, handler, "slots", collection)
 			require.NotContains(t, output, secretPrivateKey, "no slot in the page may expose its key material")
-			require.NotContains(t, output, secretPrivateKey)
 			require.Contains(t, output, renderedAttr(name, "items", 1))
 			require.Contains(t, output, renderedAttr(name, "limit", 10))
 
@@ -194,12 +200,12 @@ func TestHSMSlot_LogValueDoesNotExtendIntoABareSlice(t *testing.T) {
 	// A slot with no Local Key Vault, so the JSON handler can marshal it rather than failing on the
 	// unsupported key-store map type, which would mask what is being shown.
 	//
-	// The marker is PinSource rather than a secret: the slot carries no scalar secret now that the pin
-	// column is gone, and LogValue does not emit PinSource either, so its presence proves the struct was
-	// marshalled raw rather than through the guard. That is the boundary under test.
+	// The marker is a field LogValue withholds rather than a secret: the slot carries no scalar secret
+	// now that the pin column is gone, so its presence proves the struct was marshalled raw rather than
+	// through the guard. That is the boundary under test.
 	slot := slotWithSecrets()
 	slot.Config = hsmslot.SlotConfig{}
-	const marker = "slot-1-pin"
+	const marker = notEmittedByLogValue
 
 	require.NotContains(t, logged(t, jsonHandler, "slot", slot), marker,
 		"the direct form must go through LogValue")

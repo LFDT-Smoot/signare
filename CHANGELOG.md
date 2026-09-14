@@ -22,10 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking.** Slot creation takes `spec.pinSource`, the name of a file holding the PIN, where it took `spec.pin`. The schema forbids unknown properties, so a request still sending `pin` is rejected with a 400. `pinSource` is mandatory for a SoftHSM module and refused for the others (#42).
 - **Breaking.** `hsmmodules.softhsm.pinSourceDirectory` must be set before any slot can name a source, and the directory must exist at startup. A deployment using only AKV or Local Key Vault does not need it (#42).
 - `SlotDetail.spec` gains `pinSource`, so `describe`, `list` and the slot mutations report which secret a slot names. The PIN itself is never returned (#42).
+- Log records for an HSM slot now carry `pinSource`. It names a secret rather than holding one, and it is what an operator needs to act on a slot that cannot open its token (#43).
 
 ### Removed
 - **Breaking.** `admin.slots.updatePin` and `POST /admin/modules/{moduleId}/slots/{slotId}:update-pin`, replaced by the value-free `admin.slots.updatePinSource` on `:update-pin-source` and the new `admin.slots.verifyPinSource` on `:verify-pin-source` (#42).
-- **Breaking.** The `pin` column of `cfg_hardware_security_module_slot`, and with it the fallback that let a slot stored before pin sources existed keep signing. Every slot must already resolve its PIN from a source before this release: one without a `pinSource` now fails every signing request. The old values survive in backups and WAL, so rotate each PIN on the token if that was not done when sources were introduced (#43).
+- **Breaking.** The `pin` column of `cfg_hardware_security_module_slot`, and with it the fallback that let a slot stored before pin sources existed keep signing. The upgrade refuses to run while any slot still depends on the column; see the [database reference](app/docs/mkdocs/docs/reference/database.md) for the precondition and recovery (#43).
 
 ### Fixed
 - Fixed `eth_signTransaction` signing a request as a legacy transaction, silently discarding `maxFeePerBlobGas`, `blobVersionedHashes` or `authorizationList`, when the request carried one of those fields and neither a `gasPrice` nor any EIP-1559 fee field. Such a request is now rejected as an unsupported transaction type (#5).

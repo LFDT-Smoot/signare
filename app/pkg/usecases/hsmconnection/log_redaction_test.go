@@ -76,7 +76,6 @@ func TestHSMConnection_LogValueRedactsSlotCredentials(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			output := logged(t, handler, "connection", connectionWithSecrets())
 
-			require.NotContains(t, output, secretPrivateKey, "slot key material must never reach a log record")
 			require.NotContains(t, output, secretPrivateKey, "Local Key Vault key material must never reach a log record")
 
 			// The identifying fields must survive, otherwise the redaction destroys the diagnostic value.
@@ -96,7 +95,6 @@ func TestHSMConnection_LogValueRedactsThroughPointer(t *testing.T) {
 			connection := connectionWithSecrets()
 			output := logged(t, handler, "connection", &connection)
 
-			require.NotContains(t, output, secretPrivateKey)
 			require.NotContains(t, output, secretPrivateKey)
 			require.Contains(t, output, "slot-1")
 		})
