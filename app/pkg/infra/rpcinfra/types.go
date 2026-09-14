@@ -1,8 +1,12 @@
 package rpcinfra
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
@@ -65,6 +69,11 @@ type JSONRPCParams interface {
 
 // ProcessParams processes the params data structure from the RPCRequest.
 func ProcessParams(reqParams json.RawMessage, rpcParams JSONRPCParams) *rpcerrors.RPCError {
+	// Checked before anything decodes the payload, because which of the two decodes below runs
+	// determines how an ambiguously named field resolves.
+	if err := RejectAmbiguousParams(reqParams); err != nil {
+		return rpcerrors.NewInvalidParamsFromErr(err)
+	}
 	if err := json.Unmarshal(reqParams, rpcParams); err != nil {
 		// If the unmarshall fails, we try to unmarshall it into an interface and set the JSONRPCParams from there.
 		posParams := make([]any, 0)
@@ -73,6 +82,97 @@ func ProcessParams(reqParams json.RawMessage, rpcParams JSONRPCParams) *rpcerror
 		}
 		if err = rpcParams.SetParamsFrom(posParams); err != nil {
 			return rpcerrors.NewInvalidParamsFromErr(err)
+		}
+	}
+	return nil
+}
+
+// SingleParamsObject returns the one object a params payload carries, accepting both the positional
+// array form ([{...}]) and the bare object form ({...}), and rejects an object that names a field
+// ambiguously.
+//
+// Every party that reads the signing account out of a request has to agree on it, or the policy
+// enforcement point authorizes one account and the handler signs with another. This is the one place
+// that decides which object a payload names, so the two cannot drift.
+func SingleParamsObject(params json.RawMessage) (json.RawMessage, error) {
+	object := paramsObject(params)
+	if object == nil {
+		return nil, errors.New("a single object is expected")
+	}
+	if err := rejectAmbiguousFieldNames(object); err != nil {
+		return nil, err
+	}
+	return object, nil
+}
+
+// RejectAmbiguousParams fails if a params payload carries a single object that names a field
+// ambiguously. A payload of any other shape is passed over, so a method taking no params, or params
+// this package does not model as one object, is left to its own decoding.
+func RejectAmbiguousParams(params json.RawMessage) error {
+	object := paramsObject(params)
+	if object == nil {
+		return nil
+	}
+	return rejectAmbiguousFieldNames(object)
+}
+
+// paramsObject returns the single JSON object a params payload carries, or nil if it does not carry
+// exactly one.
+func paramsObject(params json.RawMessage) json.RawMessage {
+	object := bytes.TrimSpace(params)
+	if len(object) > 0 && object[0] == '[' {
+		var positional []json.RawMessage
+		if err := json.Unmarshal(object, &positional); err != nil || len(positional) != 1 {
+			return nil
+		}
+		object = bytes.TrimSpace(positional[0])
+	}
+	if len(object) == 0 || object[0] != '{' {
+		return nil
+	}
+	return object
+}
+
+// rejectAmbiguousFieldNames fails if two of an object's keys are equal under Unicode case folding,
+// which is how encoding/json matches a key to a struct field.
+//
+// Such an object decodes two ways. A struct decode keeps the last matching key, so {"from":a,"From":b}
+// yields b, while a map[string]any decode keeps both and a lookup of "from" yields a. Refusing the
+// object is the only resolution that cannot be read two ways.
+//
+// Only the object's own keys are checked. Values are skipped whole, because nested objects carry
+// caller data, an EIP-712 message among them, where two keys differing by case are distinct and
+// legitimate.
+func rejectAmbiguousFieldNames(object json.RawMessage) error {
+	decoder := json.NewDecoder(bytes.NewReader(object))
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if token != json.Delim('{') {
+		return errors.New("a single object is expected")
+	}
+
+	names := make([]string, 0)
+	for decoder.More() {
+		token, err = decoder.Token()
+		if err != nil {
+			return err
+		}
+		name, ok := token.(string)
+		if !ok {
+			return errors.New("a single object is expected")
+		}
+		for _, seen := range names {
+			if strings.EqualFold(seen, name) {
+				return fmt.Errorf("params name the same field twice: [%s] and [%s]", seen, name)
+			}
+		}
+		names = append(names, name)
+
+		var value json.RawMessage
+		if err = decoder.Decode(&value); err != nil {
+			return err
 		}
 	}
 	return nil
