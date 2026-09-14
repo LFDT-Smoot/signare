@@ -11,3 +11,6 @@ migration_steps:
   - up: /include/dbschemas/postgres/000004_hsm_slot_pin_source.up.sql
     down: /include/dbschemas/postgres/000004_hsm_slot_pin_source.down.sql
     version_description: "000004 name the slot pin secret instead of storing it"
+  - up: /include/dbschemas/postgres/000005_drop_hsm_slot_pin.up.sql
+    down: /include/dbschemas/postgres/000005_drop_hsm_slot_pin.down.sql
+    version_description: "000005 drop the cleartext slot pin column"

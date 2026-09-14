@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	secretPin        = "s3cr3t-slot-pin"
+	// secretPrivateKey is the canary: with the slot PIN gone from the database, the Local Key Vault key
+	// store is the only secret a connection still carries.
 	secretPrivateKey = "4c0883a69102937d6231471b5dbb6204fe512961708279f2e3e8a5d4b8e3e3ab"
 )
 
@@ -31,7 +32,7 @@ func connectionWithSecrets() hsmconnection.HSMConnection {
 			ApplicationID: "app-1",
 			HSMModuleID:   "module-1",
 			Slot:          "0",
-			Pin:           secretPin,
+			PinSource:     "slot-1-pin",
 			Config: hsmslot.SlotConfig{
 				LocalKeyVault: &hsmslot.LocalKeyVaultConfig{
 					KeyStore: map[address.Address]string{
@@ -75,7 +76,7 @@ func TestHSMConnection_LogValueRedactsSlotCredentials(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			output := logged(t, handler, "connection", connectionWithSecrets())
 
-			require.NotContains(t, output, secretPin, "the slot PIN must never reach a log record")
+			require.NotContains(t, output, secretPrivateKey, "slot key material must never reach a log record")
 			require.NotContains(t, output, secretPrivateKey, "Local Key Vault key material must never reach a log record")
 
 			// The identifying fields must survive, otherwise the redaction destroys the diagnostic value.
@@ -95,7 +96,7 @@ func TestHSMConnection_LogValueRedactsThroughPointer(t *testing.T) {
 			connection := connectionWithSecrets()
 			output := logged(t, handler, "connection", &connection)
 
-			require.NotContains(t, output, secretPin)
+			require.NotContains(t, output, secretPrivateKey)
 			require.NotContains(t, output, secretPrivateKey)
 			require.Contains(t, output, "slot-1")
 		})

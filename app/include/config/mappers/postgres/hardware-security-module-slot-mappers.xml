@@ -72,9 +72,6 @@
         WHERE
             id=:id
     </statement>
-    <!-- The only read that still selects the deprecated cleartext pin, so a row written before
-         pin_source existed can still log in. COALESCE because insert no longer writes the column.
-         Goes when the column is dropped. -->
     <statement id="getByApplication">
         SELECT
             id,
@@ -82,7 +79,6 @@
             hardware_security_module_id,
             application_id,
             slot,
-            COALESCE(pin, '') AS pin,
             pin_source,
             configuration,
             creation_date,
@@ -104,14 +100,11 @@
             id=:id AND
             resource_version=:resource_version
     </statement>
-    <!-- Clears the legacy pin, so moving a slot to a source stops the old value being served. It
-         survives in backups and WAL regardless; rotate on the token. -->
     <statement id="updatePinSource">
         UPDATE
             cfg_hardware_security_module_slot
         SET
             pin_source=:pin_source,
-            pin=NULL,
             last_update=:last_update,
             resource_version=:new_resource_version
         WHERE
