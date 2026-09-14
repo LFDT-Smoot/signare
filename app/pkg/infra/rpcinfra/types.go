@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
@@ -71,7 +73,7 @@ type JSONRPCParams interface {
 func ProcessParams(reqParams json.RawMessage, rpcParams JSONRPCParams) *rpcerrors.RPCError {
 	// Checked before anything decodes the payload, because which of the two decodes below runs
 	// determines how an ambiguously named field resolves.
-	if err := RejectAmbiguousParams(reqParams); err != nil {
+	if err := rejectAmbiguousParams(reqParams); err != nil {
 		return rpcerrors.NewInvalidParamsFromErr(err)
 	}
 	if err := json.Unmarshal(reqParams, rpcParams); err != nil {
@@ -91,9 +93,9 @@ func ProcessParams(reqParams json.RawMessage, rpcParams JSONRPCParams) *rpcerror
 // array form ([{...}]) and the bare object form ({...}), and rejects an object that names a field
 // ambiguously.
 //
-// Every party that reads the signing account out of a request has to agree on it, or the policy
-// enforcement point authorizes one account and the handler signs with another. This is the one place
-// that decides which object a payload names, so the two cannot drift.
+// Every party that reads the signing account out of a request has to agree on which account it is, or
+// the policy enforcement point authorizes one account and the handler signs with another. The two
+// still decode the payload separately; what this removes is the input on which their decodes disagree.
 func SingleParamsObject(params json.RawMessage) (json.RawMessage, error) {
 	object := paramsObject(params)
 	if object == nil {
@@ -105,10 +107,10 @@ func SingleParamsObject(params json.RawMessage) (json.RawMessage, error) {
 	return object, nil
 }
 
-// RejectAmbiguousParams fails if a params payload carries a single object that names a field
+// rejectAmbiguousParams fails if a params payload carries a single object that names a field
 // ambiguously. A payload of any other shape is passed over, so a method taking no params, or params
 // this package does not model as one object, is left to its own decoding.
-func RejectAmbiguousParams(params json.RawMessage) error {
+func rejectAmbiguousParams(params json.RawMessage) error {
 	object := paramsObject(params)
 	if object == nil {
 		return nil
@@ -133,8 +135,8 @@ func paramsObject(params json.RawMessage) json.RawMessage {
 	return object
 }
 
-// rejectAmbiguousFieldNames fails if two of an object's keys are equal under Unicode case folding,
-// which is how encoding/json matches a key to a struct field.
+// rejectAmbiguousFieldNames fails if two of an object's keys fold to the same name, which is how
+// encoding/json decides that a key matches a struct field.
 //
 // Such an object decodes two ways. A struct decode keeps the last matching key, so {"from":a,"From":b}
 // yields b, while a map[string]any decode keeps both and a lookup of "from" yields a. Refusing the
@@ -143,6 +145,10 @@ func paramsObject(params json.RawMessage) json.RawMessage {
 // Only the object's own keys are checked. Values are skipped whole, because nested objects carry
 // caller data, an EIP-712 message among them, where two keys differing by case are distinct and
 // legitimate.
+//
+// Keys are attacker-controlled and bounded only by the request body limit, so the scan is a single
+// pass with a map lookup per key. Comparing each key against every earlier one would be quadratic in
+// a value the caller chooses.
 func rejectAmbiguousFieldNames(object json.RawMessage) error {
 	decoder := json.NewDecoder(bytes.NewReader(object))
 	token, err := decoder.Token()
@@ -153,7 +159,7 @@ func rejectAmbiguousFieldNames(object json.RawMessage) error {
 		return errors.New("a single object is expected")
 	}
 
-	names := make([]string, 0)
+	seen := make(map[string]string)
 	for decoder.More() {
 		token, err = decoder.Token()
 		if err != nil {
@@ -163,12 +169,12 @@ func rejectAmbiguousFieldNames(object json.RawMessage) error {
 		if !ok {
 			return errors.New("a single object is expected")
 		}
-		for _, seen := range names {
-			if strings.EqualFold(seen, name) {
-				return fmt.Errorf("params name the same field twice: [%s] and [%s]", seen, name)
-			}
+		folded := foldName(name)
+		if previous, duplicate := seen[folded]; duplicate {
+			return fmt.Errorf("params name the same field twice: %q and %q",
+				truncateFieldName(previous), truncateFieldName(name))
 		}
-		names = append(names, name)
+		seen[folded] = name
 
 		var value json.RawMessage
 		if err = decoder.Decode(&value); err != nil {
@@ -176,4 +182,52 @@ func rejectAmbiguousFieldNames(object json.RawMessage) error {
 		}
 	}
 	return nil
+}
+
+// foldName canonicalises a key the way encoding/json does when matching it to a struct field: ASCII
+// letters upper-cased, every other rune replaced by the lowest rune in its Unicode simple-fold orbit.
+// Two keys match the same field exactly when their folded names are equal, so one map keyed by the
+// folded name detects a collision in a single pass.
+func foldName(name string) string {
+	var folded strings.Builder
+	folded.Grow(len(name))
+	for _, r := range name {
+		switch {
+		case 'a' <= r && r <= 'z':
+			r -= 'a' - 'A'
+		case r >= utf8.RuneSelf:
+			r = foldRune(r)
+		}
+		folded.WriteRune(r)
+	}
+	return folded.String()
+}
+
+// foldRune returns the lowest rune in r's simple-fold orbit. unicode.SimpleFold walks the orbit in
+// increasing order and wraps round to its smallest member, so the first value that does not increase
+// is that member.
+func foldRune(r rune) rune {
+	for {
+		next := unicode.SimpleFold(r)
+		if next <= r {
+			return next
+		}
+		r = next
+	}
+}
+
+// maxReportedFieldNameRunes bounds how much of a key name is reported back. Names are caller-supplied
+// and bounded only by the request body limit, and this error reaches the server log, so the name is
+// truncated here and quoted by the caller so that control characters cannot break up a log line.
+const maxReportedFieldNameRunes = 64
+
+func truncateFieldName(name string) string {
+	runes := 0
+	for i := range name {
+		runes++
+		if runes > maxReportedFieldNameRunes {
+			return name[:i] + "..."
+		}
+	}
+	return name
 }

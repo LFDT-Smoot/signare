@@ -11,6 +11,7 @@ import (
 
 	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authorization/pep"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/entrypoint/rpcbatchrequestsupport"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
 
@@ -98,32 +99,81 @@ func keyCasings(name string) []string {
 func TestAuthorizeAccount_SignerIsTheAuthorizedAccount(t *testing.T) {
 	for _, method := range accountSigningMethods() {
 		casings := keyCasings(method.accountKey)
-		for _, first := range casings {
-			for _, second := range casings {
-				if first == second {
-					continue
-				}
-				name := fmt.Sprintf("%s/%s_then_%s", method.method, first, second)
-				t.Run(name, func(t *testing.T) {
-					params := fmt.Sprintf(`[{%q:%q,%q:%q,%s}]`,
-						first, otherAccountAddress, second, authorizedAccountAddress, method.siblingFields)
-					body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":%q,"params":%s}`, method.method, params)
-
-					authorized, status := authorizeAccountForTest(t, method.method, body)
-					signer, signErr := method.signerAccount(json.RawMessage(params))
-
-					if status != http.StatusOK {
-						// Refused at the gate, which is the outcome this fix produces.
-						require.Empty(t, authorized, "a refused request must not have authorized an account")
-						return
+		for _, form := range []string{"array", "object"} {
+			for _, first := range casings {
+				for _, second := range casings {
+					if first == second {
+						continue
 					}
-					require.NoError(t, signErr, "a request the gate allowed must decode for signing")
-					require.Truef(t, strings.EqualFold(authorized, signer),
-						"authorized %s but would sign with %s", authorized, signer)
-				})
+					name := fmt.Sprintf("%s/%s/%s_then_%s", method.method, form, first, second)
+					t.Run(name, func(t *testing.T) {
+						object := fmt.Sprintf(`{%q:%q,%q:%q,%s}`,
+							first, otherAccountAddress, second, authorizedAccountAddress, method.siblingFields)
+						params := object
+						if form == "array" {
+							params = "[" + object + "]"
+						}
+						body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":%q,"params":%s}`, method.method, params)
+
+						authorized, status := authorizeAccountForTest(t, method.method, body)
+						signer, signErr := method.signerAccount(json.RawMessage(params))
+
+						if status != http.StatusOK {
+							// Refused at the gate, which is the outcome this fix produces.
+							require.Empty(t, authorized, "a refused request must not have authorized an account")
+							return
+						}
+						require.NoError(t, signErr, "a request the gate allowed must decode for signing")
+						require.Truef(t, strings.EqualFold(authorized, signer),
+							"authorized %s but would sign with %s", authorized, signer)
+					})
+				}
 			}
 		}
 	}
+}
+
+// TestAuthorizeAccount_SignerIsTheAuthorizedAccountInABatch runs the same property over the batch
+// entrypoint. FanOutRPCBatchRequest re-marshals each element before the authorization middleware sees
+// it, and that round trip only preserves an ambiguous params object because RPCRequest.Params is
+// json.RawMessage. Were it ever widened to any, Go would re-encode the params as a map with its keys
+// sorted, silently changing which spelling the handler's decode keeps and reopening the bypass for
+// batched requests. Nothing else pins that field's type.
+func TestAuthorizeAccount_SignerIsTheAuthorizedAccountInABatch(t *testing.T) {
+	for _, method := range accountSigningMethods() {
+		t.Run(method.method, func(t *testing.T) {
+			exact := method.accountKey
+			folded := strings.ToUpper(exact[:1]) + exact[1:]
+			params := fmt.Sprintf(`[{%q:%q,%q:%q,%s}]`,
+				exact, otherAccountAddress, folded, authorizedAccountAddress, method.siblingFields)
+			batch := fmt.Sprintf(`[{"jsonrpc":"2.0","id":1,"method":%q,"params":%s}]`, method.method, params)
+
+			for _, element := range fanOutBatchForTest(t, batch) {
+				authorized, status := authorizeAccountForTest(t, method.method, element)
+				require.Equal(t, http.StatusBadRequest, status,
+					"an ambiguous account param must be refused inside a batch too")
+				require.Empty(t, authorized, "a refused request must not have authorized an account")
+			}
+		})
+	}
+}
+
+// fanOutBatchForTest reproduces the decode-and-re-marshal that FanOutRPCBatchRequest performs on each
+// element of a batch, so the test drives the same bytes the middleware chain would hand downstream.
+func fanOutBatchForTest(t *testing.T, batch string) []string {
+	t.Helper()
+
+	var elements []rpcbatchrequestsupport.RPCRequest
+	require.NoError(t, json.Unmarshal([]byte(batch), &elements))
+	require.NotEmpty(t, elements)
+
+	bodies := make([]string, 0, len(elements))
+	for _, element := range elements {
+		marshalled, err := json.Marshal(element)
+		require.NoError(t, err)
+		bodies = append(bodies, string(marshalled))
+	}
+	return bodies
 }
 
 // TestAuthorizeAccount_RejectsAmbiguousAccountParam pins the specific bypass: naming the signing

@@ -100,9 +100,12 @@ func (policyEnforcementPoint *RPCPolicyEnforcementPoint) AuthorizeAccount(next h
 // getSigningAccount returns the account the request signs with, for either the positional array form
 // or the bare object form.
 //
-// The payload is resolved to its object through rpcinfra.SingleParamsObject, the same unwrap the
-// handler's decode goes through, so authorization and signing cannot read a different account out of
-// one request.
+// The handler decodes the payload separately, and for the positional form it reads an exact map key
+// where this struct decode matches field names by fold. rpcinfra.SingleParamsObject rejects the input
+// on which those two disagree, an object naming one field twice, so what reaches either decode
+// resolves to one account. It does not make the two share an unwrap: each still derives the
+// single-object rule itself, and they are checked against each other in
+// TestAuthorizeAccount_SignerIsTheAuthorizedAccount.
 func getSigningAccount(ctx context.Context, params AuthorizeAccountRPCBody, usesAddressParam bool) (*address.Address, error) {
 	object, err := rpcinfra.SingleParamsObject(params.Params)
 	if err != nil {

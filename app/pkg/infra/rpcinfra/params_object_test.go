@@ -51,8 +51,6 @@ func TestSingleParamsObject_RejectsAmbiguousFieldNames(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := rpcinfra.SingleParamsObject(json.RawMessage(params))
 			require.ErrorContains(t, err, "name the same field twice")
-
-			require.Error(t, rpcinfra.RejectAmbiguousParams(json.RawMessage(params)))
 		})
 	}
 }
@@ -66,7 +64,6 @@ func TestSingleParamsObject_AllowsAmbiguityBelowTheTopLevel(t *testing.T) {
 	object, err := rpcinfra.SingleParamsObject(json.RawMessage(params))
 	require.NoError(t, err)
 	require.NotEmpty(t, object)
-	require.NoError(t, rpcinfra.RejectAmbiguousParams(json.RawMessage(params)))
 
 	// A value that is itself an object is skipped whole, not descended into.
 	_, err = rpcinfra.SingleParamsObject(json.RawMessage(`[{"from":{"from":"0xa","From":"0xb"}}]`))
@@ -90,15 +87,6 @@ func TestSingleParamsObject_RejectsShapesThatAreNotOneObject(t *testing.T) {
 			_, err := rpcinfra.SingleParamsObject(json.RawMessage(params))
 			require.ErrorContains(t, err, "a single object is expected")
 		})
-	}
-}
-
-// TestRejectAmbiguousParams_PassesOverOtherShapes keeps the check out of the way of methods whose
-// params are not a single object, including the methods that take none at all.
-func TestRejectAmbiguousParams_PassesOverOtherShapes(t *testing.T) {
-	for _, params := range []string{`[]`, `null`, ``, `[{"a":1},{"b":2}]`, `["x"]`, `{}`} {
-		require.NoErrorf(t, rpcinfra.RejectAmbiguousParams(json.RawMessage(params)),
-			"params %q must be left to the per-method decoding", params)
 	}
 }
 
