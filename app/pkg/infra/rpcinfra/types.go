@@ -76,17 +76,35 @@ func ProcessParams(reqParams json.RawMessage, rpcParams JSONRPCParams) *rpcerror
 	if err := rejectAmbiguousParams(reqParams); err != nil {
 		return rpcerrors.NewInvalidParamsFromErr(err)
 	}
-	if err := json.Unmarshal(reqParams, rpcParams); err != nil {
-		// If the unmarshall fails, we try to unmarshall it into an interface and set the JSONRPCParams from there.
-		posParams := make([]any, 0)
-		if err = json.Unmarshal(reqParams, &posParams); err != nil {
-			return rpcerrors.NewInvalidParamsFromErr(err)
-		}
-		if err = rpcParams.SetParamsFrom(posParams); err != nil {
-			return rpcerrors.NewInvalidParamsFromErr(err)
-		}
+	err := json.Unmarshal(reqParams, rpcParams)
+	if err == nil {
+		return nil
+	}
+	if _, decodesBothForms := rpcParams.(json.Unmarshaler); decodesBothForms {
+		// The type already accepts every shape SetParamsFrom would, so its error is the final word.
+		// Falling through would replace a message naming the offending field with a generic one.
+		return rpcerrors.NewInvalidParamsFromErr(paramsDecodeError(err))
+	}
+	// If the unmarshall fails, we try to unmarshall it into an interface and set the JSONRPCParams from there.
+	posParams := make([]any, 0)
+	if err = json.Unmarshal(reqParams, &posParams); err != nil {
+		return rpcerrors.NewInvalidParamsFromErr(err)
+	}
+	if err = rpcParams.SetParamsFrom(posParams); err != nil {
+		return rpcerrors.NewInvalidParamsFromErr(err)
 	}
 	return nil
+}
+
+// paramsDecodeError names the offending field for a type mismatch, matching the per-field messages
+// the positional decode used to produce, and keeps encoding/json's internal type names out of the
+// response. Any other failure is reported as-is.
+func paramsDecodeError(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) && typeErr.Field != "" {
+		return fmt.Errorf("[%s] must be of type %s", typeErr.Field, typeErr.Type)
+	}
+	return err
 }
 
 // SingleParamsObject returns the one object a params payload carries, from either the positional array

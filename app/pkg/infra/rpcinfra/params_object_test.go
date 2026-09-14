@@ -161,3 +161,26 @@ func TestValidateParams_AppliesToBothForms(t *testing.T) {
 		})
 	}
 }
+
+// TestProcessParams_TypeErrorNamesTheField keeps the per-field decode messages the positional
+// extraction used to produce. Collapsing onto a struct decode would otherwise report a generic
+// failure, or leak encoding/json's internal type names.
+func TestProcessParams_TypeErrorNamesTheField(t *testing.T) {
+	tests := map[string]struct{ params, message string }{
+		"from":     {`[{"from":123,"data":"0x","nonce":"0x1"}]`, "[from] must be of type string"},
+		"gas":      {`[{"from":"0xa","gas":true,"nonce":"0x1"}]`, "[gas] must be of type string"},
+		"object":   {`{"from":"0xa","value":[],"nonce":"0x1"}`, "[value] must be of type string"},
+		"nonce":    {`[{"from":"0xa","nonce":{}}]`, "[nonce] must be of type string"},
+		"noObject": {`[]`, "only one object is expected"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var params rpcinfra.SignTXRequestParams
+			rpcErr := rpcinfra.ProcessParams(json.RawMessage(tt.params), &params)
+			require.NotNil(t, rpcErr)
+			require.Contains(t, rpcErr.Error(), tt.message)
+			require.NotContains(t, rpcErr.Error(), "Go struct field", "internal type names must not reach the client")
+		})
+	}
+}
