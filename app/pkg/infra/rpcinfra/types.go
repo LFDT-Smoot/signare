@@ -89,13 +89,9 @@ func ProcessParams(reqParams json.RawMessage, rpcParams JSONRPCParams) *rpcerror
 	return nil
 }
 
-// SingleParamsObject returns the one object a params payload carries, accepting both the positional
-// array form ([{...}]) and the bare object form ({...}), and rejects an object that names a field
-// ambiguously.
-//
-// Every party that reads the signing account out of a request has to agree on which account it is, or
-// the policy enforcement point authorizes one account and the handler signs with another. The two
-// still decode the payload separately; what this removes is the input on which their decodes disagree.
+// SingleParamsObject returns the one object a params payload carries, from either the positional array
+// form ([{...}]) or the bare object form ({...}), and rejects an object that names a field twice.
+// Authorization and signing both resolve the account through it, so they cannot read a different one.
 func SingleParamsObject(params json.RawMessage) (json.RawMessage, error) {
 	object := paramsObject(params)
 	if object == nil {
@@ -107,9 +103,8 @@ func SingleParamsObject(params json.RawMessage) (json.RawMessage, error) {
 	return object, nil
 }
 
-// rejectAmbiguousParams fails if a params payload carries a single object that names a field
-// ambiguously. A payload of any other shape is passed over, so a method taking no params, or params
-// this package does not model as one object, is left to its own decoding.
+// rejectAmbiguousParams fails if the payload is a single object naming a field twice. Any other shape
+// is passed over, so a method taking no params is unaffected.
 func rejectAmbiguousParams(params json.RawMessage) error {
 	object := paramsObject(params)
 	if object == nil {
@@ -136,19 +131,12 @@ func paramsObject(params json.RawMessage) json.RawMessage {
 }
 
 // rejectAmbiguousFieldNames fails if two of an object's keys fold to the same name, which is how
-// encoding/json decides that a key matches a struct field.
+// encoding/json matches a key to a struct field. Such an object decodes two ways, so it is refused
+// rather than resolved.
 //
-// Such an object decodes two ways. A struct decode keeps the last matching key, so {"from":a,"From":b}
-// yields b, while a map[string]any decode keeps both and a lookup of "from" yields a. Refusing the
-// object is the only resolution that cannot be read two ways.
-//
-// Only the object's own keys are checked. Values are skipped whole, because nested objects carry
-// caller data, an EIP-712 message among them, where two keys differing by case are distinct and
-// legitimate.
-//
-// Keys are attacker-controlled and bounded only by the request body limit, so the scan is a single
-// pass with a map lookup per key. Comparing each key against every earlier one would be quadratic in
-// a value the caller chooses.
+// Only the object's own keys are checked; values are skipped whole, since nested caller data such as
+// an EIP-712 message may legitimately differ only by case. Keys are caller-supplied and bounded only
+// by the body limit, so the scan is one pass with a map lookup, never a pairwise comparison.
 func rejectAmbiguousFieldNames(object json.RawMessage) error {
 	decoder := json.NewDecoder(bytes.NewReader(object))
 	token, err := decoder.Token()
@@ -184,10 +172,8 @@ func rejectAmbiguousFieldNames(object json.RawMessage) error {
 	return nil
 }
 
-// foldName canonicalises a key the way encoding/json does when matching it to a struct field: ASCII
-// letters upper-cased, every other rune replaced by the lowest rune in its Unicode simple-fold orbit.
-// Two keys match the same field exactly when their folded names are equal, so one map keyed by the
-// folded name detects a collision in a single pass.
+// foldName canonicalises a key as encoding/json does: ASCII letters upper-cased, every other rune
+// replaced by the lowest in its simple-fold orbit. Equal folded names means the same struct field.
 func foldName(name string) string {
 	var folded strings.Builder
 	folded.Grow(len(name))
@@ -203,9 +189,8 @@ func foldName(name string) string {
 	return folded.String()
 }
 
-// foldRune returns the lowest rune in r's simple-fold orbit. unicode.SimpleFold walks the orbit in
-// increasing order and wraps round to its smallest member, so the first value that does not increase
-// is that member.
+// foldRune returns the lowest rune in r's simple-fold orbit. SimpleFold walks the orbit upwards and
+// wraps to its smallest member, so the first value that does not increase is that member.
 func foldRune(r rune) rune {
 	for {
 		next := unicode.SimpleFold(r)
@@ -216,9 +201,8 @@ func foldRune(r rune) rune {
 	}
 }
 
-// maxReportedFieldNameRunes bounds how much of a key name is reported back. Names are caller-supplied
-// and bounded only by the request body limit, and this error reaches the server log, so the name is
-// truncated here and quoted by the caller so that control characters cannot break up a log line.
+// maxReportedFieldNameRunes bounds how much of a caller-supplied key name reaches the server log. The
+// caller quotes it too, so control characters cannot break up a log line.
 const maxReportedFieldNameRunes = 64
 
 func truncateFieldName(name string) string {

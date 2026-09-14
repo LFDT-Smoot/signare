@@ -30,16 +30,12 @@ for implementation-defined server errors. Signare defines the following ones:
 Every method that takes parameters accepts them either as a single object (`{...}`) or as that object
 wrapped in a one-element array (`[{...}]`).
 
+Both forms are read identically, so a request is equally valid either way.
+
 A parameter object that names the same field twice is rejected with `-32602 Invalid params`, whether
 the two spellings are identical or differ only in case: `{"from": "0x..", "From": "0x.."}` is refused
 rather than one of the two being chosen. This applies to the object's own fields only, so nested
 caller data, such as an EIP-712 `typedData` message, may contain members that differ only in case.
-
-!!! note
-    Within a one-element array the field names are matched exactly, while the single-object form also
-    matches them case-insensitively. A request is therefore best written with the field names exactly
-    as documented for the method, since `[{"From": "0x.."}]` is not recognised as `from` whereas
-    `{"From": "0x.."}` is.
 
 ## Ethereum JSON RPC API supported methods
 

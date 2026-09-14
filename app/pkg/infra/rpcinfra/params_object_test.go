@@ -115,3 +115,49 @@ func TestProcessParams_AcceptsWellFormedParams(t *testing.T) {
 		})
 	}
 }
+
+// TestProcessParams_BothFormsResolveFieldNamesAlike pins the alignment: the positional array form
+// used to match field names exactly while the object form matched them by fold, so the same body was
+// valid in one form and rejected in the other.
+func TestProcessParams_BothFormsResolveFieldNamesAlike(t *testing.T) {
+	bodies := map[string]string{
+		"canonical":    `{"from":"0xabc","data":"0x","nonce":"0x1"}`,
+		"folded from":  `{"From":"0xabc","data":"0x","nonce":"0x1"}`,
+		"folded nonce": `{"from":"0xabc","data":"0x","NONCE":"0x1"}`,
+		"folded both":  `{"FROM":"0xabc","data":"0x","Nonce":"0x1"}`,
+		"data omitted": `{"from":"0xabc","nonce":"0x1"}`,
+		"folded gas":   `{"from":"0xabc","nonce":"0x1","GasPrice":"0x2"}`,
+	}
+
+	for name, object := range bodies {
+		t.Run(name, func(t *testing.T) {
+			var fromObject, fromArray rpcinfra.SignTXRequestParams
+			require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(object), &fromObject))
+			require.Nil(t, rpcinfra.ProcessParams(json.RawMessage("["+object+"]"), &fromArray))
+
+			require.Equal(t, fromObject, fromArray, "both param forms must decode to the same params")
+			require.Equal(t, "0xabc", fromArray.From)
+			require.Equal(t, "0x1", fromArray.Nonce)
+		})
+	}
+}
+
+// TestValidateParams_AppliesToBothForms covers the checks that were previously enforced on the
+// positional form only.
+func TestValidateParams_AppliesToBothForms(t *testing.T) {
+	bodies := map[string]string{
+		"fee ordering":        `{"from":"0xabc","nonce":"0x1","maxFeePerGas":"0x1","maxPriorityFeePerGas":"0x2"}`,
+		"access list entry":   `{"from":"0xabc","nonce":"0x1","accessList":[{"storageKeys":[]}]}`,
+		"authorization entry": `{"from":"0xabc","nonce":"0x1","authorizationList":[{"storageKeys":[]}]}`,
+	}
+
+	for name, object := range bodies {
+		t.Run(name, func(t *testing.T) {
+			for form, params := range map[string]string{"object": object, "array": "[" + object + "]"} {
+				var decoded rpcinfra.SignTXRequestParams
+				require.Nilf(t, rpcinfra.ProcessParams(json.RawMessage(params), &decoded), "%s form should decode", form)
+				require.Errorf(t, decoded.ValidateParams(), "%s form should fail validation", form)
+			}
+		})
+	}
+}
