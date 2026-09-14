@@ -31,6 +31,9 @@ type HSMSlot struct {
 // type rather than a fix at one call site: a tracer property or a wrapped error anywhere can otherwise
 // put the whole struct in front of a handler, and the JSON handler would marshal every field.
 //
+// PinSource is emitted: it names a secret rather than holding one, the API returns it on SlotDetail,
+// and it is what an operator needs to act on a slot that cannot open its token.
+//
 // It protects the value and pointer forms, which is what log call sites use. It does NOT extend to an
 // HSMSlot reached inside a bare slice or map: slog resolves LogValuer on the attribute value itself,
 // not on values nested inside it, so a handler marshals the raw struct in those cases.
@@ -42,6 +45,7 @@ func (s HSMSlot) LogValue() slog.Value {
 		slog.String("applicationId", s.ApplicationID),
 		slog.String("hsmModuleId", s.HSMModuleID),
 		slog.String("slot", s.Slot),
+		slog.String("pinSource", s.PinSource),
 	)
 }
 
