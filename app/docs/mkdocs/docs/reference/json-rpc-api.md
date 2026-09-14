@@ -25,6 +25,18 @@ for implementation-defined server errors. Signare defines the following ones:
 | -32604 | Bad gateway         | An upstream dependency, such as the HSM, returned a fault.  |
 | -32605 | Already exists      | The specified resource already exists.                      |
 
+### Parameter naming
+
+Every method that takes parameters accepts them either as a single object (`{...}`) or as that object
+wrapped in a one-element array (`[{...}]`).
+
+Both forms are read identically, so a request is equally valid either way.
+
+A parameter object that names the same field twice is rejected with `-32602 Invalid params`, whether
+the two spellings are identical or differ only in case: `{"from": "0x..", "From": "0x.."}` is refused
+rather than one of the two being chosen. This applies to the object's own fields only, so nested
+caller data, such as an EIP-712 `typedData` message, may contain members that differ only in case.
+
 ## Ethereum JSON RPC API supported methods
 
 ### eth_signTransaction
