@@ -213,7 +213,6 @@ func TestDefaultUseCase_CreateHSMSlot(t *testing.T) {
 		require.Equal(t, addedModule.ID, createdSlot.HSMModuleID)
 		require.Equal(t, slotIDOne, createdSlot.Slot)
 		require.Equal(t, slotPinSource, createdSlot.PinSource)
-		require.Empty(t, createdSlot.Pin, "creation must not persist a PIN value")
 	})
 }
 
@@ -527,7 +526,6 @@ func TestDefaultUseCase_EditPinSource(t *testing.T) {
 		require.Equal(t, createdSlot.HSMModuleID, editedSlot.HSMModuleID)
 		require.NotEqual(t, createdSlot.ResourceVersion, editedSlot.ResourceVersion)
 		require.Equal(t, slotPinSource, editedSlot.PinSource)
-		require.Empty(t, editedSlot.Pin, "naming a source must clear any stored PIN")
 	})
 }
 

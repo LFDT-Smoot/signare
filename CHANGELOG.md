@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Breaking.** `admin.slots.updatePin` and `POST /admin/modules/{moduleId}/slots/{slotId}:update-pin`, replaced by the value-free `admin.slots.updatePinSource` on `:update-pin-source` and the new `admin.slots.verifyPinSource` on `:verify-pin-source` (#42).
+- **Breaking.** The `pin` column of `cfg_hardware_security_module_slot`, and with it the fallback that let a slot stored before pin sources existed keep signing. Every slot must already resolve its PIN from a source before this release: one without a `pinSource` now fails every signing request. The old values survive in backups and WAL, so rotate each PIN on the token if that was not done when sources were introduced (#43).
 
 ### Fixed
 - Fixed `eth_signTransaction` signing a request as a legacy transaction, silently discarding `maxFeePerBlobGas`, `blobVersionedHashes` or `authorizationList`, when the request carried one of those fields and neither a `gasPrice` nor any EIP-1559 fee field. Such a request is now rejected as an unsupported transaction type (#5).
