@@ -250,22 +250,53 @@ paths:
           $ref: '#/components/responses/FailedPreconditionResponse'
         '500':
           $ref: '#/components/responses/InternalServerErrorResponse'
-  /admin/modules/{moduleId}/slots/{slotId}:update-pin:
+  /admin/modules/{moduleId}/slots/{slotId}:update-pin-source:
     post:
-      operationId: admin.slots.updatePin
+      operationId: admin.slots.updatePinSource
       tags:
         - Admin
-      summary: Updates the PIN of the slot
-      description: Update the slot's PIN of a given Hardware Security Module (HSM)
+      summary: Updates the PIN source of the slot
+      description: |
+        Points the slot at the secret that holds its PIN. The PIN itself is not submitted: Signare resolves
+        the named secret at login time. The source is checked against the HSM before it is stored, so a
+        name that does not open the slot is rejected here.
       parameters:
         - $ref: '#/components/parameters/ModuleId'
         - $ref: '#/components/parameters/SlotId'
       requestBody:
-        description: The new PIN of the slot
+        description: The new PIN source of the slot
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SlotUpdatePin'
+              $ref: '#/components/schemas/SlotUpdatePinSource'
+      responses:
+        '200':
+          description: Slot details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotDetail'
+        '400':
+          $ref: '#/components/responses/BadRequestResponse'
+        '403':
+          $ref: '#/components/responses/PermissionDeniedResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerErrorResponse'
+  /admin/modules/{moduleId}/slots/{slotId}:verify-pin-source:
+    post:
+      operationId: admin.slots.verifyPinSource
+      tags:
+        - Admin
+      summary: Verifies the PIN source of the slot
+      description: |
+        Checks that the slot's current PIN source still opens it, without changing anything. Run this after
+        rotating the secret out of band. A success also clears a slot that Signare had stopped retrying
+        because its PIN was refused.
+      parameters:
+        - $ref: '#/components/parameters/ModuleId'
+        - $ref: '#/components/parameters/SlotId'
       responses:
         '200':
           description: Slot details
@@ -1297,12 +1328,16 @@ components:
               nullable: true
               description: |
                 Slot number assigned by the HSM.
-            pin:
+            pinSource:
               type: string
               x-required: optional
               nullable: true
               description: |
-                PIN that provides access to the slot number inside the HSM.
+                Name of the secret holding the PIN that provides access to the slot number inside the HSM.
+                A single name, with no path separators, resolved under the directory configured in
+                hsmmodules.softhsm.pinSourceDirectory. Mandatory for a SoftHSM module and rejected for the
+                others, which do not authenticate with a PIN. The PIN itself is never sent to or stored by
+                Signare.
             config:
               type: array
               x-required: optional
@@ -1318,11 +1353,11 @@ components:
         spec:
           applicationId: application-1
           slot: '342'
-          pin: '123'
+          pinSource: slot-1-pin
           configMap: {}
       required:
         - spec
-    SlotUpdatePin:
+    SlotUpdatePinSource:
       type: object
       additionalProperties: false
       properties:
@@ -1334,19 +1369,21 @@ components:
           nullable: true
           additionalProperties: false
           properties:
-            pin:
+            pinSource:
               type: string
               x-required: mandatory
               nullable: false
               description: |
-                PIN that provides access to the slot number inside the HSM.
+                Name of the secret holding the PIN that provides access to the slot number inside the HSM.
+                A single name, with no path separators, resolved under the directory configured in
+                hsmmodules.softhsm.pinSourceDirectory. The PIN itself is never sent to or stored by Signare.
           required:
-            - pin
+            - pinSource
       example:
         meta:
           resourceVersion: 7e032829-249d-4498-aa3e-344a16cd6a93
         spec:
-          pin: '698'
+          pinSource: slot-1-pin
       required:
         - meta
         - spec

@@ -35,6 +35,7 @@ metrics:
 hsmmodules:
   softhsm:
     lib: '/usr/local/lib/softhsm/libsofthsm2.so'
+    pinSourceDirectory: '/etc/signare/slot-pins'
   akv:
     url: 'https://signare.vault.azure.net/'
 server:
@@ -156,9 +157,28 @@ Signare provides support for different HSM types. Not all the supported HSMs req
 
 #### SoftHSM Configuration
 
-| Name        | Type   | Required | Description                              | Default Value (if any) |
-|-------------|--------|:--------:|------------------------------------------|------------------------|
-| **library** | string |    ✔     | Library path to the softHSM installation |                        |
+| Name                   | Type   | Required | Description                                        | Default Value (if any) |
+|------------------------|--------|:--------:|----------------------------------------------------|------------------------|
+| **lib**                | string |    ✔     | Library path to the softHSM installation           |                        |
+| **pinSourceDirectory** | string |    ✗     | Directory holding one file per slot PIN            |                        |
+
+Signare does not store slot PINs. A slot records a `pinSource`, the name of a file in
+`pinSourceDirectory`, and the PIN is read from that file each time Signare logs in to the token. A
+rotated secret therefore takes effect without a restart.
+
+`pinSourceDirectory` is required once any slot names a source; a deployment with only AKV or Local Key
+Vault modules does not need it. A configured directory must exist at startup, or the process fails.
+
+A `pinSource` is a single name: no path separators, no `..`, and only letters, digits, `.`, `_` and `-`.
+Anything else is rejected, so a slot cannot be pointed at a file outside the directory. Symlinks inside
+the directory are followed, which is what makes a Kubernetes secret projection work.
+
+Each file holds the PIN and nothing else. A single trailing newline is stripped, so
+`echo -n 'mypin' > slot-1-pin` and `echo 'mypin' > slot-1-pin` are equivalent; any other whitespace is
+part of the PIN. A file over 1 KiB is rejected.
+
+The files must be readable by the Signare process and by nothing else. In Kubernetes, mount a Secret at
+`pinSourceDirectory` with `defaultMode: 0400` and set the pod's `fsGroup` to the group Signare runs as.
 
 #### AKV Configuration
 

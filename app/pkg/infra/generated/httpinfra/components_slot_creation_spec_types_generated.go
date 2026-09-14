@@ -11,8 +11,8 @@ type SlotCreationSpec struct {
 	ApplicationId *string `json:"applicationId"`
 	// Slot number assigned by the HSM.
 	Slot *string `json:"slot,omitempty"`
-	// PIN that provides access to the slot number inside the HSM.
-	Pin *string `json:"pin,omitempty"`
+	// Name of the secret holding the PIN that provides access to the slot number inside the HSM. A single name, with no path separators, resolved under the directory configured in hsmmodules.softhsm.pinSourceDirectory. Mandatory for a SoftHSM module and rejected for the others, which do not authenticate with a PIN. The PIN itself is never sent to or stored by Signare.
+	PinSource *string `json:"pinSource,omitempty"`
 	// collection of config
 	Config *[]SlotDetailConfig `json:"config,omitempty"`
 }
@@ -26,7 +26,7 @@ func (data SlotCreationSpec) ValidateWith() (*httpinfra.ValidationResult, *httpi
 	}
 	if data.Slot != nil {
 	}
-	if data.Pin != nil {
+	if data.PinSource != nil {
 	}
 	if data.Config != nil {
 		for _, item := range *data.Config {

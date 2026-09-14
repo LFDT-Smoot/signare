@@ -189,17 +189,29 @@ type AdminSlotsUpdateConfigRequest struct {
 	SlotUpdateConfig SlotUpdateConfig
 }
 
-// AdminSlotsUpdatePinResponseWrapper response definition
-type AdminSlotsUpdatePinResponseWrapper struct {
+// AdminSlotsUpdatePinSourceResponseWrapper response definition
+type AdminSlotsUpdatePinSourceResponseWrapper struct {
 	SlotDetail   SlotDetail
 	ResponseInfo httpinfra.ResponseInfo
 }
 
-// AdminSlotsUpdatePinRequest request definition
-type AdminSlotsUpdatePinRequest struct {
-	ModuleId      string
-	SlotId        string
-	SlotUpdatePin SlotUpdatePin
+// AdminSlotsUpdatePinSourceRequest request definition
+type AdminSlotsUpdatePinSourceRequest struct {
+	ModuleId            string
+	SlotId              string
+	SlotUpdatePinSource SlotUpdatePinSource
+}
+
+// AdminSlotsVerifyPinSourceResponseWrapper response definition
+type AdminSlotsVerifyPinSourceResponseWrapper struct {
+	SlotDetail   SlotDetail
+	ResponseInfo httpinfra.ResponseInfo
+}
+
+// AdminSlotsVerifyPinSourceRequest request definition
+type AdminSlotsVerifyPinSourceRequest struct {
+	ModuleId string
+	SlotId   string
 }
 
 // AdminUsersCreateResponseWrapper response definition

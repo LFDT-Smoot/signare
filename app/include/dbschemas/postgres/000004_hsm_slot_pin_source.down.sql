@@ -1,0 +1,1 @@
+ALTER TABLE cfg_hardware_security_module_slot DROP COLUMN pin_source;

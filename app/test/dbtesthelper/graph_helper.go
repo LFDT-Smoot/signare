@@ -11,6 +11,11 @@ import (
 )
 
 func InitializeApp() (*graph.GraphShared, error) {
+	pinSourceDirectory, err := signaturemanagertesthelper.NewPinSourceDirectory()
+	if err != nil {
+		return nil, err
+	}
+
 	graphConfig := graph.Config{
 		BuildConfig: nil,
 		Libraries: graph.LibrariesConfig{
@@ -19,7 +24,8 @@ func InitializeApp() (*graph.GraphShared, error) {
 			},
 			HSMModules: &graph.HSMModules{
 				SoftHSM: &graph.SoftHSMConfig{
-					Library: signaturemanagertesthelper.SoftHSMLib,
+					Library:            signaturemanagertesthelper.SoftHSMLib,
+					PinSourceDirectory: pinSourceDirectory,
 				},
 			},
 		},

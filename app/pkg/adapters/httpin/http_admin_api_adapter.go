@@ -397,8 +397,8 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsCreate(ctx context.Context
 	if data.SlotCreation.Spec != nil && data.SlotCreation.Spec.Slot != nil {
 		input.Slot = *data.SlotCreation.Spec.Slot
 	}
-	if data.SlotCreation.Spec != nil && data.SlotCreation.Spec.Pin != nil {
-		input.Pin = *data.SlotCreation.Spec.Pin
+	if data.SlotCreation.Spec != nil && data.SlotCreation.Spec.PinSource != nil {
+		input.PinSource = *data.SlotCreation.Spec.PinSource
 	}
 	if data.SlotCreation.Spec != nil && data.SlotCreation.Spec.Config != nil {
 		config := *data.SlotCreation.Spec.Config
@@ -511,26 +511,47 @@ func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsRemove(ctx context.Context
 	}, nil
 }
 
-func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsUpdatePin(ctx context.Context, data generatedhttpinfra.AdminSlotsUpdatePinRequest) (*generatedhttpinfra.AdminSlotsUpdatePinResponseWrapper, *httpinfra.HTTPError) {
-	input := hsmslot.EditPinInput{
+func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsUpdatePinSource(ctx context.Context, data generatedhttpinfra.AdminSlotsUpdatePinSourceRequest) (*generatedhttpinfra.AdminSlotsUpdatePinSourceResponseWrapper, *httpinfra.HTTPError) {
+	input := hsmslot.EditPinSourceInput{
 		StandardID: entities.StandardID{
 			ID: data.SlotId,
 		},
 		HSMModuleID: data.ModuleId,
 	}
-	if data.SlotUpdatePin.Meta != nil && data.SlotUpdatePin.Meta.ResourceVersion != nil {
-		input.ResourceVersion = *data.SlotUpdatePin.Meta.ResourceVersion
+	if data.SlotUpdatePinSource.Meta != nil && data.SlotUpdatePinSource.Meta.ResourceVersion != nil {
+		input.ResourceVersion = *data.SlotUpdatePinSource.Meta.ResourceVersion
 	}
-	if data.SlotUpdatePin.Spec != nil && data.SlotUpdatePin.Spec.Pin != nil {
-		input.Pin = *data.SlotUpdatePin.Spec.Pin
+	if data.SlotUpdatePinSource.Spec != nil && data.SlotUpdatePinSource.Spec.PinSource != nil {
+		input.PinSource = *data.SlotUpdatePinSource.Spec.PinSource
 	}
 
-	out, err := adapter.hsmSlotUseCase.EditPin(ctx, input)
+	out, err := adapter.hsmSlotUseCase.EditPinSource(ctx, input)
 	if err != nil {
 		return nil, httpinfra.NewHTTPErrorFromUseCaseError(ctx, err)
 	}
 
-	return &generatedhttpinfra.AdminSlotsUpdatePinResponseWrapper{
+	return &generatedhttpinfra.AdminSlotsUpdatePinSourceResponseWrapper{
+		SlotDetail: mapSlot(out.HSMSlot),
+		ResponseInfo: httpinfra.ResponseInfo{
+			ResponseType: httpinfra.ResponseTypeOk,
+		},
+	}, nil
+}
+
+func (adapter *DefaultAdminAPIAdapter) AdaptAdminSlotsVerifyPinSource(ctx context.Context, data generatedhttpinfra.AdminSlotsVerifyPinSourceRequest) (*generatedhttpinfra.AdminSlotsVerifyPinSourceResponseWrapper, *httpinfra.HTTPError) {
+	input := hsmslot.VerifyPinSourceInput{
+		StandardID: entities.StandardID{
+			ID: data.SlotId,
+		},
+		HSMModuleID: data.ModuleId,
+	}
+
+	out, err := adapter.hsmSlotUseCase.VerifyPinSource(ctx, input)
+	if err != nil {
+		return nil, httpinfra.NewHTTPErrorFromUseCaseError(ctx, err)
+	}
+
+	return &generatedhttpinfra.AdminSlotsVerifyPinSourceResponseWrapper{
 		SlotDetail: mapSlot(out.HSMSlot),
 		ResponseInfo: httpinfra.ResponseInfo{
 			ResponseType: httpinfra.ResponseTypeOk,

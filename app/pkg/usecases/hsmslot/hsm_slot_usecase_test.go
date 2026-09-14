@@ -28,8 +28,9 @@ var (
 	slotIDOne string
 	slotIDTwo string
 
-	chainID = entities.NewInt256FromInt(5050)
-	slotPin = signaturemanagertesthelper.SlotPin
+	chainID        = entities.NewInt256FromInt(5050)
+	slotPinSource  = signaturemanagertesthelper.SlotPinSource
+	wrongPinSource = signaturemanagertesthelper.WrongSlotPinSource
 )
 
 var (
@@ -167,7 +168,7 @@ func TestDefaultUseCase_CreateHSMSlot(t *testing.T) {
 			ApplicationID: "",
 			HSMModuleID:   addedModule.ID,
 			Slot:          "my-slot-id",
-			Pin:           "my-pin",
+			PinSource:     slotPinSource,
 		}
 		output, err := app.HSMSlotUseCase.CreateHSMSlot(ctx, input)
 		require.Error(t, err)
@@ -178,7 +179,7 @@ func TestDefaultUseCase_CreateHSMSlot(t *testing.T) {
 			ApplicationID: createApplicationOutput.ID,
 			HSMModuleID:   "",
 			Slot:          "my-slot-id",
-			Pin:           "my-pin",
+			PinSource:     slotPinSource,
 		}
 		output, err = app.HSMSlotUseCase.CreateHSMSlot(ctx, input)
 		require.Error(t, err)
@@ -191,7 +192,7 @@ func TestDefaultUseCase_CreateHSMSlot(t *testing.T) {
 			ApplicationID: createApplicationOutput.ID,
 			HSMModuleID:   addedModule.ID,
 			Slot:          slotIDOne,
-			Pin:           slotPin,
+			PinSource:     slotPinSource,
 		}
 		_, err := app.HSMSlotUseCase.CreateHSMSlot(ctx, input)
 		require.NoError(t, err)
@@ -211,7 +212,8 @@ func TestDefaultUseCase_CreateHSMSlot(t *testing.T) {
 		require.Equal(t, applicationID, createdSlot.ApplicationID)
 		require.Equal(t, addedModule.ID, createdSlot.HSMModuleID)
 		require.Equal(t, slotIDOne, createdSlot.Slot)
-		require.Equal(t, slotPin, createdSlot.Pin)
+		require.Equal(t, slotPinSource, createdSlot.PinSource)
+		require.Empty(t, createdSlot.Pin, "creation must not persist a PIN value")
 	})
 }
 
@@ -268,7 +270,7 @@ func TestDefaultUseCase_GetHSMSlot(t *testing.T) {
 		require.Equal(t, createApplicationOutput.ID, output.ApplicationID)
 		require.Equal(t, addedModule.ID, output.HSMModuleID)
 		require.Equal(t, slotIDOne, output.Slot)
-		require.Equal(t, slotPin, output.Pin)
+		require.Equal(t, slotPinSource, output.PinSource)
 		require.NotEmpty(t, output.InternalResourceID)
 	})
 }
@@ -328,12 +330,12 @@ func TestDefaultUseCase_GetHSMSlotByApplication(t *testing.T) {
 		require.Equal(t, createApplicationOutput.ID, output.ApplicationID)
 		require.Equal(t, addedModule.ID, output.HSMModuleID)
 		require.Equal(t, slotIDOne, output.Slot)
-		require.Equal(t, slotPin, output.Pin)
+		require.Equal(t, slotPinSource, output.PinSource)
 		require.NotEmpty(t, output.InternalResourceID)
 	})
 }
 
-func TestDefaultUseCase_EditPin(t *testing.T) {
+func TestDefaultUseCase_EditPinSource(t *testing.T) {
 	applicationID := uuid.NewString()
 	createApplicationInput := application.CreateApplicationInput{
 		ID:      &applicationID,
@@ -344,134 +346,178 @@ func TestDefaultUseCase_EditPin(t *testing.T) {
 	require.NotNil(t, createApplicationOutput)
 
 	t.Run("failure: invalid input arguments", func(t *testing.T) {
-		input := hsmslot.EditPinInput{
+		input := hsmslot.EditPinSourceInput{
 			StandardID: entities.StandardID{
 				ID: "",
 			},
 			ResourceVersion: "my-resource-version",
-			Pin:             "my-pin",
+			PinSource:       slotPinSource,
+			HSMModuleID:     "hsm-module",
 		}
-		output, err := app.HSMSlotUseCase.EditPin(ctx, input)
+		output, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.Error(t, err)
 		require.True(t, errors.IsInvalidArgument(err))
 		require.Nil(t, output)
 
-		input = hsmslot.EditPinInput{
+		input = hsmslot.EditPinSourceInput{
 			StandardID: entities.StandardID{
 				ID: "my-id",
 			},
 			ResourceVersion: "",
-			Pin:             "my-pin",
+			PinSource:       slotPinSource,
+			HSMModuleID:     "hsm-module",
 		}
-		output, err = app.HSMSlotUseCase.EditPin(ctx, input)
+		output, err = app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.Error(t, err)
 		require.True(t, errors.IsInvalidArgument(err))
 		require.Nil(t, output)
 
-		input = hsmslot.EditPinInput{
+		input = hsmslot.EditPinSourceInput{
 			StandardID: entities.StandardID{
 				ID: "my-id",
 			},
 			ResourceVersion: "my-resource-version",
-			Pin:             "",
+			PinSource:       "",
+			HSMModuleID:     "hsm-module",
 		}
-		output, err = app.HSMSlotUseCase.EditPin(ctx, input)
+		output, err = app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.Error(t, err)
 		require.True(t, errors.IsInvalidArgument(err))
 		require.Nil(t, output)
 	})
 
+	// A source is a name resolved under a configured directory, so anything that could address a file
+	// outside it has to be refused before it is stored.
+	t.Run("failure: pin source is not a single name", func(t *testing.T) {
+		addedModule := createOrGetModule(t, "7e61fd30-299a-4282-9cf7-4582505ecbc5")
+		createdSlot := createOrGetSlot(t, createApplicationOutput.ID, slotIDOne, addedModule.ID)
+
+		for _, source := range []string{
+			"../escape",
+			"sub/dir",
+			`sub\dir`,
+			"..",
+			"..data",
+			".",
+			"/etc/passwd",
+			"has space",
+			"semi;colon",
+		} {
+			input := hsmslot.EditPinSourceInput{
+				StandardID:      createdSlot.StandardID,
+				HSMModuleID:     createdSlot.HSMModuleID,
+				ResourceVersion: createdSlot.ResourceVersion,
+				PinSource:       source,
+			}
+			output, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
+			require.Error(t, err, "pin source %q must be rejected", source)
+			require.True(t, errors.IsInvalidArgument(err), "pin source %q must be rejected as invalid argument", source)
+			require.Nil(t, output)
+		}
+	})
+
 	t.Run("failure: slot not found", func(t *testing.T) {
-		input := hsmslot.EditPinInput{
+		input := hsmslot.EditPinSourceInput{
 			StandardID: entities.StandardID{
 				ID: "my-id",
 			},
 			ResourceVersion: "my-resource-version",
-			Pin:             "my-pin",
+			PinSource:       slotPinSource,
 			HSMModuleID:     "hsm-module",
 		}
-		output, err := app.HSMSlotUseCase.EditPin(ctx, input)
+		output, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.Error(t, err)
 		require.True(t, errors.IsNotFound(err))
 		require.Nil(t, output)
 	})
 
 	t.Run("failure: invalid resource version", func(t *testing.T) {
-		// Create module
 		addedModule := createOrGetModule(t, "7e61fd30-299a-4282-9cf7-4582505ecbc5")
-
-		// Create Slot
 		createdSlot := createOrGetSlot(t, createApplicationOutput.ID, slotIDOne, addedModule.ID)
 
-		// Edit Pin
-		editPinInput := hsmslot.EditPinInput{
+		input := hsmslot.EditPinSourceInput{
 			StandardID:      createdSlot.StandardID,
 			ResourceVersion: "invalid-resource-version",
-			Pin:             createdSlot.Pin,
+			PinSource:       slotPinSource,
 			HSMModuleID:     createdSlot.HSMModuleID,
 		}
-		editedSlot, err := app.HSMSlotUseCase.EditPin(ctx, editPinInput)
+		editedSlot, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.Error(t, err)
 		require.True(t, errors.IsNotFound(err))
 		require.Nil(t, editedSlot)
 	})
 
-	t.Run("failure: pin incorrect", func(t *testing.T) {
-		// Create module
+	t.Run("failure: pin source names a secret the HSM refuses", func(t *testing.T) {
 		addedModule := createOrGetModule(t, "7e61fd30-299a-4282-9cf7-4582505ecbc5")
-
-		// Create Slot
 		createdSlot := createOrGetSlot(t, createApplicationOutput.ID, slotIDOne, addedModule.ID)
 
-		// Edit Pin
-		editPinInput := hsmslot.EditPinInput{
+		input := hsmslot.EditPinSourceInput{
 			StandardID:      createdSlot.StandardID,
 			HSMModuleID:     createdSlot.HSMModuleID,
-			ResourceVersion: "invalid-resource-version",
-			Pin:             "incorrect-pin",
+			ResourceVersion: createdSlot.ResourceVersion,
+			PinSource:       wrongPinSource,
 		}
-		editedSlot, err := app.HSMSlotUseCase.EditPin(ctx, editPinInput)
+		editedSlot, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsPreconditionFailed(err))
+		require.Nil(t, editedSlot)
+
+		// The wrong value must not have been stored: the slot still resolves through its old source.
+		stored, getErr := app.HSMSlotUseCase.GetHSMSlot(ctx, hsmslot.GetHSMSlotInput{StandardID: createdSlot.StandardID})
+		require.NoError(t, getErr)
+		require.Equal(t, slotPinSource, stored.PinSource)
+
+		// Clear the breaker the refused login just opened, so later subtests are not short-circuited.
+		_, verifyErr := app.HSMSlotUseCase.VerifyPinSource(ctx, hsmslot.VerifyPinSourceInput{
+			StandardID:  createdSlot.StandardID,
+			HSMModuleID: createdSlot.HSMModuleID,
+		})
+		require.NoError(t, verifyErr)
+	})
+
+	t.Run("failure: unreadable pin source", func(t *testing.T) {
+		addedModule := createOrGetModule(t, "7e61fd30-299a-4282-9cf7-4582505ecbc5")
+		createdSlot := createOrGetSlot(t, createApplicationOutput.ID, slotIDOne, addedModule.ID)
+
+		input := hsmslot.EditPinSourceInput{
+			StandardID:      createdSlot.StandardID,
+			HSMModuleID:     createdSlot.HSMModuleID,
+			ResourceVersion: createdSlot.ResourceVersion,
+			PinSource:       "no-such-source",
+		}
+		editedSlot, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.Error(t, err)
 		require.True(t, errors.IsPreconditionFailed(err))
 		require.Nil(t, editedSlot)
 	})
 
 	t.Run("failure: slot does not exist in HSM module", func(t *testing.T) {
-		// Create module
 		addedModule := createOrGetModule(t, "7e61fd30-299a-4282-9cf7-4582505ecbc5")
-
-		// Create Slot
 		createdSlot := createOrGetSlot(t, createApplicationOutput.ID, slotIDOne, addedModule.ID)
 
-		// Edit Pin
-		editPinInput := hsmslot.EditPinInput{
+		input := hsmslot.EditPinSourceInput{
 			StandardID:      createdSlot.StandardID,
 			HSMModuleID:     "other-hsm-module",
 			ResourceVersion: createdSlot.ResourceVersion,
-			Pin:             createdSlot.Pin,
+			PinSource:       slotPinSource,
 		}
-		editedSlot, err := app.HSMSlotUseCase.EditPin(ctx, editPinInput)
+		editedSlot, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.Error(t, err)
 		require.True(t, errors.IsNotFound(err))
 		require.Nil(t, editedSlot)
 	})
 
 	t.Run("success", func(t *testing.T) {
-		// Create module
 		addedModule := createOrGetModule(t, "7e61fd30-299a-4282-9cf7-4582505ecbc5")
-
-		// Create Slot
 		createdSlot := createOrGetSlot(t, createApplicationOutput.ID, slotIDOne, addedModule.ID)
 
-		// Edit Pin
-		newPin := createdSlot.Pin
-		editPinInput := hsmslot.EditPinInput{
+		input := hsmslot.EditPinSourceInput{
 			StandardID:      createdSlot.StandardID,
 			HSMModuleID:     createdSlot.HSMModuleID,
 			ResourceVersion: createdSlot.ResourceVersion,
-			Pin:             newPin,
+			PinSource:       slotPinSource,
 		}
-		editedSlot, err := app.HSMSlotUseCase.EditPin(ctx, editPinInput)
+		editedSlot, err := app.HSMSlotUseCase.EditPinSource(ctx, input)
 		require.NoError(t, err)
 		require.NotNil(t, editedSlot)
 		require.Equal(t, createdSlot.ID, editedSlot.ID)
@@ -480,7 +526,55 @@ func TestDefaultUseCase_EditPin(t *testing.T) {
 		require.NotEqual(t, createdSlot.LastUpdate, editedSlot.LastUpdate)
 		require.Equal(t, createdSlot.HSMModuleID, editedSlot.HSMModuleID)
 		require.NotEqual(t, createdSlot.ResourceVersion, editedSlot.ResourceVersion)
-		require.Equal(t, newPin, editedSlot.Pin)
+		require.Equal(t, slotPinSource, editedSlot.PinSource)
+		require.Empty(t, editedSlot.Pin, "naming a source must clear any stored PIN")
+	})
+}
+
+func TestDefaultUseCase_VerifyPinSource(t *testing.T) {
+	applicationID := uuid.NewString()
+	createApplicationInput := application.CreateApplicationInput{
+		ID:      &applicationID,
+		ChainID: *chainID,
+	}
+	createApplicationOutput, createApplicationErr := app.ApplicationUseCase.CreateApplication(ctx, createApplicationInput)
+	require.NoError(t, createApplicationErr)
+	require.NotNil(t, createApplicationOutput)
+
+	t.Run("failure: invalid input arguments", func(t *testing.T) {
+		output, err := app.HSMSlotUseCase.VerifyPinSource(ctx, hsmslot.VerifyPinSourceInput{
+			StandardID:  entities.StandardID{ID: "my-id"},
+			HSMModuleID: "",
+		})
+		require.Error(t, err)
+		require.True(t, errors.IsInvalidArgument(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("failure: slot not found", func(t *testing.T) {
+		output, err := app.HSMSlotUseCase.VerifyPinSource(ctx, hsmslot.VerifyPinSourceInput{
+			StandardID:  entities.StandardID{ID: "my-id"},
+			HSMModuleID: "hsm-module",
+		})
+		require.Error(t, err)
+		require.True(t, errors.IsNotFound(err))
+		require.Nil(t, output)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		addedModule := createOrGetModule(t, "7e61fd30-299a-4282-9cf7-4582505ecbc5")
+		createdSlot := createOrGetSlot(t, createApplicationOutput.ID, slotIDOne, addedModule.ID)
+
+		output, err := app.HSMSlotUseCase.VerifyPinSource(ctx, hsmslot.VerifyPinSourceInput{
+			StandardID:  createdSlot.StandardID,
+			HSMModuleID: createdSlot.HSMModuleID,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, output)
+		require.Equal(t, createdSlot.ID, output.ID)
+		require.Equal(t, slotPinSource, output.PinSource)
+		// Verification must not mutate the resource.
+		require.Equal(t, createdSlot.ResourceVersion, output.ResourceVersion)
 	})
 }
 
@@ -712,7 +806,7 @@ func createOrGetSlot(t *testing.T, applicationID, slotID, hsmID string) *hsmslot
 		ApplicationID: applicationID,
 		HSMModuleID:   hsmID,
 		Slot:          slotID,
-		Pin:           slotPin,
+		PinSource:     slotPinSource,
 	}
 
 	createdSlot, err := app.HSMSlotUseCase.CreateHSMSlot(ctx, createSlotInput)
