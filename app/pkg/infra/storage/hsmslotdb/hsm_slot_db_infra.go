@@ -14,7 +14,7 @@ const (
 	addSlotMapperID              = "signare.hardwareSecurityModuleSlot.insert"
 	getSlotMapperID              = "signare.hardwareSecurityModuleSlot.getById"
 	getSlotByApplicationMapperID = "signare.hardwareSecurityModuleSlot.getByApplication"
-	editPinSlotMapperID          = "signare.hardwareSecurityModuleSlot.updatePin"
+	editPinSourceSlotMapperID    = "signare.hardwareSecurityModuleSlot.updatePinSource"
 	editConfigSlotMapperID       = "signare.hardwareSecurityModuleSlot.updateConfig"
 	removeSlotMapperID           = "signare.hardwareSecurityModuleSlot.delete"
 	listSlotMapperID             = "signare.hardwareSecurityModuleSlot.list"
@@ -64,14 +64,14 @@ func (repository *HSMSlotRepositoryInfra) GetByApplicationID(ctx context.Context
 	return slotDBItems, nil
 }
 
-func (repository *HSMSlotRepositoryInfra) EditPin(ctx context.Context, db HSMSlotUpdatePinDB) (*persistence.ExecuteStmtWithStorageResultOutput, error) {
+func (repository *HSMSlotRepositoryInfra) EditPinSource(ctx context.Context, db HSMSlotUpdatePinSourceDB) (*persistence.ExecuteStmtWithStorageResultOutput, error) {
 	_, err := repository.Exists(ctx, db.StandardID)
 	if err != nil {
 		return nil, err
 	}
 
 	db.NewResourceVersion = uuid.NewString()
-	return repository.genericStorage.ExecuteStmtWithStorageResult(ctx, editPinSlotMapperID, db)
+	return repository.genericStorage.ExecuteStmtWithStorageResult(ctx, editPinSourceSlotMapperID, db)
 }
 
 func (repository *HSMSlotRepositoryInfra) EditConfig(ctx context.Context, db HSMSlotUpdateConfigDB) (*persistence.ExecuteStmtWithStorageResultOutput, error) {

@@ -317,7 +317,8 @@ func toGraphConfiguration(staticConfig *config.StaticConfiguration) graph.Config
 
 		if staticConfig.HSMModules.SoftHSM != nil {
 			graphConfig.Libraries.HSMModules.SoftHSM = &graph.SoftHSMConfig{
-				Library: staticConfig.HSMModules.SoftHSM.Library,
+				Library:            staticConfig.HSMModules.SoftHSM.Library,
+				PinSourceDirectory: staticConfig.HSMModules.SoftHSM.PinSourceDirectory,
 			}
 		}
 

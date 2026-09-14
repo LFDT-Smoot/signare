@@ -27,6 +27,9 @@ metrics:
 hsmmodules:
   softhsm:
     lib: '/usr/local/lib/softhsm/libsofthsm2.so'
+    # Directory holding one file per slot PIN. A slot records the file name, never the PIN itself.
+    # Mount these read-only to the Signare process alone.
+    pinSourceDirectory: '/etc/signare/slot-pins'
 server:
   maxRequestBodyBytes: 1048576
   maxHeaderBytes: 1048576

@@ -23,6 +23,15 @@ properties:
         x-required: mandatory
         description: |
           Slot number assigned by the HSM.
+      pinSource:
+        type: string
+        x-required: optional
+        nullable: true
+        description: |
+          Name of the secret holding the PIN that provides access to the slot, resolved under the
+          configured pin source directory. A reference, not the PIN: the value is never returned.
+          Absent for a module kind that does not authenticate with a PIN, and for a slot created
+          before pin sources existed.
       config:
         type: array
         x-required: mandatory
@@ -45,6 +54,7 @@ example:
     hardwareSecurityModuleId: 'module-1'
     applicationId: 'application-1'
     slot: '342'
+    pinSource: 'slot-1-pin'
     config: {}
 
 required:
