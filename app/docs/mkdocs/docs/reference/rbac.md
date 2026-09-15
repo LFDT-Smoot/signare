@@ -62,7 +62,7 @@ Our RBAC model consists of the following concepts:
   <figcaption>signare RBAC model diagram</figcaption>
 </figure>
 
-Three YAML files define the RBAC model, you can configure the RBAC as you wish by editing them. Let's dive into how to configure those files: 
+Four YAML files define the RBAC model, you can configure the RBAC as you wish by editing them. Let's dive into how to configure those files: 
 
 ### How to generate new actions
 
@@ -73,7 +73,7 @@ A command in the ``/app`` directory of the signare project, automatically genera
 make tools.generate 
 ``` 
 
-The result of the `make tools.generate` command is outputted in `app/include/rbac/actions/generated.yaml`.
+The result of the `make tools.generate` command is outputted in `app/include/rbac/actions-generated.yaml`.
 
 Below is an example of how a defined action looks:
 
@@ -87,12 +87,15 @@ Nevertheless, the application has a set of RPC methods in the API that are not d
 ```YAML
 actions:
   - rpc.method.eth_generateAccount
+  - rpc.method.eth_importAccount
   - rpc.method.eth_removeAccount
   - rpc.method.eth_accounts
   - rpc.method.eth_signTransaction
   - rpc.method.eth_signTypedData
   - rpc.method.personal_sign
 ```
+
+Because those actions have no operation ID, they are also the list of actions exempt from the 1 to 1 check that `make tools.validate_rbac` runs, which is why the validator reads this file directly. Only a published RPC method belongs here: the RBAC coverage tests assert that every method the signare publishes has an action in this file that a permission grants, and that every entry in this file names a method the signare publishes. Adding an entry for anything else fails those tests, which `make unit_test` runs.
 
 ### How to edit permissions
 
