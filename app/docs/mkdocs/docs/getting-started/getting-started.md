@@ -46,12 +46,19 @@ Follow the steps below to start up for the first time:
 4. Spin up Signare, it's key to use the `--signer-administrator` flag as in the command below to follow this guide successfully:
 
     ```console
-    signare --listen-address 0.0.0.0 --http-port 32325 --rpc-port 4545 --config <path_to_repository>/deployment/examples/config --signer-administrator owner
+    signare --http-port 32325 --rpc-port 4545 --config <path_to_repository>/deployment/examples/config --signer-administrator owner
     ```
 
 !!! tip
 
     You can adapt the configuration and flags as needed, for more in depth information take a look at the [configuration reference](../reference/configuration.md).
+
+!!! warning
+
+    This guide runs Signare on `127.0.0.1`, the default for `--listen-address`, and every request below
+    is sent from the same host. Signare does not authenticate callers: the `X-Auth-RpcUserId` header
+    below is taken at face value. Before exposing it on any other address, read the
+    [deployment requirements](../reference/security.md#deployment-requirements).
 
 ## Creating an account
 

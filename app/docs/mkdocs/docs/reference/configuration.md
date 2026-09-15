@@ -57,6 +57,10 @@ server:
       `SIGNARE_DATABASE_POSTGRESQL_PASSWORD` environment variable (see below); the `__CHANGE_ME__`
       placeholder is intentionally invalid.
     - `info` is the recommended log level. `debug` can emit internal stack traces.
+    - Leave `--listen-address` at `127.0.0.1` unless a proxy, sidecar or mesh policy is the only route
+      to the address you widen it to. Signare authenticates no one: it trusts the `X-Auth-*` headers,
+      so a reachable listener is an unauthenticated one. Signare logs a startup warning when the bind
+      address is not loopback. See the [deployment requirements](./security.md#deployment-requirements){:target="_blank"}.
 
 !!! info "Supplying configuration via the environment"
 
@@ -193,9 +197,24 @@ Let us delve deeper into the specifics to further describe the flag options:
 |--------------------------|--------|:--------:|--------------------------------------------------------------|------------------------|
 | **signer-administrator** | string |    ✔     | Id of Signare's initial admin                            |                        |
 | **config**               | string |    ✔     | Path to where the config yml file is stored                  |                        |
-| **listen-address**       | string |    ✗     | Address where Signare will listen                        | 0.0.0.0                |
+| **listen-address**       | string |    ✗     | Address where Signare will listen, on all three listeners    | 127.0.0.1              |
 | **http-port**            | int    |    ✗     | Number of the port where REST API methods will be hosted     | 32325                  |
 | **rpc-port**             | int    |    ✗     | Number of the port where JSON RPC API methods will be hosted | 4545                   |
+
+!!! warning "`listen-address` binds every listener"
+
+    `listen-address` governs the REST, JSON-RPC and Prometheus metrics listeners alike; only their
+    ports are configured separately.
+
+    It defaults to `127.0.0.1`, which is the only value that needs no further protection. Signare
+    authenticates no one, so any address a client can reach is an address from which it can act as any
+    user. Set it to `0.0.0.0` only where a proxy, sidecar or mesh policy is the sole route in, and read
+    the [deployment requirements](./security.md#deployment-requirements){:target="_blank"} first.
+    Signare logs a startup warning whenever the bind address is not loopback.
+
+    A container that publishes its ports has to pass `--listen-address 0.0.0.0` explicitly: a loopback
+    bind inside the container is not reachable from the published port. Publish it to the proxy, not to
+    the host.
 
 
 

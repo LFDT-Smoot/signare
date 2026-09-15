@@ -10,6 +10,14 @@ The following metric types are used depending on the value that needs to be meas
 
 For more details on types of metrics, please refer to [Prometheus metrics documentation](https://prometheus.io/docs/concepts/metric_types/>)
 
+!!! note
+
+    The metrics server binds the `--listen-address` the REST and JSON-RPC listeners use, which defaults
+    to `127.0.0.1`; only its port is configured separately, under
+    [`metrics.prometheus`](../reference/configuration.md#prometheus-metrics-configuration). A scraper
+    running off-host needs `--listen-address` widened, which exposes the API as well, so read the
+    [deployment requirements](../reference/security.md#deployment-requirements) before doing so.
+
 ## HTTP metrics
 
 | Name                        | Labels             | Type    | Description                                                     |
