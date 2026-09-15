@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/asaskevich/govalidator"
@@ -93,17 +94,58 @@ func (c *StaticConfiguration) ServerLimits() (maxBodyBytes int64, maxHeaderBytes
 // production deployment. It performs no logging so the caller controls how the warnings are surfaced.
 // Currently it flags any sslmode that does not guarantee an encrypted connection (see secureSSLModes),
 // which would send all database traffic (including the HSM slot credentials stored in the database) in
-// cleartext.
+// cleartext. Each check guards its own configuration section, so an absent section silences that check
+// alone and not the rest.
 func (c *StaticConfiguration) InsecureSettingsWarnings() []string {
-	if c == nil || c.DatabaseInfo.PostgreSQL == nil {
+	if c == nil {
 		return nil
 	}
 	var warnings []string
-	sslMode := strings.ToLower(strings.TrimSpace(c.DatabaseInfo.PostgreSQL.SSLMode))
-	if !secureSSLModes[sslMode] {
-		warnings = append(warnings, fmt.Sprintf("database.postgresql.sslmode is set to %q: database traffic, including the HSM slot credentials stored in the database, may be sent unencrypted. Set sslmode to 'require' or stronger ('verify-ca', 'verify-full') for production.", c.DatabaseInfo.PostgreSQL.SSLMode))
+	if c.DatabaseInfo.PostgreSQL != nil {
+		sslMode := strings.ToLower(strings.TrimSpace(c.DatabaseInfo.PostgreSQL.SSLMode))
+		if !secureSSLModes[sslMode] {
+			warnings = append(warnings, fmt.Sprintf("database.postgresql.sslmode is set to %q: database traffic, including the HSM slot credentials stored in the database, may be sent unencrypted. Set sslmode to 'require' or stronger ('verify-ca', 'verify-full') for production.", c.DatabaseInfo.PostgreSQL.SSLMode))
+		}
 	}
 	return warnings
+}
+
+// loopbackHostname is the only name treated as loopback. Resolving any other name would need a DNS
+// lookup at startup, whose answer can change under the process, so a name is never assumed safe.
+const loopbackHostname = "localhost"
+
+// InsecureListenAddressWarnings returns human-readable warnings for a bind address that puts Signare
+// within reach of anything but the local host. It performs no logging so the caller controls how the
+// warnings are surfaced.
+//
+// Signare authenticates no one: it reads the caller's identity from the request headers and trusts it,
+// which is only safe while the sole route to the listener is a proxy that sets those headers from a
+// verified identity. A reachable listener is therefore an unauthenticated one, so any address that
+// cannot be confirmed to be loopback warns.
+//
+// This is a function rather than a method on StaticConfiguration because the bind address is a
+// command-line flag, and because only the serving command may call it: the upgrade command runs
+// migrations and exits without opening a listener.
+func InsecureListenAddressWarnings(listenAddress string) []string {
+	host := strings.TrimSpace(listenAddress)
+	if strings.EqualFold(host, loopbackHostname) {
+		return nil
+	}
+
+	var exposure string
+	switch ip := net.ParseIP(host); {
+	case ip != nil && ip.IsLoopback():
+		return nil
+	case host == "", ip != nil && ip.IsUnspecified():
+		// The empty string and the unspecified addresses ("0.0.0.0", "::") all bind every interface.
+		exposure = "binds every network interface"
+	case ip != nil:
+		exposure = "is reachable from every host that can route to it"
+	default:
+		exposure = "cannot be confirmed to be loopback"
+	}
+
+	return []string{fmt.Sprintf("--listen-address is set to %q, which %s. Signare does not authenticate callers: it reads the caller's identity from the X-Auth-* request headers and trusts it, so anything that can reach the listener can act as any user, including the signer administrator. Bind a loopback address (127.0.0.1) and front Signare with a proxy that authenticates the caller, sets those headers from the verified identity, and strips any the client sent.", listenAddress, exposure)}
 }
 
 // Logger specification
@@ -164,7 +206,7 @@ type MetricsConfig struct {
 
 // PrometheusMetricsConfig provides configuration to expose prometheus metrics
 type PrometheusMetricsConfig struct {
-	// Port where prometheus metrics will be exposed. Default 9780 aligned with not used port from https://github.com/prometheus/prometheus/wiki/Default-port-allocations
+	// Port where prometheus metrics will be exposed. Default 9785, from the unallocated range in https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 	Port *int `mapstructure:"port" valid:"optional"`
 	// Path where prometheus
 	Path *string `mapstructure:"path" valid:"optional"`

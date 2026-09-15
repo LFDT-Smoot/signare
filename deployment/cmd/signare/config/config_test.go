@@ -1,8 +1,10 @@
 package config
 
 import (
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -141,6 +143,10 @@ func TestInsecureSettingsWarnings(t *testing.T) {
 	}{
 		{name: "nil config", cfg: nil, wantWarn: false},
 		{name: "nil postgres section", cfg: &StaticConfiguration{}, wantWarn: false},
+		// A shape assertion, not a regression guard: with one check in the function there is nothing
+		// for a missing database section to short-circuit, so this case passes against the early
+		// return it replaced too. It pins the contract a second check will rely on.
+		{name: "nil postgres section with other sections present", cfg: &StaticConfiguration{Logger: &Logger{LogLevel: "info"}, Server: &Server{}}, wantWarn: false},
 		{name: "sslmode disable warns", cfg: pgConfig("disable"), wantWarn: true},
 		{name: "sslmode disable is case-insensitive", cfg: pgConfig("DISABLE"), wantWarn: true},
 		{name: "sslmode allow warns", cfg: pgConfig("allow"), wantWarn: true},
@@ -160,6 +166,119 @@ func TestInsecureSettingsWarnings(t *testing.T) {
 				t.Fatalf("InsecureSettingsWarnings() = %v, wantWarn = %v", warnings, tt.wantWarn)
 			}
 		})
+	}
+}
+
+// TestInsecureListenAddressWarningsNonLiteralAddresses covers the inputs that are not IP literals.
+// There is no oracle for these: whether a name binds loopback is a question about a resolver, not
+// about the string, and the check deliberately answers it without resolving. They are enumerated, and
+// enumeration is all the coverage they have. The IP literals are covered differentially below.
+func TestInsecureListenAddressWarningsNonLiteralAddresses(t *testing.T) {
+	tests := []struct {
+		name          string
+		listenAddress string
+		wantWarn      bool
+	}{
+		{name: "localhost does not warn", listenAddress: "localhost", wantWarn: false},
+		{name: "localhost is case-insensitive", listenAddress: "LocalHost", wantWarn: false},
+		{name: "localhost is trimmed", listenAddress: "  localhost  ", wantWarn: false},
+		{name: "a loopback literal is trimmed", listenAddress: " 127.0.0.1 ", wantWarn: false},
+		{name: "the empty address warns, it binds every interface", listenAddress: "", wantWarn: true},
+		{name: "whitespace only warns, it is the empty address", listenAddress: "   ", wantWarn: true},
+		{name: "another name warns, it is not resolved", listenAddress: "signare.internal", wantWarn: true},
+		{name: "a loopback name that is not localhost warns", listenAddress: "localhost.localdomain", wantWarn: true},
+		{name: "a zoned literal warns, net.ParseIP rejects the zone", listenAddress: "fe80::1%eth0", wantWarn: true},
+		{name: "an octal-looking literal warns, net.ParseIP rejects it", listenAddress: "0177.0.0.1", wantWarn: true},
+		{name: "a host:port value warns, it is not an address", listenAddress: "127.0.0.1:32325", wantWarn: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := InsecureListenAddressWarnings(tt.listenAddress)
+			if got := len(warnings) > 0; got != tt.wantWarn {
+				t.Fatalf("InsecureListenAddressWarnings(%q) = %v, wantWarn = %v", tt.listenAddress, warnings, tt.wantWarn)
+			}
+		})
+	}
+}
+
+// TestInsecureListenAddressWarningsNameTheExposure checks that the three exposure branches say three
+// different things. The message is the whole product of this function, and a warning that fires but
+// misdescribes why is barely better than none: asserting only that some warning appeared would pass
+// with all three branches collapsed into one string, or with two of them swapped.
+func TestInsecureListenAddressWarningsNameTheExposure(t *testing.T) {
+	tests := []struct {
+		name          string
+		listenAddress string
+		wantExposure  string
+	}{
+		{name: "unspecified IPv4", listenAddress: "0.0.0.0", wantExposure: "binds every network interface"},
+		{name: "unspecified IPv6", listenAddress: "::", wantExposure: "binds every network interface"},
+		{name: "the empty address", listenAddress: "", wantExposure: "binds every network interface"},
+		{name: "a private literal", listenAddress: "10.0.0.5", wantExposure: "is reachable from every host that can route to it"},
+		{name: "a documentation-range IPv6 literal", listenAddress: "2001:db8::1", wantExposure: "is reachable from every host that can route to it"},
+		{name: "a name", listenAddress: "signare.internal", wantExposure: "cannot be confirmed to be loopback"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := InsecureListenAddressWarnings(tt.listenAddress)
+			if len(warnings) != 1 {
+				t.Fatalf("InsecureListenAddressWarnings(%q) = %v, want exactly one warning", tt.listenAddress, warnings)
+			}
+			if !strings.Contains(warnings[0], tt.wantExposure) {
+				t.Errorf("InsecureListenAddressWarnings(%q) = %q, want it to say %q", tt.listenAddress, warnings[0], tt.wantExposure)
+			}
+			// The address as it was configured has to appear, or the operator cannot act on it.
+			if !strings.Contains(warnings[0], strconv.Quote(tt.listenAddress)) {
+				t.Errorf("InsecureListenAddressWarnings(%q) = %q, want it to quote the address", tt.listenAddress, warnings[0])
+			}
+		})
+	}
+}
+
+// TestInsecureListenAddressWarningsMatchLoopback checks the warn decision for every IP literal against
+// an oracle built without net.ParseIP, which is what the check itself parses with. The corpus is
+// addresses constructed from their bytes and rendered with String(), so the string-handling path is
+// what is under test while the expectation comes from the bytes.
+func TestInsecureListenAddressWarningsMatchLoopback(t *testing.T) {
+	var corpus []net.IP
+	// Sweep the first octet across the 127/8 boundary, then the rest of 127/8, which is loopback in
+	// full and not just 127.0.0.1.
+	for octet := 0; octet < 256; octet++ {
+		corpus = append(corpus, net.IP{byte(octet), 0, 0, 1}, net.IP{byte(octet), 255, 255, 254})
+		corpus = append(corpus, net.IP{127, byte(octet), 0, 1}, net.IP{127, 0, 0, byte(octet)})
+	}
+	// Sweep the low byte of the IPv6 zero prefix, which covers "::" and "::1" and their neighbours.
+	for low := 0; low < 256; low++ {
+		v6 := make(net.IP, net.IPv6len)
+		v6[net.IPv6len-1] = byte(low)
+		corpus = append(corpus, v6)
+		v6Global := make(net.IP, net.IPv6len)
+		v6Global[0] = 0x20
+		v6Global[net.IPv6len-1] = byte(low)
+		corpus = append(corpus, v6Global)
+	}
+	corpus = append(corpus, net.IPv6loopback, net.IPv6zero, net.IPv4zero, net.IPv4(127, 0, 0, 1), net.IPv4(10, 0, 0, 5))
+
+	var loopbacks, exposed int
+	for _, ip := range corpus {
+		listenAddress := ip.String()
+		wantWarn := !ip.IsLoopback()
+		if wantWarn {
+			exposed++
+		} else {
+			loopbacks++
+		}
+		warnings := InsecureListenAddressWarnings(listenAddress)
+		if got := len(warnings) > 0; got != wantWarn {
+			t.Errorf("InsecureListenAddressWarnings(%q) = %v, wantWarn = %v", listenAddress, warnings, wantWarn)
+		}
+	}
+
+	// Guard against a corpus that agrees with the check because it only holds one kind of address.
+	if loopbacks == 0 || exposed == 0 {
+		t.Fatalf("degenerate corpus: %d loopback, %d exposed", loopbacks, exposed)
 	}
 }
 
