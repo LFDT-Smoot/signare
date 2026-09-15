@@ -33,7 +33,17 @@ The signare currently does not support custom locations for specifying the CA ce
 
 The application does not store HSM slot PINs. A slot records the name of the file holding its PIN (see [`pinSourceDirectory`](./configuration.md#softhsm-configuration)), and the value is read from that file at login time.
 
-The `pin` column of `cfg_hardware_security_module_slot` is retained for one release so that slots created before this change keep working, and is dropped in the next. **Any PIN written before the upgrade must be rotated on the token**: the old value survives in database backups, WAL archives and dead tuples, and dropping the column does not remove it from those.
+The `pin` column of `cfg_hardware_security_module_slot` has been dropped.
+
+**Every slot must resolve its PIN from a source before upgrading to this release.** There is no fallback: a slot with no `pinSource` fails every signing request until one is set, and Signare cannot recover the PIN for you. Migration `000005` refuses the upgrade while any slot still holds a stored PIN and names no source, so a deployment that has not moved its slots fails the upgrade instead of losing the credential.
+
+If the upgrade is refused:
+
+1. For each slot the error names, write its PIN into the configured `pinSourceDirectory` and point the slot at the file with `admin.slots.updatePinSource`, running the previous release.
+2. Clear the dirty flag the aborted migration left behind: `UPDATE signare_migrations SET dirty = false WHERE version = 5`. `signare upgrade` refuses to run while a version is marked dirty.
+3. Run `signare upgrade` again.
+
+**Any PIN written before the column was dropped must be rotated on the token.** Dropping a column in PostgreSQL only updates the catalog, so the value stays in the existing heap tuples until those rows are rewritten; `VACUUM FULL cfg_hardware_security_module_slot` or `pg_repack` does that. Even then the value survives in WAL archives and in every backup taken while it was stored, which is why rotation on the token, not this migration, is what actually retires a PIN.
 
 The database still holds Local Key Vault private key material, and Local Key Vault is not for production use. In addition to using a secure SSL mode for the connection between the application and the database server, we recommend using encryption at rest. Please, refer to the Data Partition Encryption section of PostgreSQL's encryption options [documentation](https://www.postgresql.org/docs/current/encryption-options.html){:target="_blank"}.
 

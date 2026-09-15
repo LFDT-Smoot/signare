@@ -30,33 +30,28 @@ type slotPin struct {
 // pinFor resolves the PIN for one operation, and refuses to attempt a login while the breaker is open
 // against that value. Every login path goes through here, so a PIN lives only for the length of one
 // call and never reaches a struct that is logged or serialised.
-func (d *DefaultUseCase) pinFor(ctx context.Context, moduleKind ModuleKind, slot string, source string, legacy string) (*slotPin, error) {
+func (d *DefaultUseCase) pinFor(ctx context.Context, moduleKind ModuleKind, slot string, source string) (*slotPin, error) {
 	if moduleKind != SoftHSMModuleKind {
 		return &slotPin{}, nil
 	}
 
-	resolved := slotPin{
-		key:     pinBreakerKey{moduleKind: moduleKind, slot: slot},
-		guarded: true,
-	}
-
-	switch {
-	case len(source) > 0:
-		if err := ValidatePinSource(source); err != nil {
-			return nil, err
-		}
-		value, err := d.pinResolver.Resolve(ctx, source)
-		if err != nil {
-			return nil, err
-		}
-		resolved.value = value
-	case len(legacy) > 0:
-		// Stored before pin_source existed. Kept for one release so a deployment can upgrade the binary
-		// before moving its secrets.
-		resolved.value = legacy
-	default:
+	if len(source) == 0 {
 		msg := fmt.Sprintf("slot '%s' has no pin source configured", slot)
 		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+	if err := ValidatePinSource(source); err != nil {
+		return nil, err
+	}
+
+	value, err := d.pinResolver.Resolve(ctx, source)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved := slotPin{
+		value:   value,
+		key:     pinBreakerKey{moduleKind: moduleKind, slot: slot},
+		guarded: true,
 	}
 
 	if d.breaker.blocked(resolved.key, resolved.value) {
