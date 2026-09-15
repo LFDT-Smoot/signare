@@ -61,4 +61,4 @@ func (stubJSONRPCAPIHandler) HandlePersonalSign(_ context.Context, _ rpcinfra.RP
 	return nil, nil
 }
 
-var _ rpcinfra.JSONRPCAPIHandler = (*stubJSONRPCAPIHandler)(nil)
+var _ rpcinfra.JSONRPCAPIHandler = stubJSONRPCAPIHandler{}

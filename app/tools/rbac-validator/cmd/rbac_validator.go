@@ -131,8 +131,7 @@ func executeCmd(_ *cobra.Command, _ []string) error {
 	}
 
 	// Inclusions may also be read from an actions file, so that a file declaring actions with no
-	// OpenAPI operation is not transcribed into the flag as well. Exclusions apply to both sources as
-	// they do to the actions side, otherwise excluding an action would add it back as an operationID.
+	// OpenAPI operation is not transcribed into the flag as well.
 	if len(operationIdInclusionsFile) > 0 {
 		var inclusionsFromFile types.ActionCollection
 		inclusionsFromFile, err = readActions(operationIdInclusionsFile)
@@ -141,11 +140,7 @@ func executeCmd(_ *cobra.Command, _ []string) error {
 		}
 		operationIdInclusions = append(operationIdInclusions, inclusionsFromFile.Actions...)
 	}
-	for _, inclusion := range operationIdInclusions {
-		if _, excluded := operationIdExclusionsMap[inclusion]; !excluded {
-			operationIds = append(operationIds, inclusion)
-		}
-	}
+	operationIds = appendInclusions(operationIds, operationIdInclusions, operationIdExclusionsMap)
 
 	// Load roles, permissions and actions
 	// 1. Read actions
@@ -257,6 +252,18 @@ func splitList(value string) []string {
 		return nil
 	}
 	return strings.Split(value, flagsListDelimiter)
+}
+
+// appendInclusions adds the operationIDs of the endpoints that are in no OpenAPI spec but are subject
+// to RBAC. An inclusion that is also excluded is dropped, as it is on the actions side, otherwise
+// excluding an action would add it straight back here as an operationID
+func appendInclusions(ids, inclusions []string, exclusions map[string]string) []string {
+	for _, inclusion := range inclusions {
+		if _, excluded := exclusions[inclusion]; !excluded {
+			ids = append(ids, inclusion)
+		}
+	}
+	return ids
 }
 
 // readActions reads an action collection from a YAML file

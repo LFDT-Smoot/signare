@@ -32,6 +32,42 @@ func TestSplitList(t *testing.T) {
 	}
 }
 
+// TestAppendInclusions guards the rule that an exclusion wins over an inclusion. Inclusions arrive
+// from two places, the flag and the actions file, and they used to be filtered on only one of those
+// paths, so the same operationID survived or was dropped depending on which one was in use.
+func TestAppendInclusions(t *testing.T) {
+	tests := map[string]struct {
+		ids        []string
+		inclusions []string
+		exclusions []string
+		want       []string
+	}{
+		"no inclusions":            {ids: []string{"a"}, want: []string{"a"}},
+		"inclusions appended":      {ids: []string{"a"}, inclusions: []string{"b", "c"}, want: []string{"a", "b", "c"}},
+		"excluded inclusion":       {ids: []string{"a"}, inclusions: []string{"b", "c"}, exclusions: []string{"b"}, want: []string{"a", "c"}},
+		"every inclusion excluded": {ids: []string{"a"}, inclusions: []string{"b"}, exclusions: []string{"b"}, want: []string{"a"}},
+		"exclusion matching no inclusion": {
+			ids: []string{"a"}, inclusions: []string{"b"}, exclusions: []string{"z"}, want: []string{"a", "b"},
+		},
+		"no operation IDs": {inclusions: []string{"b"}, want: []string{"b"}},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			exclusions := make(map[string]string, len(test.exclusions))
+			for _, exclusion := range test.exclusions {
+				exclusions[exclusion] = ""
+			}
+
+			got := appendInclusions(test.ids, test.inclusions, exclusions)
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("appendInclusions(%#v, %#v, %#v) = %#v, want %#v",
+					test.ids, test.inclusions, test.exclusions, got, test.want)
+			}
+		})
+	}
+}
+
 func TestReadActions(t *testing.T) {
 	tests := map[string]struct {
 		contents string

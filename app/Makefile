@@ -106,11 +106,10 @@ tools.stop_docs:
 	@docker rm -f $(SIGNARE_DOCS) || true
 	@echo 'Closing & deleting documentation container'
 
-# An action granted to no role, or an endpoint with no action, denies rather than crashes, so nothing
-# surfaces it at runtime. Dangling permission and role references do abort startup, but only once
-# deployed. A prerequisite of lint so that a pipeline calling a standardised step gets the check. The
-# JSON-RPC actions are exempt from the API spec check, since no RPC method is in the spec; the RBAC
-# coverage tests in pkg/infra/rpcinfra pin those to the published method set instead.
+# An action granted to no role, or an endpoint with no action, is denied rather than erroring, so it
+# is indistinguishable from a legitimate authorization failure. Dangling permission and role
+# references do abort startup, but only once deployed. A prerequisite of lint so that a pipeline
+# calling a standardised step gets the check.
 .PHONY: tools.validate_rbac
 tools.validate_rbac:
 	@echo "Validating the RBAC roles, permissions and actions"
