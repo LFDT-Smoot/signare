@@ -22,7 +22,7 @@ build:
 	@echo "Not applicable"
 
 .PHONY: lint
-lint:
+lint: tools.validate_rbac
 	@echo "Executing linters"
 	golangci-lint --verbose run
 
@@ -33,6 +33,7 @@ unit_test:
 	@echo "Executing tests for application packages"
 	gotestsum --jsonfile ${ARTIFACTS_DIR}/unit_tests_results.json --format short-verbose --junitfile ${ARTIFACTS_DIR}/junit.xml -- -p 1 -tags=unit -timeout=5m -coverpkg=github.com/lfdt-smoot/signare/app/pkg/... -coverprofile=${ARTIFACTS_DIR}/signare.coverage.out github.com/lfdt-smoot/signare/app/pkg/...
 	$(call postProcess, signare, github.com/lfdt-smoot/signare/app, app)
+	@cd tools/rbac-validator; $(MAKE) unit_test
 
 .PHONY: race_test
 race_test:
@@ -105,10 +106,11 @@ tools.stop_docs:
 	@docker rm -f $(SIGNARE_DOCS) || true
 	@echo 'Closing & deleting documentation container'
 
-# The RBAC data that decides who may call what is spread over four files, so a rename or a new endpoint
-# can leave a dangling reference that only surfaces as a denied request at runtime. The JSON-RPC actions
-# are exempt from the validator's API spec check, since no RPC method is in the spec; the RBAC coverage
-# tests in pkg/infra/rpcinfra pin those to the published method set instead.
+# An action granted to no role, or an endpoint with no action, denies rather than crashes, so nothing
+# surfaces it at runtime. Dangling permission and role references do abort startup, but only once
+# deployed. A prerequisite of lint so that a pipeline calling a standardised step gets the check. The
+# JSON-RPC actions are exempt from the API spec check, since no RPC method is in the spec; the RBAC
+# coverage tests in pkg/infra/rpcinfra pin those to the published method set instead.
 .PHONY: tools.validate_rbac
 tools.validate_rbac:
 	@echo "Validating the RBAC roles, permissions and actions"

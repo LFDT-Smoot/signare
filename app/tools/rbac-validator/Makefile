@@ -14,3 +14,10 @@ tools.run_default:
 .PHONY: tools.help
 tools.help:
 	@go run ./cmd/rbac_validator.go --help
+
+# This module is outside the app module, so app's unit_test does not reach it on its own. It delegates
+# here instead, which is also what a pipeline should call.
+.PHONY: unit_test
+unit_test:
+	@echo "Executing tests for the rbac-validator tool"
+	@go test ./...

@@ -13,9 +13,11 @@ Specifically, the tool runs the following checks:
 ## How to use
 
 Run `make tools.validate_rbac` from the `app` directory, or `make tools.run_default` from here. Both
-use the RBAC files located in signare/app/include/rbac.
+use the RBAC files located in signare/app/include/rbac. `make lint` in the `app` directory depends on
+the former, so a pipeline calling that standardised step runs the validator too.
 
-Use `make tools.help` for more info about the command and its flags.
+Use `make tools.help` for more info about the command and its flags, and `make unit_test` for this
+module's own tests. They are a separate module, so the app module's `unit_test` delegates here.
 
 ## Exemptions
 

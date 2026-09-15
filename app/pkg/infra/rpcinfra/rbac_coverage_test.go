@@ -64,11 +64,11 @@ func TestRBACCoverage_EveryPublishedMethodIsRegisteredAndGrantable(t *testing.T)
 }
 
 // TestRBACCoverage_ManualActionsNameOnlyPublishedMethods guards the reverse direction, which the
-// rbac-validator cannot: the validator takes actions-manual.yaml as its list of actions exempt from the
-// one-to-one check against the API spec, so an entry naming a method that does not exist would pass
-// every one of its checks. Only the Go code knows which methods are published. Together with the test
-// above this pins the file to SupportedMethods exactly, which is what makes an exemption legitimate:
-// it names a published method, and nothing else can be added.
+// rbac-validator cannot. That file is its exemption list from the API spec check, so an entry naming a
+// method that does not exist clears that check and is caught only by the orphan-action check, which a
+// grant in permissions.yaml then satisfies: exactly the shape a copy-paste into both files produces.
+// Only the Go code knows which methods are published. With the test above this pins the file to
+// SupportedMethods in both directions, so an exemption is legitimate only if it names a live method.
 func TestRBACCoverage_ManualActionsNameOnlyPublishedMethods(t *testing.T) {
 	manualBytes, err := embedded.RBACFiles.ReadFile("include/rbac/actions-manual.yaml")
 	require.NoError(t, err)

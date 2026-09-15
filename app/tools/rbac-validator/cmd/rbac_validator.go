@@ -120,18 +120,6 @@ func executeCmd(_ *cobra.Command, _ []string) error {
 	permissionsFile := viper.GetString(permissionsFileFlag)
 	actionsFiles := splitList(viper.GetString(actionsFilesFlag))
 
-	// Inclusions may also be read from an actions file, so that a file declaring actions with no
-	// OpenAPI operation is not transcribed into the flag as well. Exclusions apply as they do to the
-	// actions side, otherwise excluding an action here would add it back as an operationID.
-	if len(operationIdInclusionsFile) > 0 {
-		inclusionsFromFile, err := readActions(operationIdInclusionsFile)
-		if err != nil {
-			return err
-		}
-		merged := types.MergeActions(types.ActionCollection{Actions: operationIdInclusions}, *inclusionsFromFile, operationIdExclusions)
-		operationIdInclusions = merged.Actions
-	}
-
 	// Get all the operation IDs defined in the API specs
 	operationIdExclusionsMap := make(map[string]string)
 	for _, op := range operationIdExclusions {
@@ -141,7 +129,23 @@ func executeCmd(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	operationIds = append(operationIds, operationIdInclusions...)
+
+	// Inclusions may also be read from an actions file, so that a file declaring actions with no
+	// OpenAPI operation is not transcribed into the flag as well. Exclusions apply to both sources as
+	// they do to the actions side, otherwise excluding an action would add it back as an operationID.
+	if len(operationIdInclusionsFile) > 0 {
+		var inclusionsFromFile types.ActionCollection
+		inclusionsFromFile, err = readActions(operationIdInclusionsFile)
+		if err != nil {
+			return err
+		}
+		operationIdInclusions = append(operationIdInclusions, inclusionsFromFile.Actions...)
+	}
+	for _, inclusion := range operationIdInclusions {
+		if _, excluded := operationIdExclusionsMap[inclusion]; !excluded {
+			operationIds = append(operationIds, inclusion)
+		}
+	}
 
 	// Load roles, permissions and actions
 	// 1. Read actions
@@ -157,7 +161,7 @@ func executeCmd(_ *cobra.Command, _ []string) error {
 			}
 			// Add operationID exclusions here also, as these actions come from the generated actions file
 			actionsToExclude := operationIdExclusions
-			actions = types.MergeActions(actions, *actionsFromFile, actionsToExclude)
+			actions = types.MergeActions(actions, actionsFromFile, actionsToExclude)
 		}
 	}
 	printSuccessLog()
@@ -256,16 +260,16 @@ func splitList(value string) []string {
 }
 
 // readActions reads an action collection from a YAML file
-func readActions(path string) (*types.ActionCollection, error) {
+func readActions(path string) (types.ActionCollection, error) {
+	var actions types.ActionCollection
 	contents, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return actions, err
 	}
-	var actions types.ActionCollection
 	if err = yaml.Unmarshal(contents, &actions); err != nil {
-		return nil, err
+		return actions, err
 	}
-	return &actions, nil
+	return actions, nil
 }
 
 // getOperationIds returns all the operationIDs defined in a set of OpenAPI specification files, except those operationIDs that were set to be excluded
