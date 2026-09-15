@@ -14,19 +14,21 @@ import (
 )
 
 const (
-	openAPISpecFilesFlag      = "openapiSpecFiles"
-	operationIdExclusionsFlag = "operationIdExclusions"
-	operationIdInclusionsFlag = "operationIdInclusions"
-	rolesFileFlag             = "rolesFilePath"
-	permissionsFileFlag       = "permissionsFilePath"
-	actionsFilesFlag          = "actionsFilesPath"
+	openAPISpecFilesFlag          = "openapiSpecFiles"
+	operationIdExclusionsFlag     = "operationIdExclusions"
+	operationIdInclusionsFlag     = "operationIdInclusions"
+	operationIdInclusionsFileFlag = "operationIdInclusionsFilePath"
+	rolesFileFlag                 = "rolesFilePath"
+	permissionsFileFlag           = "permissionsFilePath"
+	actionsFilesFlag              = "actionsFilesPath"
 
-	openAPISpecFilesFlagDescription      = "Comma-separated list of files to look for operationIds"
-	operationIdExclusionsFlagDescription = "[Optional] Comma-separated list of operationIDs to exclude from provided OpenAPI specs. This is the way to say that some endpoints are excluded from RBAC"
-	operationIdInclusionsFlagDescription = "[Optional] Comma-separated list of operationIDs to include in to the ones read from OpenAPI specs. This is the way to manually add the operationIDs of those endpoints that are not in any OpenAPI spec but that are subject to RBAC checks"
-	rolesFileFlagDescription             = "Path to the file with the roles definition"
-	permissionsFileFlagDescription       = "Path to the file with the permissions definition"
-	actionsFilesFlagDescription          = "Comma-separated list of paths to files with actions definition"
+	openAPISpecFilesFlagDescription          = "Comma-separated list of files to look for operationIds"
+	operationIdExclusionsFlagDescription     = "[Optional] Comma-separated list of operationIDs to exclude from provided OpenAPI specs. This is the way to say that some endpoints are excluded from RBAC"
+	operationIdInclusionsFlagDescription     = "[Optional] Comma-separated list of operationIDs to include in to the ones read from OpenAPI specs. This is the way to manually add the operationIDs of those endpoints that are not in any OpenAPI spec but that are subject to RBAC checks"
+	operationIdInclusionsFileFlagDescription = "[Optional] Path to an actions file whose entries are added to the operationIDs read from OpenAPI specs, as --" + operationIdInclusionsFlag + " does. Point it at the file that declares those actions so the list is not maintained twice"
+	rolesFileFlagDescription                 = "Path to the file with the roles definition"
+	permissionsFileFlagDescription           = "Path to the file with the permissions definition"
+	actionsFilesFlagDescription              = "Comma-separated list of paths to files with actions definition"
 )
 
 const (
@@ -55,6 +57,7 @@ func registerFlags(cmd *cobra.Command) {
 	cmd.Flags().String(openAPISpecFilesFlag, "", openAPISpecFilesFlagDescription)
 	cmd.Flags().String(operationIdExclusionsFlag, "", operationIdExclusionsFlagDescription)
 	cmd.Flags().String(operationIdInclusionsFlag, "", operationIdInclusionsFlagDescription)
+	cmd.Flags().String(operationIdInclusionsFileFlag, "", operationIdInclusionsFileFlagDescription)
 	cmd.Flags().String(rolesFileFlag, "", rolesFileFlagDescription)
 	cmd.Flags().String(permissionsFileFlag, "", permissionsFileFlagDescription)
 	cmd.Flags().String(actionsFilesFlag, "", actionsFilesFlagDescription)
@@ -89,6 +92,10 @@ func warmupCmd(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	err = viper.BindPFlag(operationIdInclusionsFileFlag, cmd.Flags().Lookup(operationIdInclusionsFileFlag))
+	if err != nil {
+		return err
+	}
 	err = viper.BindPFlag(rolesFileFlag, cmd.Flags().Lookup(rolesFileFlag))
 	if err != nil {
 		return err
@@ -105,16 +112,25 @@ func warmupCmd(cmd *cobra.Command, _ []string) error {
 }
 
 func executeCmd(_ *cobra.Command, _ []string) error {
-	openAPISpecFilesList := viper.GetString(openAPISpecFilesFlag)
-	openAPISpecFiles := strings.Split(openAPISpecFilesList, flagsListDelimiter)
-	operationIdExclusionsList := viper.GetString(operationIdExclusionsFlag)
-	operationIdExclusions := strings.Split(operationIdExclusionsList, flagsListDelimiter)
-	operationIdInclusionsList := viper.GetString(operationIdInclusionsFlag)
-	operationIdInclusions := strings.Split(operationIdInclusionsList, flagsListDelimiter)
+	openAPISpecFiles := splitList(viper.GetString(openAPISpecFilesFlag))
+	operationIdExclusions := splitList(viper.GetString(operationIdExclusionsFlag))
+	operationIdInclusions := splitList(viper.GetString(operationIdInclusionsFlag))
+	operationIdInclusionsFile := viper.GetString(operationIdInclusionsFileFlag)
 	rolesFile := viper.GetString(rolesFileFlag)
 	permissionsFile := viper.GetString(permissionsFileFlag)
-	actionsFilesList := viper.GetString(actionsFilesFlag)
-	actionsFiles := strings.Split(actionsFilesList, flagsListDelimiter)
+	actionsFiles := splitList(viper.GetString(actionsFilesFlag))
+
+	// Inclusions may also be read from an actions file, so that a file declaring actions with no
+	// OpenAPI operation is not transcribed into the flag as well. Exclusions apply as they do to the
+	// actions side, otherwise excluding an action here would add it back as an operationID.
+	if len(operationIdInclusionsFile) > 0 {
+		inclusionsFromFile, err := readActions(operationIdInclusionsFile)
+		if err != nil {
+			return err
+		}
+		merged := types.MergeActions(types.ActionCollection{Actions: operationIdInclusions}, *inclusionsFromFile, operationIdExclusions)
+		operationIdInclusions = merged.Actions
+	}
 
 	// Get all the operation IDs defined in the API specs
 	operationIdExclusionsMap := make(map[string]string)
@@ -135,18 +151,13 @@ func executeCmd(_ *cobra.Command, _ []string) error {
 	}
 	{
 		for _, actionsFile := range actionsFiles {
-			var actionsFromFile types.ActionCollection
-			actionsBytes, err := os.ReadFile(actionsFile)
-			if err != nil {
-				return err
-			}
-			err = yaml.Unmarshal(actionsBytes, &actionsFromFile)
+			actionsFromFile, err := readActions(actionsFile)
 			if err != nil {
 				return err
 			}
 			// Add operationID exclusions here also, as these actions come from the generated actions file
 			actionsToExclude := operationIdExclusions
-			actions = types.MergeActions(actions, actionsFromFile, actionsToExclude)
+			actions = types.MergeActions(actions, *actionsFromFile, actionsToExclude)
 		}
 	}
 	printSuccessLog()
@@ -234,6 +245,27 @@ func executeCmd(_ *cobra.Command, _ []string) error {
 	printSuccessLog()
 
 	return nil
+}
+
+// splitList splits a comma-separated flag value, returning nothing for an unset flag rather than a single empty entry
+func splitList(value string) []string {
+	if len(value) == 0 {
+		return nil
+	}
+	return strings.Split(value, flagsListDelimiter)
+}
+
+// readActions reads an action collection from a YAML file
+func readActions(path string) (*types.ActionCollection, error) {
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var actions types.ActionCollection
+	if err = yaml.Unmarshal(contents, &actions); err != nil {
+		return nil, err
+	}
+	return &actions, nil
 }
 
 // getOperationIds returns all the operationIDs defined in a set of OpenAPI specification files, except those operationIDs that were set to be excluded

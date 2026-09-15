@@ -105,6 +105,15 @@ tools.stop_docs:
 	@docker rm -f $(SIGNARE_DOCS) || true
 	@echo 'Closing & deleting documentation container'
 
+# The RBAC data that decides who may call what is spread over four files, so a rename or a new endpoint
+# can leave a dangling reference that only surfaces as a denied request at runtime. The JSON-RPC actions
+# are exempt from the validator's API spec check, since no RPC method is in the spec; the RBAC coverage
+# tests in pkg/infra/rpcinfra pin those to the published method set instead.
+.PHONY: tools.validate_rbac
+tools.validate_rbac:
+	@echo "Validating the RBAC roles, permissions and actions"
+	@cd tools/rbac-validator; $(MAKE) tools.run_default
+
 .PHONY: tools.format
 tools.format:
 	@echo ">> Formatting"

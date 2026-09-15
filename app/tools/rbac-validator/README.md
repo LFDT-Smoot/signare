@@ -12,6 +12,21 @@ Specifically, the tool runs the following checks:
 
 ## How to use
 
-Run `make tools.run_default`. It uses RBAC files located in signare/app/include/rbac.
+Run `make tools.validate_rbac` from the `app` directory, or `make tools.run_default` from here. Both
+use the RBAC files located in signare/app/include/rbac.
 
 Use `make tools.help` for more info about the command and its flags.
+
+## Exemptions
+
+The JSON-RPC methods are subject to RBAC but appear in no OpenAPI spec, so their actions have no
+operation ID to map onto. `--operationIdInclusionsFilePath` is how they are exempted from the 1 to 1
+check, and it points at `include/rbac/actions-manual.yaml`, the file that declares them. Reading the
+file rather than restating its contents in a flag means the exemption list cannot drift from the
+actions it exempts.
+
+That file is pinned to the published method set by the RBAC coverage tests in
+`app/pkg/infra/rpcinfra`, in both directions: every method in `SupportedMethods` has an action that at
+least one permission grants, and every entry in the file names a method in `SupportedMethods`. So an
+exemption is legitimate exactly when it names a published method, and nothing else can be added. The
+tests carry that guarantee rather than this tool because only the Go code knows which methods exist.

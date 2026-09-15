@@ -87,12 +87,19 @@ Nevertheless, the application has a set of RPC methods in the API that are not d
 ```YAML
 actions:
   - rpc.method.eth_generateAccount
+  - rpc.method.eth_importAccount
   - rpc.method.eth_removeAccount
   - rpc.method.eth_accounts
   - rpc.method.eth_signTransaction
   - rpc.method.eth_signTypedData
   - rpc.method.personal_sign
 ```
+
+Because those actions have no operation ID, they are also the list of actions exempt from the 1 to 1
+check that `make tools.validate_rbac` runs, which is why the validator reads this file directly. Only
+a published RPC method belongs here: the RBAC coverage tests assert that every method the signare
+publishes has an action in this file that a permission grants, and that every entry in this file names
+a method the signare publishes. Adding an entry for anything else fails the build.
 
 ### How to edit permissions
 

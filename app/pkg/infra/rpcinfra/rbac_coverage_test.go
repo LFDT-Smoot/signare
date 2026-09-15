@@ -1,6 +1,7 @@
 package rpcinfra_test
 
 import (
+	"strings"
 	"testing"
 
 	embedded "github.com/lfdt-smoot/signare/app"
@@ -59,5 +60,33 @@ func TestRBACCoverage_EveryPublishedMethodIsRegisteredAndGrantable(t *testing.T)
 			"method %q is published but its action %q is missing from actions-manual.yaml", method, action)
 		require.Truef(t, granted[action],
 			"method %q is published but its action %q is granted by no permission, so it is denied for every user", method, action)
+	}
+}
+
+// TestRBACCoverage_ManualActionsNameOnlyPublishedMethods guards the reverse direction, which the
+// rbac-validator cannot: the validator takes actions-manual.yaml as its list of actions exempt from the
+// one-to-one check against the API spec, so an entry naming a method that does not exist would pass
+// every one of its checks. Only the Go code knows which methods are published. Together with the test
+// above this pins the file to SupportedMethods exactly, which is what makes an exemption legitimate:
+// it names a published method, and nothing else can be added.
+func TestRBACCoverage_ManualActionsNameOnlyPublishedMethods(t *testing.T) {
+	manualBytes, err := embedded.RBACFiles.ReadFile("include/rbac/actions-manual.yaml")
+	require.NoError(t, err)
+	var manual manualActionsFile
+	require.NoError(t, yaml.Unmarshal(manualBytes, &manual))
+
+	published := make(map[string]bool, len(rpcinfra.SupportedMethods))
+	for _, method := range rpcinfra.SupportedMethods {
+		published[method] = true
+	}
+
+	for _, action := range manual.Actions {
+		method, isRPCAction := strings.CutPrefix(action, rpcActionPrefix)
+		require.Truef(t, isRPCAction,
+			"action %q in actions-manual.yaml is outside the %q namespace; the file is the exemption list for the API spec check, so only RPC method actions belong in it",
+			action, rpcActionPrefix)
+		require.Truef(t, published[method],
+			"action %q in actions-manual.yaml names method %q, which is not in SupportedMethods, so it is exempt from the API spec check without being published anywhere",
+			action, method)
 	}
 }
