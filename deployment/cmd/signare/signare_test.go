@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net"
+	"strconv"
 	"testing"
 
 	"github.com/lfdt-smoot/signare/deployment/cmd/signare/config"
@@ -8,6 +10,11 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+// Known gaps. Both call sites need a live database and a built graph, so only the helpers behind them
+// are covered here:
+//   - nothing asserts that startServer logs the bind warning, only that the warning exists;
+//   - nothing asserts that startMetricsServers forwards the host it is handed to the listener.
 
 func TestListenAddressFlagDefaultsToLoopback(t *testing.T) {
 	cmd := &cobra.Command{Use: "signare-test"}
@@ -35,15 +42,34 @@ func TestListenerAddress(t *testing.T) {
 		want string
 	}{
 		{name: "loopback keeps the host", host: "127.0.0.1", port: defaultHTTPPort, want: "127.0.0.1:32325"},
-		{name: "bind-all collapses to a bare port", host: defaultAllAddresses, port: defaultRPCPort, want: ":4545"},
+		{name: "bind-all keeps the host", host: "0.0.0.0", port: defaultRPCPort, want: "0.0.0.0:4545"},
 		{name: "a name keeps the host", host: "localhost", port: defaultPrometheusPort, want: "localhost:9785"},
 		{name: "any other address keeps the host", host: "10.0.0.5", port: defaultHTTPPort, want: "10.0.0.5:32325"},
+		{name: "IPv6 loopback is bracketed", host: "::1", port: defaultHTTPPort, want: "[::1]:32325"},
+		{name: "IPv6 bind-all is bracketed", host: "::", port: defaultRPCPort, want: "[::]:4545"},
+		{name: "an IPv4-mapped IPv6 literal is bracketed", host: "::ffff:127.0.0.1", port: defaultHTTPPort, want: "[::ffff:127.0.0.1]:32325"},
+		{name: "an empty host binds every interface", host: "", port: defaultHTTPPort, want: ":32325"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := listenerAddress(tt.host, tt.port); got != tt.want {
-				t.Errorf("listenerAddress(%q, %d) = %q, want %q", tt.host, tt.port, got, tt.want)
+			got := listenerAddress(tt.host, tt.port)
+			if got != tt.want {
+				t.Fatalf("listenerAddress(%q, %d) = %q, want %q", tt.host, tt.port, got, tt.want)
+			}
+			// The expected strings above are only as good as the model that wrote them, so the
+			// address is also put back through the parser net.Listen itself uses. "%s:%d" formatting
+			// satisfied a table like this one for every IPv4 case while producing "::1:32325" for the
+			// IPv6 ones, which fails here with "too many colons in address", as it does at bind time.
+			gotHost, gotPort, err := net.SplitHostPort(got)
+			if err != nil {
+				t.Fatalf("net.SplitHostPort(%q): %v", got, err)
+			}
+			if gotHost != tt.host {
+				t.Errorf("host round trip: net.SplitHostPort(%q) host = %q, want %q", got, gotHost, tt.host)
+			}
+			if gotPort != strconv.Itoa(tt.port) {
+				t.Errorf("port round trip: net.SplitHostPort(%q) port = %q, want %d", got, gotPort, tt.port)
 			}
 		})
 	}
@@ -71,9 +97,9 @@ func TestMetricsListenerAddressHonoursListenAddress(t *testing.T) {
 		},
 		{
 			name:             "bind-all is still available",
-			host:             defaultAllAddresses,
+			host:             "0.0.0.0",
 			prometheusConfig: &config.PrometheusMetricsConfig{Port: &configuredPort},
-			want:             ":9092",
+			want:             "0.0.0.0:9092",
 		},
 	}
 

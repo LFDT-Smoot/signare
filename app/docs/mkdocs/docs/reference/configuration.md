@@ -143,7 +143,7 @@ Let us dive into the different attributes:
 
 | Name                    | Type   | Required | Description                                          | Default Value (if any) |
 |-------------------------|--------|:--------:|------------------------------------------------------|------------------------|
-| **port**                | int    |    ✗     | Port number where Prometheus metrics will be exposed | 9780                   |
+| **port**                | int    |    ✗     | Port number where Prometheus metrics will be exposed | 9785                   |
 | **path**                | string |    ✗     | URL path where prometheus will listen                | /metrics               |
 | **maxRequestsInFlight** | int    |    ✗     | Number of concurrent HTTP requests                   | 10                     |
 | **timeoutInMillis**     | int    |    ✗     | Number of millis until timeout                       | 30000                  |

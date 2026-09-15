@@ -48,7 +48,7 @@ type MetricsConfig struct {
 
 // PrometheusConfig Prometheus configuration for the metric recorder
 type PrometheusConfig struct {
-	// Port where prometheus metrics will be exposed. Default 9780 aligned with not used port from https://github.com/prometheus/prometheus/wiki/Default-port-allocations
+	// Port where prometheus metrics will be exposed. Default 9785, from the unallocated range in https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 	Port *int `valid:"optional"`
 	// Path where prometheus is
 	Path *string `valid:"optional"`

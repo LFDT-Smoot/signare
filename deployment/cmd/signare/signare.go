@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -33,10 +35,7 @@ const (
 	// defaultListenAddress binds loopback only. Signare authenticates no one: it trusts the caller
 	// identity a fronting proxy puts in the request headers, so a listener anything else can reach is
 	// an unauthenticated one. Widening this is a deployment decision, made explicitly.
-	defaultListenAddress = "127.0.0.1"
-	// defaultAllAddresses is the bind-everything address. It is no longer the default, but it stays as
-	// the value listenerAddress collapses to the bare ":port" form.
-	defaultAllAddresses   = "0.0.0.0"
+	defaultListenAddress  = "127.0.0.1"
 	defaultPrometheusPort = 9785
 	defaultHTTPPort       = 32325
 	defaultRPCPort        = 4545
@@ -131,7 +130,9 @@ func checkRequiredFlags(cmd *cobra.Command, _ []string) error {
 func startServer(_ *cobra.Command, _ []string) {
 	ctxMainWithCancellation, mainCancel := context.WithCancel(context.Background())
 
-	listenAddress := viper.GetString(flags.ListenAddressFlag)
+	// Trimmed once, here, so the safety check and the listeners judge the same string. An untrimmed
+	// value reaches net.Listen as a hostname and fails the lookup.
+	listenAddress := strings.TrimSpace(viper.GetString(flags.ListenAddressFlag))
 
 	staticConfigPath := viper.GetString(flags.SignareConfigPathFlag)
 	if staticConfigPath == "" {
@@ -221,11 +222,12 @@ func startServer(_ *cobra.Command, _ []string) {
 // listenerAddress builds the bind address for a listener from the --listen-address flag and a port.
 // Every listener (main, RPC and metrics) goes through it, so the flag governs all three and cannot be
 // honoured by two of them and not the third.
+//
+// net.JoinHostPort, not a "%s:%d", because an IPv6 host has to be bracketed: "::1" would otherwise
+// yield "::1:32325", which net.Listen rejects as having too many colons. The bind-address check treats
+// every loopback literal as safe, IPv6 included, so the two have to agree on what an address is.
 func listenerAddress(host string, port int) string {
-	if host == defaultAllAddresses {
-		return fmt.Sprintf(":%d", port)
-	}
-	return fmt.Sprintf("%s:%d", host, port)
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 // metricsListenerAddress builds the metrics bind address, from --listen-address and the configured

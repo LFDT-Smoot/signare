@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -142,8 +143,9 @@ func TestInsecureSettingsWarnings(t *testing.T) {
 	}{
 		{name: "nil config", cfg: nil, wantWarn: false},
 		{name: "nil postgres section", cfg: &StaticConfiguration{}, wantWarn: false},
-		// A missing database section silences the sslmode check alone. It must not short-circuit the
-		// rest of the function, which is what an early return on it used to do.
+		// A shape assertion, not a regression guard: with one check in the function there is nothing
+		// for a missing database section to short-circuit, so this case passes against the early
+		// return it replaced too. It pins the contract a second check will rely on.
 		{name: "nil postgres section with other sections present", cfg: &StaticConfiguration{Logger: &Logger{LogLevel: "info"}, Server: &Server{}}, wantWarn: false},
 		{name: "sslmode disable warns", cfg: pgConfig("disable"), wantWarn: true},
 		{name: "sslmode disable is case-insensitive", cfg: pgConfig("DISABLE"), wantWarn: true},
@@ -195,6 +197,41 @@ func TestInsecureListenAddressWarningsNonLiteralAddresses(t *testing.T) {
 			warnings := InsecureListenAddressWarnings(tt.listenAddress)
 			if got := len(warnings) > 0; got != tt.wantWarn {
 				t.Fatalf("InsecureListenAddressWarnings(%q) = %v, wantWarn = %v", tt.listenAddress, warnings, tt.wantWarn)
+			}
+		})
+	}
+}
+
+// TestInsecureListenAddressWarningsNameTheExposure checks that the three exposure branches say three
+// different things. The message is the whole product of this function, and a warning that fires but
+// misdescribes why is barely better than none: asserting only that some warning appeared would pass
+// with all three branches collapsed into one string, or with two of them swapped.
+func TestInsecureListenAddressWarningsNameTheExposure(t *testing.T) {
+	tests := []struct {
+		name          string
+		listenAddress string
+		wantExposure  string
+	}{
+		{name: "unspecified IPv4", listenAddress: "0.0.0.0", wantExposure: "binds every network interface"},
+		{name: "unspecified IPv6", listenAddress: "::", wantExposure: "binds every network interface"},
+		{name: "the empty address", listenAddress: "", wantExposure: "binds every network interface"},
+		{name: "a private literal", listenAddress: "10.0.0.5", wantExposure: "is reachable from every host that can route to it"},
+		{name: "a documentation-range IPv6 literal", listenAddress: "2001:db8::1", wantExposure: "is reachable from every host that can route to it"},
+		{name: "a name", listenAddress: "signare.internal", wantExposure: "cannot be confirmed to be loopback"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := InsecureListenAddressWarnings(tt.listenAddress)
+			if len(warnings) != 1 {
+				t.Fatalf("InsecureListenAddressWarnings(%q) = %v, want exactly one warning", tt.listenAddress, warnings)
+			}
+			if !strings.Contains(warnings[0], tt.wantExposure) {
+				t.Errorf("InsecureListenAddressWarnings(%q) = %q, want it to say %q", tt.listenAddress, warnings[0], tt.wantExposure)
+			}
+			// The address as it was configured has to appear, or the operator cannot act on it.
+			if !strings.Contains(warnings[0], strconv.Quote(tt.listenAddress)) {
+				t.Errorf("InsecureListenAddressWarnings(%q) = %q, want it to quote the address", tt.listenAddress, warnings[0])
 			}
 		})
 	}
