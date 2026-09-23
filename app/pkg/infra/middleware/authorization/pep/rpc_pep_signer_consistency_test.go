@@ -14,6 +14,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/entrypoint/rpcbatchrequestsupport"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
 
 	"github.com/stretchr/testify/require"
 )
@@ -23,17 +24,42 @@ const (
 	otherAccountAddress      = "0x1234567890123456789012345678901234567890"
 )
 
-// signingMethod pairs an account-signing RPC method with the way its handler decodes the signing
-// account, so a test can drive the authorization path and the signing path from one request body.
+// capturingAdapter records the account each signing method hands on. Only the three signing methods
+// are implemented; the rest are promoted from the embedded nil interface and would panic if the
+// handler called them unexpectedly.
+type capturingAdapter struct {
+	rpcinfra.JSONRPCAPIAdapter
+	gotAccount string
+}
+
+func (a *capturingAdapter) AdaptSignTx(_ context.Context, data rpcinfra.SignTXRequestParams) (*string, *rpcerrors.RPCError) {
+	a.gotAccount = data.From
+	return &signatureStub, nil
+}
+
+func (a *capturingAdapter) AdaptPersonalSign(_ context.Context, data rpcinfra.PersonalSignRequestParams) (*string, *rpcerrors.RPCError) {
+	a.gotAccount = data.Address
+	return &signatureStub, nil
+}
+
+func (a *capturingAdapter) AdaptSignTypedData(_ context.Context, data rpcinfra.SignTypedDataRequestParams) (*string, *rpcerrors.RPCError) {
+	a.gotAccount = data.Address
+	return &signatureStub, nil
+}
+
+var signatureStub = "0xsignature"
+
+// signingMethod pairs an account-signing RPC method with the handler that serves it, so a test can
+// drive the authorization path and the signing path from one request body.
 type signingMethod struct {
 	method string
 	// accountKey is the params field naming the account the method signs with.
 	accountKey string
 	// siblingFields are the remaining params the method needs to decode, as a JSON fragment.
 	siblingFields string
-	// signerAccount decodes params the way the JSON-RPC handler does and returns the account that
-	// would be signed with.
-	signerAccount func(params json.RawMessage) (string, error)
+	// invoke runs the real JSON-RPC handler for this method and returns the account it handed to the
+	// adapter, which is the account that would be signed with.
+	invoke func(ctx context.Context, handler *rpcinfra.DefaultJSONRPCAPIHandler, request rpcinfra.RPCRequest) (any, *rpcerrors.RPCError)
 }
 
 func accountSigningMethods() []signingMethod {
@@ -42,39 +68,46 @@ func accountSigningMethods() []signingMethod {
 			method:        rpcinfra.SignTransactionMethod,
 			accountKey:    "from",
 			siblingFields: `"data":"0x","nonce":"0x1"`,
-			signerAccount: func(params json.RawMessage) (string, error) {
-				var decoded rpcinfra.SignTXRequestParams
-				if err := rpcinfra.ProcessParams(params, &decoded); err != nil {
-					return "", err
-				}
-				return decoded.From, nil
+			invoke: func(ctx context.Context, h *rpcinfra.DefaultJSONRPCAPIHandler, r rpcinfra.RPCRequest) (any, *rpcerrors.RPCError) {
+				return h.HandleSignTX(ctx, r)
 			},
 		},
 		{
 			method:        rpcinfra.PersonalSignMethod,
 			accountKey:    "address",
 			siblingFields: `"message":"0xdeadbeef"`,
-			signerAccount: func(params json.RawMessage) (string, error) {
-				var decoded rpcinfra.PersonalSignRequestParams
-				if err := rpcinfra.ProcessParams(params, &decoded); err != nil {
-					return "", err
-				}
-				return decoded.Address, nil
+			invoke: func(ctx context.Context, h *rpcinfra.DefaultJSONRPCAPIHandler, r rpcinfra.RPCRequest) (any, *rpcerrors.RPCError) {
+				return h.HandlePersonalSign(ctx, r)
 			},
 		},
 		{
 			method:        rpcinfra.SignTypedDataMethod,
 			accountKey:    "address",
-			siblingFields: `"typedData":{}`,
-			signerAccount: func(params json.RawMessage) (string, error) {
-				var decoded rpcinfra.SignTypedDataRequestParams
-				if err := rpcinfra.ProcessParams(params, &decoded); err != nil {
-					return "", err
-				}
-				return decoded.Address, nil
+			siblingFields: `"typedData":{"types":{"EIP712Domain":[]},"primaryType":"EIP712Domain","domain":{},"message":{}}`,
+			invoke: func(ctx context.Context, h *rpcinfra.DefaultJSONRPCAPIHandler, r rpcinfra.RPCRequest) (any, *rpcerrors.RPCError) {
+				return h.HandleSignTypedData(ctx, r)
 			},
 		},
 	}
+}
+
+// signerAccount runs the real JSON-RPC handler over params and reports the account it passed to the
+// adapter. Driving the handler rather than re-deriving its decode is the point: the test exists to
+// catch the authorization path and the signing path disagreeing, so the signing side has to be the
+// production one, not a restatement of it. It also puts ValidateParams in the path, which the handler
+// calls and a bare ProcessParams does not.
+func (m signingMethod) signerAccount(t *testing.T, params json.RawMessage) (string, error) {
+	t.Helper()
+
+	adapter := &capturingAdapter{}
+	handler, err := rpcinfra.NewDefaultJSONRPCAPIHandler(rpcinfra.DefaultJSONRPCAPIHandlerOptions{Adapter: adapter})
+	require.NoError(t, err)
+
+	ctx := context.WithValue(context.Background(), requestcontext.ApplicationContextKey, "app1")
+	if _, rpcErr := m.invoke(ctx, handler, rpcinfra.RPCRequest{Params: params}); rpcErr != nil {
+		return "", rpcErr
+	}
+	return adapter.gotAccount, nil
 }
 
 // keyCasings returns the spellings of name that encoding/json resolves to the same struct field but
@@ -116,7 +149,7 @@ func TestAuthorizeAccount_SignerIsTheAuthorizedAccount(t *testing.T) {
 						body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":%q,"params":%s}`, method.method, params)
 
 						authorized, status := authorizeAccountForTest(t, method.method, body)
-						signer, signErr := method.signerAccount(json.RawMessage(params))
+						signer, signErr := method.signerAccount(t, json.RawMessage(params))
 
 						if status != http.StatusOK {
 							// Refused at the gate, which is the outcome this fix produces.
@@ -156,7 +189,7 @@ func TestAuthorizeAccount_SignerIsTheAuthorizedAccountForOneSpelling(t *testing.
 
 					authorized, status := authorizeAccountForTest(t, method.method, body)
 					require.Equal(t, http.StatusOK, status, "a request naming the account once must be served")
-					signer, signErr := method.signerAccount(json.RawMessage(params))
+					signer, signErr := method.signerAccount(t, json.RawMessage(params))
 					require.NoError(t, signErr, "a request the gate allowed must decode for signing")
 
 					require.Truef(t, strings.EqualFold(authorized, signer),
@@ -228,7 +261,7 @@ func TestAuthorizeAccount_RejectsAmbiguousAccountParam(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, status, "an ambiguous account param must be refused")
 			require.Empty(t, authorized, "a refused request must not have authorized an account")
 
-			_, err := method.signerAccount(json.RawMessage(params))
+			_, err := method.signerAccount(t, json.RawMessage(params))
 			require.Error(t, err, "the signing path must refuse the same params")
 		})
 	}
@@ -252,7 +285,7 @@ func TestAuthorizeAccount_AcceptsBothParamForms(t *testing.T) {
 				require.Truef(t, strings.EqualFold(authorizedAccountAddress, authorized),
 					"expected authorization on %s, got %s", authorizedAccountAddress, authorized)
 
-				signer, err := method.signerAccount(json.RawMessage(params))
+				signer, err := method.signerAccount(t, json.RawMessage(params))
 				require.NoError(t, err)
 				require.Truef(t, strings.EqualFold(authorizedAccountAddress, signer),
 					"expected signing with %s, got %s", authorizedAccountAddress, signer)
