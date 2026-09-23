@@ -188,6 +188,10 @@ type HSMModules struct {
 // SoftHSMConfig configures a SoftHSM in Signare.
 type SoftHSMConfig struct {
 	Library string `mapstructure:"lib" valid:"required"`
+	// PinSourceDirectory is the directory holding one file per slot PIN, each named by the source a slot
+	// records. Signare reads a PIN from it on every operation that logs in to a token, so a rotated
+	// secret takes effect without a restart. Optional: only a deployment with a PKCS#11 slot needs it.
+	PinSourceDirectory string `mapstructure:"pinSourceDirectory" valid:"optional"`
 }
 
 // AKVConfig configures AKV in Signare.

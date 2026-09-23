@@ -79,6 +79,8 @@ type HSMModules struct {
 // SoftHSMConfig configures a SoftHSM.
 type SoftHSMConfig struct {
 	Library string `mapstructure:"lib" valid:"required"`
+	// PinSourceDirectory holds one file per slot PIN, each named by the source a slot records.
+	PinSourceDirectory string `mapstructure:"pinSourceDirectory" valid:"optional"`
 }
 
 // AKVConfig configures AKV.

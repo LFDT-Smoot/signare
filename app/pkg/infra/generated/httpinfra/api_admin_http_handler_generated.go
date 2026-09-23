@@ -65,8 +65,11 @@ type AdminAPIHTTPHandler interface {
 	// HandleHTTPAdminSlotsUpdateConfig handles an AdminSlotsUpdateConfig request
 	HandleHTTPAdminSlotsUpdateConfig(responseWriter http.ResponseWriter, request *http.Request)
 
-	// HandleHTTPAdminSlotsUpdatePin handles an AdminSlotsUpdatePin request
-	HandleHTTPAdminSlotsUpdatePin(responseWriter http.ResponseWriter, request *http.Request)
+	// HandleHTTPAdminSlotsUpdatePinSource handles an AdminSlotsUpdatePinSource request
+	HandleHTTPAdminSlotsUpdatePinSource(responseWriter http.ResponseWriter, request *http.Request)
+
+	// HandleHTTPAdminSlotsVerifyPinSource handles an AdminSlotsVerifyPinSource request
+	HandleHTTPAdminSlotsVerifyPinSource(responseWriter http.ResponseWriter, request *http.Request)
 
 	// HandleHTTPAdminUsersCreate handles an AdminUsersCreate request
 	HandleHTTPAdminUsersCreate(responseWriter http.ResponseWriter, request *http.Request)
@@ -115,7 +118,9 @@ type AdminAPIAdapter interface {
 
 	AdaptAdminSlotsUpdateConfig(ctx context.Context, data AdminSlotsUpdateConfigRequest) (*AdminSlotsUpdateConfigResponseWrapper, *httpinfra.HTTPError)
 
-	AdaptAdminSlotsUpdatePin(ctx context.Context, data AdminSlotsUpdatePinRequest) (*AdminSlotsUpdatePinResponseWrapper, *httpinfra.HTTPError)
+	AdaptAdminSlotsUpdatePinSource(ctx context.Context, data AdminSlotsUpdatePinSourceRequest) (*AdminSlotsUpdatePinSourceResponseWrapper, *httpinfra.HTTPError)
+
+	AdaptAdminSlotsVerifyPinSource(ctx context.Context, data AdminSlotsVerifyPinSourceRequest) (*AdminSlotsVerifyPinSourceResponseWrapper, *httpinfra.HTTPError)
 
 	AdaptAdminUsersCreate(ctx context.Context, data AdminUsersCreateRequest) (*AdminUsersCreateResponseWrapper, *httpinfra.HTTPError)
 
@@ -1513,23 +1518,23 @@ func (handler DefaultAdminAPIHTTPHandler) HandleHTTPAdminSlotsUpdateConfig(w htt
 	handler.responseHandler.HandleSuccessResponse(ctx, w, response.ResponseInfo, response.SlotDetail)
 }
 
-// AdminSlotsUpdatePinSupportedParams AdminSlotsUpdatePin supported parameters
-type AdminSlotsUpdatePinSupportedParams struct {
+// AdminSlotsUpdatePinSourceSupportedParams AdminSlotsUpdatePinSource supported parameters
+type AdminSlotsUpdatePinSourceSupportedParams struct {
 	params map[string]bool
 }
 
-// NewAdminSlotsUpdatePinSupportedParams returns a new AdminSlotsUpdatePinSupportedParams
-func NewAdminSlotsUpdatePinSupportedParams() AdminSlotsUpdatePinSupportedParams {
+// NewAdminSlotsUpdatePinSourceSupportedParams returns a new AdminSlotsUpdatePinSourceSupportedParams
+func NewAdminSlotsUpdatePinSourceSupportedParams() AdminSlotsUpdatePinSourceSupportedParams {
 	params := make(map[string]bool)
 	params["moduleId"] = true
 	params["slotId"] = true
-	params["SlotUpdatePin"] = true
-	return AdminSlotsUpdatePinSupportedParams{
+	params["SlotUpdatePinSource"] = true
+	return AdminSlotsUpdatePinSourceSupportedParams{
 		params: params,
 	}
 }
 
-func (sp *AdminSlotsUpdatePinSupportedParams) check(r *http.Request) *httpinfra.HTTPError {
+func (sp *AdminSlotsUpdatePinSourceSupportedParams) check(r *http.Request) *httpinfra.HTTPError {
 	unsupportedParams := make([]string, 0)
 	queryParams := r.URL.Query()
 	for param := range queryParams {
@@ -1545,13 +1550,13 @@ func (sp *AdminSlotsUpdatePinSupportedParams) check(r *http.Request) *httpinfra.
 	return nil
 }
 
-// HandleHTTPAdminSlotsUpdatePin handles AdminSlotsUpdatePin request
-func (handler DefaultAdminAPIHTTPHandler) HandleHTTPAdminSlotsUpdatePin(w http.ResponseWriter, r *http.Request) {
+// HandleHTTPAdminSlotsUpdatePinSource handles AdminSlotsUpdatePinSource request
+func (handler DefaultAdminAPIHTTPHandler) HandleHTTPAdminSlotsUpdatePinSource(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	params := mux.Vars(r)
 
 	// Parameters supported check
-	supportedParams := NewAdminSlotsUpdatePinSupportedParams()
+	supportedParams := NewAdminSlotsUpdatePinSourceSupportedParams()
 	supportedParamsErr := supportedParams.check(r)
 	if supportedParamsErr != nil {
 		handler.responseHandler.HandleErrorResponse(ctx, w, supportedParamsErr)
@@ -1571,35 +1576,112 @@ func (handler DefaultAdminAPIHTTPHandler) HandleHTTPAdminSlotsUpdatePin(w http.R
 	// Data retrieval
 	// Conversions
 	// Request body processing
-	slotUpdatePinValue := SlotUpdatePin{}
-	errDecoder := json.NewDecoder(r.Body).Decode(&slotUpdatePinValue)
+	slotUpdatePinSourceValue := SlotUpdatePinSource{}
+	errDecoder := json.NewDecoder(r.Body).Decode(&slotUpdatePinSourceValue)
 	if errDecoder != nil {
 		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
 		httpError.SetMessage(fmt.Sprintf("an error occurred when parsing the JSON request data [%s]: [%s]", r.Body, errDecoder.Error()))
 		handler.responseHandler.HandleErrorResponse(ctx, w, httpError)
 		return
 	}
-	slotUpdatePinValidationResult, slotUpdatePinValidationErr := slotUpdatePinValue.ValidateWith()
+	slotUpdatePinSourceValidationResult, slotUpdatePinSourceValidationErr := slotUpdatePinSourceValue.ValidateWith()
 
-	if slotUpdatePinValidationErr != nil {
-		handler.responseHandler.HandleErrorResponse(ctx, w, slotUpdatePinValidationErr)
+	if slotUpdatePinSourceValidationErr != nil {
+		handler.responseHandler.HandleErrorResponse(ctx, w, slotUpdatePinSourceValidationErr)
 		return
 	}
 
-	if !slotUpdatePinValidationResult.Valid {
+	if !slotUpdatePinSourceValidationResult.Valid {
 		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
-		httpError.SetMessage(fmt.Sprintf("an error occurred when validating the JSON request data [%s]: [%s]", r.Body, slotUpdatePinValidationResult.NotValidReason))
+		httpError.SetMessage(fmt.Sprintf("an error occurred when validating the JSON request data [%s]: [%s]", r.Body, slotUpdatePinSourceValidationResult.NotValidReason))
 		handler.responseHandler.HandleErrorResponse(ctx, w, httpError)
 		return
 	}
 
-	slotUpdatePinValue.SetDefaults()
-	reqData := AdminSlotsUpdatePinRequest{}
+	slotUpdatePinSourceValue.SetDefaults()
+	reqData := AdminSlotsUpdatePinSourceRequest{}
 	reqData.ModuleId = moduleIdValue
 	reqData.SlotId = slotIdValue
-	reqData.SlotUpdatePin = slotUpdatePinValue
+	reqData.SlotUpdatePinSource = slotUpdatePinSourceValue
 
-	response, adaptError := handler.adapter.AdaptAdminSlotsUpdatePin(ctx, reqData)
+	response, adaptError := handler.adapter.AdaptAdminSlotsUpdatePinSource(ctx, reqData)
+	if adaptError != nil {
+		handler.responseHandler.HandleErrorResponse(ctx, w, adaptError)
+		return
+	}
+
+	responseValidationResult, responseValidationErr := response.SlotDetail.ValidateWith()
+
+	if responseValidationErr != nil || !responseValidationResult.Valid {
+		logger.LogEntry(ctx).Errorf("error validating response [%+v]", response)
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+		httpError.SetMessage("the response was not successfully validated")
+		handler.responseHandler.HandleErrorResponse(ctx, w, httpError)
+		return
+	}
+
+	handler.responseHandler.HandleSuccessResponse(ctx, w, response.ResponseInfo, response.SlotDetail)
+}
+
+// AdminSlotsVerifyPinSourceSupportedParams AdminSlotsVerifyPinSource supported parameters
+type AdminSlotsVerifyPinSourceSupportedParams struct {
+	params map[string]bool
+}
+
+// NewAdminSlotsVerifyPinSourceSupportedParams returns a new AdminSlotsVerifyPinSourceSupportedParams
+func NewAdminSlotsVerifyPinSourceSupportedParams() AdminSlotsVerifyPinSourceSupportedParams {
+	params := make(map[string]bool)
+	params["moduleId"] = true
+	params["slotId"] = true
+	return AdminSlotsVerifyPinSourceSupportedParams{
+		params: params,
+	}
+}
+
+func (sp *AdminSlotsVerifyPinSourceSupportedParams) check(r *http.Request) *httpinfra.HTTPError {
+	unsupportedParams := make([]string, 0)
+	queryParams := r.URL.Query()
+	for param := range queryParams {
+		if !sp.params[param] {
+			unsupportedParams = append(unsupportedParams, param)
+		}
+	}
+	if len(unsupportedParams) > 0 {
+		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
+		httpError.SetMessage(fmt.Sprintf("Unsupported parameters in request [%s]", strings.Join(unsupportedParams, ",")))
+		return httpError
+	}
+	return nil
+}
+
+// HandleHTTPAdminSlotsVerifyPinSource handles AdminSlotsVerifyPinSource request
+func (handler DefaultAdminAPIHTTPHandler) HandleHTTPAdminSlotsVerifyPinSource(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	params := mux.Vars(r)
+
+	// Parameters supported check
+	supportedParams := NewAdminSlotsVerifyPinSourceSupportedParams()
+	supportedParamsErr := supportedParams.check(r)
+	if supportedParamsErr != nil {
+		handler.responseHandler.HandleErrorResponse(ctx, w, supportedParamsErr)
+		return
+	}
+
+	// Data retrieval
+	moduleIdRawValue := params["moduleId"]
+	// Conversions
+
+	moduleIdValue := moduleIdRawValue
+	// Data retrieval
+	slotIdRawValue := params["slotId"]
+	// Conversions
+
+	slotIdValue := slotIdRawValue
+	reqData := AdminSlotsVerifyPinSourceRequest{}
+	reqData.ModuleId = moduleIdValue
+	reqData.SlotId = slotIdValue
+
+	response, adaptError := handler.adapter.AdaptAdminSlotsVerifyPinSource(ctx, reqData)
 	if adaptError != nil {
 		handler.responseHandler.HandleErrorResponse(ctx, w, adaptError)
 		return

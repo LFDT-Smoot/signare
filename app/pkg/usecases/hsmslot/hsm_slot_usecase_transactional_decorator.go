@@ -27,14 +27,24 @@ func (_d *DefaultUseCaseTransactionalDecorator) GetHSMSlot(ctx context.Context, 
 	return returnValue.(*GetHSMSlotOutput), nil
 }
 
-// EditPin implements DefaultUseCase's EditPin to be a transactional operation.
-func (_d *DefaultUseCaseTransactionalDecorator) EditPin(ctx context.Context, input EditPinInput) (*EditPinOutput, error) {
-	returnValue, failure := _d.transactionalManager.ExecuteInTransaction(ctx, _d.editPinInternal(ctx, input))
+// EditPinSource implements DefaultUseCase's EditPinSource to be a transactional operation.
+func (_d *DefaultUseCaseTransactionalDecorator) EditPinSource(ctx context.Context, input EditPinSourceInput) (*EditPinSourceOutput, error) {
+	returnValue, failure := _d.transactionalManager.ExecuteInTransaction(ctx, _d.editPinSourceInternal(ctx, input))
 	if failure != nil {
 		return nil, failure
 	}
 
-	return returnValue.(*EditPinOutput), nil
+	return returnValue.(*EditPinSourceOutput), nil
+}
+
+// VerifyPinSource implements DefaultUseCase's VerifyPinSource to be a transactional operation.
+func (_d *DefaultUseCaseTransactionalDecorator) VerifyPinSource(ctx context.Context, input VerifyPinSourceInput) (*VerifyPinSourceOutput, error) {
+	returnValue, failure := _d.transactionalManager.ExecuteInTransaction(ctx, _d.verifyPinSourceInternal(ctx, input))
+	if failure != nil {
+		return nil, failure
+	}
+
+	return returnValue.(*VerifyPinSourceOutput), nil
 }
 
 func (_d *DefaultUseCaseTransactionalDecorator) EditConfig(ctx context.Context, input EditConfigInput) (*EditConfigOutput, error) {
@@ -88,9 +98,15 @@ func (_d *DefaultUseCaseTransactionalDecorator) getHSMSlotInternal(_ context.Con
 	}
 }
 
-func (_d *DefaultUseCaseTransactionalDecorator) editPinInternal(_ context.Context, input EditPinInput) func(context.Context) (interface{}, error) {
+func (_d *DefaultUseCaseTransactionalDecorator) editPinSourceInternal(_ context.Context, input EditPinSourceInput) func(context.Context) (interface{}, error) {
 	return func(ctx2 context.Context) (interface{}, error) {
-		return _d.DefaultUseCase.EditPin(ctx2, input)
+		return _d.DefaultUseCase.EditPinSource(ctx2, input)
+	}
+}
+
+func (_d *DefaultUseCaseTransactionalDecorator) verifyPinSourceInternal(_ context.Context, input VerifyPinSourceInput) func(context.Context) (interface{}, error) {
+	return func(ctx2 context.Context) (interface{}, error) {
+		return _d.DefaultUseCase.VerifyPinSource(ctx2, input)
 	}
 }
 

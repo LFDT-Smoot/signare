@@ -9,20 +9,22 @@ properties:
     nullable: true
     additionalProperties: false
     properties:
-      pin:
+      pinSource:
         type: string
         x-required: mandatory
         nullable: false
         description: |
-          PIN that provides access to the slot number inside the HSM.
+          Name of the secret holding the PIN that provides access to the slot number inside the HSM.
+          A single name, with no path separators, resolved under the directory configured in
+          hsmmodules.softhsm.pinSourceDirectory. The PIN itself is never sent to or stored by Signare.
     required:
-      - pin
+      - pinSource
 
 example:
   meta:
     resourceVersion: '7e032829-249d-4498-aa3e-344a16cd6a93'
   spec:
-    pin: '698'
+    pinSource: 'slot-1-pin'
 
 required:
   - meta

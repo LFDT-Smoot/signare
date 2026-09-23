@@ -163,7 +163,8 @@ func (u *DefaultUserUseCase) DeleteAllAccountsForAddress(ctx context.Context, in
 		removeAddressInput := hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       hsmConnection.Slot.Slot,
-				Pin:        hsmConnection.Slot.Pin,
+				PinSource:  hsmConnection.Slot.PinSource,
+				LegacyPin:  hsmConnection.Slot.Pin,
 				ModuleKind: hsmConnection.ModuleKind,
 			},
 			Address: input.Address,
