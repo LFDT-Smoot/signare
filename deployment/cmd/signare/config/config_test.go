@@ -187,8 +187,8 @@ func TestInsecureListenAddressWarningsNonLiteralAddresses(t *testing.T) {
 		{name: "whitespace only warns, it is the empty address", listenAddress: "   ", wantWarn: true},
 		{name: "another name warns, it is not resolved", listenAddress: "signare.internal", wantWarn: true},
 		{name: "a loopback name that is not localhost warns", listenAddress: "localhost.localdomain", wantWarn: true},
-		{name: "a zoned literal warns, net.ParseIP rejects the zone", listenAddress: "fe80::1%eth0", wantWarn: true},
-		{name: "an octal-looking literal warns, net.ParseIP rejects it", listenAddress: "0177.0.0.1", wantWarn: true},
+		{name: "a zoned link-local literal warns, it is routable", listenAddress: "fe80::1%eth0", wantWarn: true},
+		{name: "an octal-looking literal warns, it is not a valid address", listenAddress: "0177.0.0.1", wantWarn: true},
 		{name: "a host:port value warns, it is not an address", listenAddress: "127.0.0.1:32325", wantWarn: true},
 	}
 
@@ -199,6 +199,63 @@ func TestInsecureListenAddressWarningsNonLiteralAddresses(t *testing.T) {
 				t.Fatalf("InsecureListenAddressWarnings(%q) = %v, wantWarn = %v", tt.listenAddress, warnings, tt.wantWarn)
 			}
 		})
+	}
+}
+
+func TestListenAddressHost(t *testing.T) {
+	tests := []struct {
+		name          string
+		listenAddress string
+		want          string
+	}{
+		{name: "a bare IPv4 literal is unchanged", listenAddress: "127.0.0.1", want: "127.0.0.1"},
+		{name: "a bare IPv6 literal is unchanged", listenAddress: "::1", want: "::1"},
+		{name: "a bracketed IPv6 literal is unwrapped", listenAddress: "[::1]", want: "::1"},
+		{name: "bracketed unspecified is unwrapped", listenAddress: "[::]", want: "::"},
+		{name: "a bracketed zoned literal is unwrapped", listenAddress: "[fe80::1%eth0]", want: "fe80::1%eth0"},
+		{name: "whitespace is trimmed", listenAddress: "  127.0.0.1  ", want: "127.0.0.1"},
+		{name: "whitespace around brackets is trimmed", listenAddress: "  [::1]  ", want: "::1"},
+		{name: "a name is unchanged", listenAddress: "localhost", want: "localhost"},
+		{name: "the empty address is unchanged", listenAddress: "", want: ""},
+		// Brackets come off only when what is inside them is an address. These are left alone, so the
+		// warning check and the listener both reject them instead of one of them guessing.
+		{name: "a doubled bracket is not unwrapped", listenAddress: "[[::1]]", want: "[[::1]]"},
+		{name: "brackets round a name are not unwrapped", listenAddress: "[signare.internal]", want: "[signare.internal]"},
+		{name: "an unmatched leading bracket is untouched", listenAddress: "[::1", want: "[::1"},
+		{name: "an unmatched trailing bracket is untouched", listenAddress: "::1]", want: "::1]"},
+		{name: "a lone bracket is untouched", listenAddress: "[", want: "["},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ListenAddressHost(tt.listenAddress)
+			if got != tt.want {
+				t.Fatalf("ListenAddressHost(%q) = %q, want %q", tt.listenAddress, got, tt.want)
+			}
+			// Both the listener and the warning check call this, the second of them on a value the
+			// first already normalised, so a second pass must not change the answer again.
+			if again := ListenAddressHost(got); again != got {
+				t.Errorf("ListenAddressHost is not idempotent: %q then %q", got, again)
+			}
+		})
+	}
+}
+
+// TestInsecureListenAddressWarningsBracketedLoopback guards the regression this check had: a
+// bracketed IPv6 loopback binds loopback, and has to be recognised as such rather than warned about.
+func TestInsecureListenAddressWarningsBracketedLoopback(t *testing.T) {
+	silent := []string{"::1", "[::1]", "  [::1]  ", "[::ffff:127.0.0.1]", "[::1%lo0]"}
+	for _, listenAddress := range silent {
+		if warnings := InsecureListenAddressWarnings(listenAddress); len(warnings) > 0 {
+			t.Errorf("InsecureListenAddressWarnings(%q) = %v, want no warning: it binds loopback", listenAddress, warnings)
+		}
+	}
+
+	warned := []string{"[::]", "[2001:db8::1]", "[fe80::1%eth0]"}
+	for _, listenAddress := range warned {
+		if warnings := InsecureListenAddressWarnings(listenAddress); len(warnings) == 0 {
+			t.Errorf("InsecureListenAddressWarnings(%q) = no warning, want one: it is not loopback", listenAddress)
+		}
 	}
 }
 
@@ -238,9 +295,10 @@ func TestInsecureListenAddressWarningsNameTheExposure(t *testing.T) {
 }
 
 // TestInsecureListenAddressWarningsMatchLoopback checks the warn decision for every IP literal against
-// an oracle built without net.ParseIP, which is what the check itself parses with. The corpus is
-// addresses constructed from their bytes and rendered with String(), so the string-handling path is
-// what is under test while the expectation comes from the bytes.
+// a second implementation. The check classifies with net/netip; the expectation here comes from net.IP
+// over addresses constructed from their bytes and rendered with String(), so neither the parser nor
+// the loopback predicate is shared with the code under test. A wrong idea of what loopback means has
+// to be wrong in both packages to pass.
 func TestInsecureListenAddressWarningsMatchLoopback(t *testing.T) {
 	var corpus []net.IP
 	// Sweep the first octet across the 127/8 boundary, then the rest of 127/8, which is loopback in

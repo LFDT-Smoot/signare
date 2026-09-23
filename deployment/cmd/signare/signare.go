@@ -130,9 +130,10 @@ func checkRequiredFlags(cmd *cobra.Command, _ []string) error {
 func startServer(_ *cobra.Command, _ []string) {
 	ctxMainWithCancellation, mainCancel := context.WithCancel(context.Background())
 
-	// Trimmed once, here, so the safety check and the listeners judge the same string. An untrimmed
-	// value reaches net.Listen as a hostname and fails the lookup.
-	listenAddress := strings.TrimSpace(viper.GetString(flags.ListenAddressFlag))
+	// Normalised once, here, so the safety check and all three listeners judge the same string. An
+	// untrimmed value reaches net.Listen as a hostname and fails the lookup, and a bracketed IPv6
+	// literal would be bracketed a second time by listenerAddress.
+	listenAddress := config.ListenAddressHost(viper.GetString(flags.ListenAddressFlag))
 
 	staticConfigPath := viper.GetString(flags.SignareConfigPathFlag)
 	if staticConfigPath == "" {
@@ -224,8 +225,9 @@ func startServer(_ *cobra.Command, _ []string) {
 // honoured by two of them and not the third.
 //
 // net.JoinHostPort, not a "%s:%d", because an IPv6 host has to be bracketed: "::1" would otherwise
-// yield "::1:32325", which net.Listen rejects as having too many colons. The bind-address check treats
-// every loopback literal as safe, IPv6 included, so the two have to agree on what an address is.
+// yield "::1:32325", which net.Listen rejects as having too many colons. JoinHostPort brackets any
+// host containing a colon without checking for brackets already there, so host must have come through
+// config.ListenAddressHost, which is where a bracketed literal is unwrapped.
 func listenerAddress(host string, port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))
 }

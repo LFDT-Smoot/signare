@@ -46,6 +46,7 @@ func TestListenerAddress(t *testing.T) {
 		{name: "a name keeps the host", host: "localhost", port: defaultPrometheusPort, want: "localhost:9785"},
 		{name: "any other address keeps the host", host: "10.0.0.5", port: defaultHTTPPort, want: "10.0.0.5:32325"},
 		{name: "IPv6 loopback is bracketed", host: "::1", port: defaultHTTPPort, want: "[::1]:32325"},
+		{name: "a zoned literal is bracketed", host: "fe80::1%eth0", port: defaultHTTPPort, want: "[fe80::1%eth0]:32325"},
 		{name: "IPv6 bind-all is bracketed", host: "::", port: defaultRPCPort, want: "[::]:4545"},
 		{name: "an IPv4-mapped IPv6 literal is bracketed", host: "::ffff:127.0.0.1", port: defaultHTTPPort, want: "[::ffff:127.0.0.1]:32325"},
 		{name: "an empty host binds every interface", host: "", port: defaultHTTPPort, want: ":32325"},
@@ -70,6 +71,48 @@ func TestListenerAddress(t *testing.T) {
 			}
 			if gotPort != strconv.Itoa(tt.port) {
 				t.Errorf("port round trip: net.SplitHostPort(%q) port = %q, want %d", got, gotPort, tt.port)
+			}
+		})
+	}
+}
+
+// TestConfiguredListenAddressReachesTheListener runs the spellings an operator might plausibly write
+// through the path startServer uses, config.ListenAddressHost then listenerAddress, and requires that
+// each one both parses as a bind address and is vetted as the address it actually binds.
+//
+// These two were separated before: the listener bracketed whatever it was handed, so "[::1]" arrived
+// double-bracketed and unbindable, while the check could not parse the brackets either and warned that
+// a loopback bind could not be confirmed. Neither was visible from a test of either half alone.
+func TestConfiguredListenAddressReachesTheListener(t *testing.T) {
+	tests := []struct {
+		configured string
+		wantWarn   bool
+	}{
+		{configured: "127.0.0.1", wantWarn: false},
+		{configured: "  127.0.0.1  ", wantWarn: false},
+		{configured: "localhost", wantWarn: false},
+		{configured: "::1", wantWarn: false},
+		{configured: "[::1]", wantWarn: false},
+		{configured: "[::ffff:127.0.0.1]", wantWarn: false},
+		{configured: "0.0.0.0", wantWarn: true},
+		{configured: "::", wantWarn: true},
+		{configured: "[::]", wantWarn: true},
+		{configured: "", wantWarn: true},
+		{configured: "10.0.0.5", wantWarn: true},
+		{configured: "[2001:db8::1]", wantWarn: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.configured, func(t *testing.T) {
+			host := config.ListenAddressHost(tt.configured)
+
+			addr := listenerAddress(host, defaultHTTPPort)
+			if _, _, err := net.SplitHostPort(addr); err != nil {
+				t.Errorf("--listen-address %q builds %q, which net.Listen rejects: %v", tt.configured, addr, err)
+			}
+
+			if gotWarn := len(config.InsecureListenAddressWarnings(host)) > 0; gotWarn != tt.wantWarn {
+				t.Errorf("--listen-address %q: warned = %v, want %v", tt.configured, gotWarn, tt.wantWarn)
 			}
 		})
 	}

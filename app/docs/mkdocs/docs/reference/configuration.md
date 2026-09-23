@@ -58,9 +58,10 @@ server:
       placeholder is intentionally invalid.
     - `info` is the recommended log level. `debug` can emit internal stack traces.
     - Leave `--listen-address` at `127.0.0.1` unless a proxy, sidecar or mesh policy is the only route
-      to the address you widen it to. Signare authenticates no one: it trusts the `X-Auth-*` headers,
-      so a reachable listener is an unauthenticated one. Signare logs a startup warning when the bind
-      address is not loopback. See the [deployment requirements](./security.md#deployment-requirements){:target="_blank"}.
+      to the address you widen it to. Signare authenticates no one: it trusts the identity headers
+      named by `requestContext` below, so a reachable listener is an unauthenticated one. Signare logs
+      a startup warning when the bind address is not loopback. See the
+      [deployment requirements](./security.md#deployment-requirements){:target="_blank"}.
 
 !!! info "Supplying configuration via the environment"
 

@@ -3,7 +3,7 @@ package config
 
 import (
 	"fmt"
-	"net"
+	"net/netip"
 	"strings"
 
 	"github.com/asaskevich/govalidator"
@@ -114,6 +114,31 @@ func (c *StaticConfiguration) InsecureSettingsWarnings() []string {
 // lookup at startup, whose answer can change under the process, so a name is never assumed safe.
 const loopbackHostname = "localhost"
 
+// ListenAddressHost returns the host a configured bind address names: whitespace trimmed, and one pair
+// of surrounding brackets removed from an IPv6 literal. An operator may reasonably write either "::1"
+// or "[::1]", and net.JoinHostPort brackets whatever it is handed, so the bracketed form has to be
+// unwrapped once or it reaches the listener double-bracketed and unbindable.
+//
+// Both the listener and InsecureListenAddressWarnings judge this value, so the address they bind and
+// the address they vet cannot diverge. It is idempotent.
+func ListenAddressHost(listenAddress string) string {
+	host := strings.TrimSpace(listenAddress)
+	// Unwrapped only when unwrapping yields an address. That keeps this idempotent, since the result
+	// never has brackets left to strip, and it leaves a malformed value such as "[[::1]]" alone so the
+	// warning check and the listener both reject it rather than one of them guessing at it.
+	if len(host) > 1 && strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		if inner := host[1 : len(host)-1]; isIPLiteral(inner) {
+			host = inner
+		}
+	}
+	return host
+}
+
+func isIPLiteral(host string) bool {
+	_, err := netip.ParseAddr(host)
+	return err == nil
+}
+
 // InsecureListenAddressWarnings returns human-readable warnings for a bind address that puts Signare
 // within reach of anything but the local host. It performs no logging so the caller controls how the
 // warnings are surfaced.
@@ -127,25 +152,28 @@ const loopbackHostname = "localhost"
 // command-line flag, and because only the serving command may call it: the upgrade command runs
 // migrations and exits without opening a listener.
 func InsecureListenAddressWarnings(listenAddress string) []string {
-	host := strings.TrimSpace(listenAddress)
+	host := ListenAddressHost(listenAddress)
 	if strings.EqualFold(host, loopbackHostname) {
 		return nil
 	}
 
+	// netip rather than net.ParseIP, so a zoned literal such as "fe80::1%eth0" is classified on its
+	// address bits instead of falling through unparsed. The listener accepts a zone, so the check has
+	// to understand one.
 	var exposure string
-	switch ip := net.ParseIP(host); {
-	case ip != nil && ip.IsLoopback():
+	switch addr, err := netip.ParseAddr(host); {
+	case err == nil && addr.IsLoopback():
 		return nil
-	case host == "", ip != nil && ip.IsUnspecified():
+	case host == "", err == nil && addr.IsUnspecified():
 		// The empty string and the unspecified addresses ("0.0.0.0", "::") all bind every interface.
 		exposure = "binds every network interface"
-	case ip != nil:
+	case err == nil:
 		exposure = "is reachable from every host that can route to it"
 	default:
 		exposure = "cannot be confirmed to be loopback"
 	}
 
-	return []string{fmt.Sprintf("--listen-address is set to %q, which %s. Signare does not authenticate callers: it reads the caller's identity from the X-Auth-* request headers and trusts it, so anything that can reach the listener can act as any user, including the signer administrator. Bind a loopback address (127.0.0.1) and front Signare with a proxy that authenticates the caller, sets those headers from the verified identity, and strips any the client sent.", listenAddress, exposure)}
+	return []string{fmt.Sprintf("--listen-address is set to %q, which %s. Signare does not authenticate callers: it reads the caller's identity from the request headers named by requestContext (X-Auth-UserId and X-Auth-ApplicationId by default) and trusts it, so anything that can reach the listener can act as any user, including the signer administrator. Bind a loopback address (127.0.0.1) and front Signare with a proxy that authenticates the caller, sets those headers from the verified identity, and strips whatever the client sent for them.", listenAddress, exposure)}
 }
 
 // Logger specification
