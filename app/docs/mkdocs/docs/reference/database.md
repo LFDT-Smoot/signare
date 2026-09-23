@@ -35,13 +35,46 @@ The application does not store HSM slot PINs. A slot records the name of the fil
 
 The `pin` column of `cfg_hardware_security_module_slot` has been dropped.
 
-**Every slot must resolve its PIN from a source before upgrading to this release.** There is no fallback: a slot with no `pinSource` fails every signing request until one is set, and Signare cannot recover the PIN for you. Migration `000005` refuses the upgrade while any slot still holds a stored PIN and names no source, so a deployment that has not moved its slots fails the upgrade instead of losing the credential.
+**Every slot must resolve its PIN from a source before upgrading to this release.** There is no fallback: a slot with no `pinSource` fails every signing request until one is set, and Signare cannot recover the PIN for you. Migration `000005` checks this before it drops anything, so a deployment that has not moved its slots fails the upgrade instead of losing the credential.
 
-If the upgrade is refused:
+Only PKCS#11 (SoftHSM) slots are checked. An AKV or Local Key Vault slot never authenticated with this column, so a stray value on one is discarded rather than treated as a credential.
 
-1. For each slot the error names, write its PIN into the configured `pinSourceDirectory` and point the slot at the file with `admin.slots.updatePinSource`, running the previous release.
-2. Clear the dirty flag the aborted migration left behind: `UPDATE signare_migrations SET dirty = false WHERE version = 5`. `signare upgrade` refuses to run while a version is marked dirty.
-3. Run `signare upgrade` again.
+If the upgrade is refused, recover with SQL rather than through the API. The API route needs a release that already has `admin.slots.updatePinSource`, which the release you are upgrading from may not have:
+
+1. List the slots still holding a PIN. **This prints the PINs to your terminal**, so do it on a trusted console and clear the scrollback afterwards:
+
+    ```sql
+    SELECT s.id, s.pin
+    FROM cfg_hardware_security_module_slot s
+    JOIN cfg_hardware_security_module m ON m.id = s.hardware_security_module_id
+    WHERE m.kind = 'SoftHSM' AND s.pin IS NOT NULL AND s.pin <> '' AND s.pin_source = '';
+    ```
+
+2. For each one, write that PIN into a file in the configured `pinSourceDirectory`, owned by the user Signare runs as and created with mode `0400`, then name the file on the slot:
+
+    ```sql
+    UPDATE cfg_hardware_security_module_slot SET pin_source = '<file name>' WHERE id = '<slot id>';
+    ```
+
+3. Reset the migration version, not just the dirty flag:
+
+    ```sql
+    UPDATE signare_migrations SET version = 4, dirty = false;
+    ```
+
+    `signare upgrade` refuses to run while a version is marked dirty. Clearing only the flag leaves the version at 5, and the upgrade then treats step 5 as already applied: it logs `nothing to migrate` and **exits successfully without dropping the column**. Resetting the version to 4 is what re-runs the step.
+
+4. Run `signare upgrade` again.
+5. Confirm the column is gone. This is the check that distinguishes a real upgrade from the `nothing to migrate` case above, which reports success either way:
+
+    ```sql
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'cfg_hardware_security_module_slot' AND column_name = 'pin';
+    ```
+
+    It must return no rows.
+
+6. Run `admin.slots.verifyPinSource` on each slot you fixed by SQL. Setting `pin_source` directly skips the check against the HSM that the admin API performs, so this is where a wrong file name or a wrong PIN surfaces.
 
 **Any PIN written before the column was dropped must be rotated on the token.** Dropping a column in PostgreSQL only updates the catalog, so the value stays in the existing heap tuples until those rows are rewritten; `VACUUM FULL cfg_hardware_security_module_slot` or `pg_repack` does that. Even then the value survives in WAL archives and in every backup taken while it was stored, which is why rotation on the token, not this migration, is what actually retires a PIN.
 
