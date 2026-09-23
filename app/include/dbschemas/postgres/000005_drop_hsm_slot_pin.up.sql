@@ -6,22 +6,24 @@
 -- run N+1. A guard in its own step is therefore disarmed by the obvious recovery. Here there is no step
 -- to skip: reaching the DROP means the guard passed in the same execution.
 --
--- The whole body is idempotent and re-runnable. If the column is already gone, because a previous run
--- dropped it but failed before recording the version, this returns without touching anything, so the
--- documented recovery cannot loop.
+-- The body is idempotent: if the column is already gone, because an earlier run dropped it but failed
+-- before recording the version, this returns without touching anything, so the recovery cannot loop.
 --
--- Only a PKCS#11 slot is blocked. An AKV or Local Key Vault slot never authenticated with this column,
--- and before pin sources existed slot creation bound it for every module kind, so such a slot can hold
--- a stray value that is not a credential for anything. Blocking on those would refuse the upgrade and
--- send the operator to set a pinSource the API rejects for that module kind.
+-- Only a PKCS#11 slot is blocked. AKV and Local Key Vault never authenticated with this column, and
+-- creation bound it for every module kind before pin sources existed, so such a slot can hold a stray
+-- value that is not a credential. Blocking on those would refuse the upgrade and send the operator to
+-- set a pinSource the API rejects for that module kind.
 --
--- 's.pin <> \'\'' is load-bearing for the same reason: creation always bound the column, so a slot that
--- never had a PIN holds an empty string rather than NULL.
+-- 's.pin <> \'\'' is defence rather than the kind filter's job: creation always bound the column, so a
+-- row that never had a PIN holds an empty string, not NULL. The API cannot leave a SoftHSM slot in that
+-- shape, since creation verified the PIN against the token, but SQL can.
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'cfg_hardware_security_module_slot' AND column_name = 'pin'
+    WHERE table_schema = current_schema()
+      AND table_name = 'cfg_hardware_security_module_slot'
+      AND column_name = 'pin'
   ) THEN
     RETURN;
   END IF;
