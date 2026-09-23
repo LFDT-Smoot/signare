@@ -123,11 +123,13 @@ const loopbackHostname = "localhost"
 // the address they vet cannot diverge. It is idempotent.
 func ListenAddressHost(listenAddress string) string {
 	host := strings.TrimSpace(listenAddress)
-	// Unwrapped only when unwrapping yields an address. That keeps this idempotent, since the result
-	// never has brackets left to strip, and it leaves a malformed value such as "[[::1]]" alone so the
-	// warning check and the listener both reject it rather than one of them guessing at it.
+	// Unwrapped only when unwrapping yields an address, or nothing at all: net.Listen reads "[]:port"
+	// as a bind-everything address, so "[]" has to reach the check as the empty host it is. That keeps
+	// this idempotent, since the result never has brackets left to strip, and it leaves a malformed
+	// value such as "[[::1]]" alone so the warning check and the listener both reject it rather than
+	// one of them guessing at it.
 	if len(host) > 1 && strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
-		if inner := host[1 : len(host)-1]; isIPLiteral(inner) {
+		if inner := host[1 : len(host)-1]; inner == "" || isIPLiteral(inner) {
 			host = inner
 		}
 	}
@@ -153,7 +155,9 @@ func isIPLiteral(host string) bool {
 // migrations and exits without opening a listener.
 func InsecureListenAddressWarnings(listenAddress string) []string {
 	host := ListenAddressHost(listenAddress)
-	if strings.EqualFold(host, loopbackHostname) {
+	// ToLower rather than EqualFold: EqualFold applies Unicode simple folding, under which the long s
+	// in "localhoſt" equals "localhost", and a name the resolver will reject must not read as loopback.
+	if strings.ToLower(host) == loopbackHostname {
 		return nil
 	}
 
@@ -164,8 +168,10 @@ func InsecureListenAddressWarnings(listenAddress string) []string {
 	switch addr, err := netip.ParseAddr(host); {
 	case err == nil && addr.IsLoopback():
 		return nil
-	case host == "", err == nil && addr.IsUnspecified():
+	case host == "", err == nil && addr.Unmap().IsUnspecified():
 		// The empty string and the unspecified addresses ("0.0.0.0", "::") all bind every interface.
+		// Unmap first: IsUnspecified does not unmap, so "::ffff:0.0.0.0" would otherwise read as an
+		// ordinary routable address, while net.Listen binds every interface for it.
 		exposure = "binds every network interface"
 	case err == nil:
 		exposure = "is reachable from every host that can route to it"

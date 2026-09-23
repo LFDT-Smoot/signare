@@ -181,6 +181,10 @@ func TestInsecureListenAddressWarningsNonLiteralAddresses(t *testing.T) {
 	}{
 		{name: "localhost does not warn", listenAddress: "localhost", wantWarn: false},
 		{name: "localhost is case-insensitive", listenAddress: "LocalHost", wantWarn: false},
+		// Unicode folding is not case-insensitivity: U+017F, the long s, folds to "s" but is a different
+		// name, one the resolver rejects, so it must not read as loopback. Written escaped because it
+		// is indistinguishable from "localhost" at a glance, which is the point.
+		{name: "a Unicode fold of localhost warns", listenAddress: "localho\u017ft", wantWarn: true},
 		{name: "localhost is trimmed", listenAddress: "  localhost  ", wantWarn: false},
 		{name: "a loopback literal is trimmed", listenAddress: " 127.0.0.1 ", wantWarn: false},
 		{name: "the empty address warns, it binds every interface", listenAddress: "", wantWarn: true},
@@ -217,6 +221,8 @@ func TestListenAddressHost(t *testing.T) {
 		{name: "whitespace around brackets is trimmed", listenAddress: "  [::1]  ", want: "::1"},
 		{name: "a name is unchanged", listenAddress: "localhost", want: "localhost"},
 		{name: "the empty address is unchanged", listenAddress: "", want: ""},
+		// net.Listen reads "[]:port" as bind-everything, so the empty host has to come through as one.
+		{name: "the bracketed empty host is unwrapped", listenAddress: "[]", want: ""},
 		// Brackets come off only when what is inside them is an address. These are left alone, so the
 		// warning check and the listener both reject them instead of one of them guessing.
 		{name: "a doubled bracket is not unwrapped", listenAddress: "[[::1]]", want: "[[::1]]"},
@@ -272,6 +278,10 @@ func TestInsecureListenAddressWarningsNameTheExposure(t *testing.T) {
 		{name: "unspecified IPv4", listenAddress: "0.0.0.0", wantExposure: "binds every network interface"},
 		{name: "unspecified IPv6", listenAddress: "::", wantExposure: "binds every network interface"},
 		{name: "the empty address", listenAddress: "", wantExposure: "binds every network interface"},
+		// net.Listen binds every interface for both of these, so the message has to say so. The
+		// IPv4-mapped form needs unmapping first, and the bracketed empty host needs unwrapping.
+		{name: "IPv4-mapped unspecified", listenAddress: "::ffff:0.0.0.0", wantExposure: "binds every network interface"},
+		{name: "the bracketed empty address", listenAddress: "[]", wantExposure: "binds every network interface"},
 		{name: "a private literal", listenAddress: "10.0.0.5", wantExposure: "is reachable from every host that can route to it"},
 		{name: "a documentation-range IPv6 literal", listenAddress: "2001:db8::1", wantExposure: "is reachable from every host that can route to it"},
 		{name: "a name", listenAddress: "signare.internal", wantExposure: "cannot be confirmed to be loopback"},

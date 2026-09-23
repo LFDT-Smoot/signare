@@ -98,6 +98,10 @@ func TestConfiguredListenAddressReachesTheListener(t *testing.T) {
 		{configured: "::", wantWarn: true},
 		{configured: "[::]", wantWarn: true},
 		{configured: "", wantWarn: true},
+		// Both of these bind every interface, which is why they must warn. Neither reads as
+		// unspecified without help: netip does not unmap before testing, and "[]" is not a literal.
+		{configured: "::ffff:0.0.0.0", wantWarn: true},
+		{configured: "[]", wantWarn: true},
 		{configured: "10.0.0.5", wantWarn: true},
 		{configured: "[2001:db8::1]", wantWarn: true},
 	}
