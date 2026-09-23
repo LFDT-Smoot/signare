@@ -14,9 +14,10 @@
 -- value that is not a credential. Blocking on those would refuse the upgrade and send the operator to
 -- set a pinSource the API rejects for that module kind.
 --
--- 's.pin <> \'\'' is defence rather than the kind filter's job: creation always bound the column, so a
--- row that never had a PIN holds an empty string, not NULL. The API cannot leave a SoftHSM slot in that
--- shape, since creation verified the PIN against the token, but SQL can.
+-- 's.pin <> \'\'' is what keeps this from blocking a deployment that did exactly what it was asked.
+-- Moving a slot to a source writes an empty string rather than NULL, so that the previous release can
+-- still read the column on a rollback, which means every correctly migrated slot arrives here with
+-- pin = '' and a source set. Testing only for NULL would refuse those upgrades.
 DO $$
 BEGIN
   IF NOT EXISTS (
