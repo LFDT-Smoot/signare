@@ -105,13 +105,16 @@
             resource_version=:resource_version
     </statement>
     <!-- Clears the legacy pin, so moving a slot to a source stops the old value being served. It
-         survives in backups and WAL regardless; rotate on the token. -->
+         survives in backups and WAL regardless; rotate on the token.
+         Empty string, not NULL: the previous release reads this column into a plain string, so a NULL
+         here makes every slot read fail on a binary rollback. Nothing in this release distinguishes
+         them, since the read COALESCEs and pinFor tests for a non-empty value. -->
     <statement id="updatePinSource">
         UPDATE
             cfg_hardware_security_module_slot
         SET
             pin_source=:pin_source,
-            pin=NULL,
+            pin='',
             last_update=:last_update,
             resource_version=:new_resource_version
         WHERE
