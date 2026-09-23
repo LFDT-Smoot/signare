@@ -25,6 +25,29 @@ for implementation-defined server errors. Signare defines the following ones:
 | -32604 | Bad gateway         | An upstream dependency, such as the HSM, returned a fault.  |
 | -32605 | Already exists      | The specified resource already exists.                      |
 
+### Parameter naming
+
+Every method that takes parameters accepts them either as a single object (`{...}`) or as that object
+wrapped in a one-element array (`[{...}]`). Both forms are read identically, so a request is equally
+valid either way, and field names are matched without regard to case.
+
+A parameter object that declares the same key twice is refused rather than one of the two values
+being chosen. This covers an exact repeat, `{"from": "0x..", "from": "0x.."}`, and two spellings that
+differ only in case, `{"from": "0x..", "From": "0x.."}`. It applies to every key, including one that
+matches no field of the method. It applies to the object's own keys only, so nested caller data, such
+as an EIP-712 `typedData` message, may contain members that differ only in case.
+
+!!! warning "Response to a refused request"
+    How the refusal is reported depends on where it is caught, and the two differ.
+
+    For `eth_signTransaction`, `eth_signTypedData` and `personal_sign`, the duplicate key is caught by
+    the account authorization middleware, which responds with an HTTP **400** and an empty body. There
+    is no JSON-RPC error object, so a client that only parses the response body sees nothing. This is
+    the one case where the "always responds with 200 OK" rule above does not hold.
+
+    Every other method is caught while decoding the parameters and responds as documented: HTTP 200
+    with `-32602 Invalid params` in the response body.
+
 ## Ethereum JSON RPC API supported methods
 
 ### eth_signTransaction

@@ -18,30 +18,38 @@ type GenerateAccountRequestParams struct {
 }
 
 type ImportAccountRequestParams struct {
-	// ApplicationID performing the Ethereum account import.
-	ApplicationID string
+	// ApplicationID performing the Ethereum account import. Taken from the request context, never from the body.
+	ApplicationID string `json:"-"`
 	// PrivateKey is the hexadecimal string representation of the 256-bit Ethereum account private key.
 	PrivateKey string `json:"privateKey"`
 }
 
+// UnmarshalJSON decodes the eth_importAccount params from either the positional array form ([{...}])
+// or a single object ({...}), so both forms resolve a field name the same way.
+func (p *ImportAccountRequestParams) UnmarshalJSON(data []byte) error {
+	object := paramsObject(data)
+	if object == nil {
+		return errors.New("only one object is expected")
+	}
+	// The local type sheds this method, so the decode below does not recurse.
+	type params ImportAccountRequestParams
+	var decoded params
+	if err := json.Unmarshal(object, &decoded); err != nil {
+		return err
+	}
+	*p = ImportAccountRequestParams(decoded)
+	return nil
+}
+
+// SetParamsFrom is the JSONRPCParams fallback. See SignTXRequestParams.SetParamsFrom.
 func (p *ImportAccountRequestParams) SetParamsFrom(params []any) error {
 	if len(params) != 1 {
 		return fmt.Errorf("only one object is expected")
 	}
-	paramMap, ok := params[0].(map[string]any)
-	if !ok {
+	if _, ok := params[0].(map[string]any); !ok {
 		return errors.New("a single object is expected")
 	}
-	privateKeyParam, ok := paramMap["privateKey"]
-	if !ok {
-		return errors.New("missing required field [privateKey]")
-	}
-	privateKey, ok := privateKeyParam.(string)
-	if !ok {
-		return errors.New("[privateKey] must be of type string")
-	}
-	p.PrivateKey = privateKey
-	return nil
+	return errors.New("could not decode eth_importAccount params; expected a single object with [privateKey]")
 }
 
 func (p *ImportAccountRequestParams) ValidateParams() error {
@@ -53,30 +61,38 @@ func (p *ImportAccountRequestParams) ValidateParams() error {
 
 // RemoveAccountRequestParams request definition
 type RemoveAccountRequestParams struct {
-	// ApplicationID requesting the Ethereum account removal.
-	ApplicationID string
+	// ApplicationID requesting the Ethereum account removal. Taken from the request context, never from the body.
+	ApplicationID string `json:"-"`
 	// Address is the Ethereum account to be removed.
 	Address string `json:"address"`
 }
 
+// UnmarshalJSON decodes the eth_removeAccount params from either the positional array form ([{...}])
+// or a single object ({...}), so both forms resolve a field name the same way.
+func (p *RemoveAccountRequestParams) UnmarshalJSON(data []byte) error {
+	object := paramsObject(data)
+	if object == nil {
+		return errors.New("only one object is expected")
+	}
+	// The local type sheds this method, so the decode below does not recurse.
+	type params RemoveAccountRequestParams
+	var decoded params
+	if err := json.Unmarshal(object, &decoded); err != nil {
+		return err
+	}
+	*p = RemoveAccountRequestParams(decoded)
+	return nil
+}
+
+// SetParamsFrom is the JSONRPCParams fallback. See SignTXRequestParams.SetParamsFrom.
 func (p *RemoveAccountRequestParams) SetParamsFrom(params []any) error {
 	if len(params) != 1 {
 		return fmt.Errorf("only one object is expected")
 	}
-	paramMap, ok := params[0].(map[string]any)
-	if !ok {
+	if _, ok := params[0].(map[string]any); !ok {
 		return errors.New("a single object is expected")
 	}
-	addressParam, ok := paramMap["address"]
-	if !ok {
-		return errors.New("missing required field [address]")
-	}
-	address, ok := addressParam.(string)
-	if !ok {
-		return errors.New("[address] must be of type string")
-	}
-	p.Address = address
-	return nil
+	return errors.New("could not decode eth_removeAccount params; expected a single object with [address]")
 }
 
 func (p *RemoveAccountRequestParams) ValidateParams() error {
@@ -93,7 +109,8 @@ type ListAccountsRequestParams struct {
 
 // SignTXRequestParams request definition
 type SignTXRequestParams struct {
-	ApplicationID string
+	// ApplicationID is taken from the request context, never from the body.
+	ApplicationID string `json:"-"`
 	// From address
 	From string `json:"from"`
 	// To address
@@ -136,265 +153,38 @@ type AuthorizationListParamEntry struct {
 	StorageKeys []string `json:"storageKeys"`
 }
 
+// UnmarshalJSON decodes the eth_signTransaction params from either the positional array form
+// ([{...}]) or a single object ({...}). One unwrap and one struct decode for both, so a field name
+// resolves the same way either way, and matches what authorization read.
+func (p *SignTXRequestParams) UnmarshalJSON(data []byte) error {
+	object := paramsObject(data)
+	if object == nil {
+		return errors.New("only one object is expected")
+	}
+	// The local type sheds this method, so the decode below does not recurse.
+	type params SignTXRequestParams
+	var decoded params
+	if err := json.Unmarshal(object, &decoded); err != nil {
+		return err
+	}
+	*p = SignTXRequestParams(decoded)
+	return nil
+}
+
+// SetParamsFrom is the JSONRPCParams fallback, reached only once UnmarshalJSON has rejected the
+// params. Re-reading them from a map here is what used to disagree with authorization, so it errors.
 func (p *SignTXRequestParams) SetParamsFrom(params []any) error {
 	if len(params) != 1 {
 		return fmt.Errorf("only one object is expected")
 	}
-	paramMap, ok := params[0].(map[string]any)
-	if !ok {
+	if _, ok := params[0].(map[string]any); !ok {
 		return errors.New("a single object is expected")
 	}
-
-	// Required fields
-	fromParam, ok := paramMap["from"]
-	if !ok {
-		return errors.New("missing required field [from]")
-	}
-	from, ok := fromParam.(string)
-	if !ok {
-		return errors.New("[from] must be of type string")
-	}
-	p.From = from
-
-	dataParam, ok := paramMap["data"]
-	if !ok {
-		return errors.New("missing required field [data]")
-	}
-	data, ok := dataParam.(string)
-	if !ok {
-		return errors.New("[data] must be of type string")
-	}
-	p.Data = data
-
-	nonceParam, ok := paramMap["nonce"]
-	if !ok {
-		return errors.New("missing required field [nonce]")
-	}
-	nonce, ok := nonceParam.(string)
-	if !ok {
-		return errors.New("[nonce] must be of type string")
-	}
-	p.Nonce = nonce
-
-	// Optional fields
-	var to, gas, gasPrice, value, chainID string
-
-	toParam, ok := paramMap["to"]
-	if ok {
-		to, ok = toParam.(string)
-		if !ok {
-			return errors.New("[to] must be of type string")
-		}
-		p.To = &to
-	}
-
-	gasParam, ok := paramMap["gas"]
-	if ok {
-		gas, ok = gasParam.(string)
-		if !ok {
-			return errors.New("[gas] must be of type string")
-		}
-		p.Gas = &gas
-	}
-
-	gasPriceParam, ok := paramMap["gasPrice"]
-	if ok {
-		gasPrice, ok = gasPriceParam.(string)
-		if !ok {
-			return errors.New("[gasPrice] must be of type string")
-		}
-		p.GasPrice = &gasPrice
-	}
-
-	valueParam, ok := paramMap["value"]
-	if ok {
-		value, ok = valueParam.(string)
-		if !ok {
-			return errors.New("[value] must be of type string")
-		}
-		p.Value = &value
-	}
-
-	chainIDParam, ok := paramMap["chainId"]
-	if ok {
-		chainID, ok = chainIDParam.(string)
-		if !ok {
-			return errors.New("[chainId] must be of type string")
-		}
-		p.ChainID = &chainID
-	}
-
-	// EIP-1559 fields
-	var maxFeePerGas, maxPriorityFeePerGas string
-
-	maxFeePerGasParam, ok := paramMap["maxFeePerGas"]
-	if ok {
-		maxFeePerGas, ok = maxFeePerGasParam.(string)
-		if !ok {
-			return errors.New("[maxFeePerGas] must be of type string")
-		}
-		p.MaxFeePerGas = &maxFeePerGas
-	}
-
-	maxPriorityFeePerGasParam, ok := paramMap["maxPriorityFeePerGas"]
-	if ok {
-		maxPriorityFeePerGas, ok = maxPriorityFeePerGasParam.(string)
-		if !ok {
-			return errors.New("[maxPriorityFeePerGas] must be of type string")
-		}
-		p.MaxPriorityFeePerGas = &maxPriorityFeePerGas
-	}
-
-	if p.MaxFeePerGas != nil && p.MaxPriorityFeePerGas != nil {
-		maxFee, errFee := entities.NewInt256FromString(*p.MaxFeePerGas)
-		maxPriority, errPriority := entities.NewInt256FromString(*p.MaxPriorityFeePerGas)
-		if errFee == nil && errPriority == nil {
-			if maxFee.BigInt().Cmp(maxPriority.BigInt()) < 0 {
-				return errors.New("[maxFeePerGas] must be greater than [maxPriorityFeePerGas]")
-			}
-		}
-	}
-
-	if err := p.setAccessListParam(paramMap); err != nil {
-		return err
-	}
-
-	// EIP-4844 fields
-	if err := p.setEIP4844Params(paramMap); err != nil {
-		return err
-	}
-
-	// EIP-7702 fields
-	return p.setAuthorizationListParam(paramMap)
+	return errors.New("could not decode eth_signTransaction params; expected a single object")
 }
 
-func (p *SignTXRequestParams) setAccessListParam(paramMap map[string]any) error {
-	accessListParam, ok := paramMap["accessList"]
-	if !ok {
-		return nil
-	}
-	accessListRaw, ok := accessListParam.([]interface{})
-	if !ok {
-		return errors.New("[accessList] must be an array")
-	}
-	p.AccessList = make([]AccessListParamEntry, 0, len(accessListRaw))
-	for _, entry := range accessListRaw {
-		entryMap, ok := entry.(map[string]interface{})
-		if !ok {
-			return errors.New("[accessList] entries must be objects")
-		}
-		// Validate address
-		addrParam, ok := entryMap["address"]
-		if !ok {
-			return errors.New("[accessList] entry missing required field [address]")
-		}
-		addrVal, ok := addrParam.(string)
-		if !ok {
-			return errors.New("[accessList] entry field [address] must be of type string")
-		}
-
-		// Validate storageKeys
-		keysParam, ok := entryMap["storageKeys"]
-		if !ok {
-			return errors.New("[accessList] entry missing required field [storageKeys]")
-		}
-		keysVal, ok := keysParam.([]interface{})
-		if !ok {
-			return errors.New("[accessList] entry field [storageKeys] must be an array")
-		}
-		keys := make([]string, len(keysVal))
-		for j, k := range keysVal {
-			keyStr, ok := k.(string)
-			if !ok {
-				return errors.New("[accessList] entry field [storageKeys] elements must be of type string")
-			}
-			keys[j] = keyStr
-		}
-		p.AccessList = append(p.AccessList, AccessListParamEntry{
-			Address:     addrVal,
-			StorageKeys: keys,
-		})
-	}
-	return nil
-}
-
-func (p *SignTXRequestParams) setEIP4844Params(paramMap map[string]any) error {
-	var maxFeePerBlobGas string
-
-	maxFeePerBlobGasParam, ok := paramMap["maxFeePerBlobGas"]
-	if ok {
-		maxFeePerBlobGas, ok = maxFeePerBlobGasParam.(string)
-		if !ok {
-			return errors.New("[maxFeePerBlobGas] must be of type string")
-		}
-		p.MaxFeePerBlobGas = &maxFeePerBlobGas
-	}
-
-	blobVersionedHashesParam, ok := paramMap["blobVersionedHashes"]
-	if ok {
-		blobHashesRaw, ok := blobVersionedHashesParam.([]interface{})
-		if !ok {
-			return errors.New("[blobVersionedHashes] must be an array")
-		}
-		p.BlobVersionedHashes = make([]string, 0, len(blobHashesRaw))
-		for _, h := range blobHashesRaw {
-			hashStr, ok := h.(string)
-			if !ok {
-				return errors.New("[blobVersionedHashes] entries must be of type string")
-			}
-			p.BlobVersionedHashes = append(p.BlobVersionedHashes, hashStr)
-		}
-	}
-	return nil
-}
-
-func (p *SignTXRequestParams) setAuthorizationListParam(paramMap map[string]any) error {
-	authorizationListParam, ok := paramMap["authorizationList"]
-	if !ok {
-		return nil
-	}
-	authListRaw, ok := authorizationListParam.([]interface{})
-	if !ok {
-		return errors.New("[authorizationList] must be an array")
-	}
-	p.AuthorizationList = make([]AuthorizationListParamEntry, 0, len(authListRaw))
-	for _, entry := range authListRaw {
-		entryMap, ok := entry.(map[string]interface{})
-		if !ok {
-			return errors.New("[authorizationList] entries must be objects")
-		}
-		addrRaw, ok := entryMap["address"]
-		if !ok {
-			return errors.New("[authorizationList] entries must contain [address]")
-		}
-		addrVal, ok := addrRaw.(string)
-		if !ok {
-			return errors.New("[authorizationList] entry [address] must be of type string")
-		}
-		storageKeysRaw, ok := entryMap["storageKeys"]
-		if !ok {
-			return errors.New("[authorizationList] entries must contain [storageKeys]")
-		}
-		keysVal, ok := storageKeysRaw.([]interface{})
-		if !ok {
-			return errors.New("[authorizationList] entry [storageKeys] must be an array")
-		}
-		keys := make([]string, len(keysVal))
-		for j, k := range keysVal {
-			keyStr, ok := k.(string)
-			if !ok {
-				return errors.New("[authorizationList] entry [storageKeys] elements must be of type string")
-			}
-			keys[j] = keyStr
-		}
-		p.AuthorizationList = append(p.AuthorizationList, AuthorizationListParamEntry{
-			Address:     addrVal,
-			StorageKeys: keys,
-		})
-	}
-	return nil
-}
-
+// ValidateParams holds the rules that were previously enforced on the positional form only, since
+// that was the form with the hand-rolled extraction. Both forms reach them here.
 func (p *SignTXRequestParams) ValidateParams() error {
 	if len(p.From) == 0 {
 		return errors.New("[from] cannot be nil")
@@ -405,13 +195,31 @@ func (p *SignTXRequestParams) ValidateParams() error {
 	if p.GasPrice != nil && p.MaxFeePerGas != nil {
 		return errors.New("cannot specify both [gasPrice] and [maxFeePerGas]")
 	}
+	if p.MaxFeePerGas != nil && p.MaxPriorityFeePerGas != nil {
+		// An unparseable fee is left to the adapter, which reports it per field.
+		maxFee, errFee := entities.NewInt256FromString(*p.MaxFeePerGas)
+		maxPriority, errPriority := entities.NewInt256FromString(*p.MaxPriorityFeePerGas)
+		if errFee == nil && errPriority == nil && maxFee.BigInt().Cmp(maxPriority.BigInt()) < 0 {
+			return errors.New("[maxFeePerGas] must be greater than [maxPriorityFeePerGas]")
+		}
+	}
+	for i, entry := range p.AccessList {
+		if len(entry.Address) == 0 {
+			return fmt.Errorf("[accessList] entry %d is missing required field [address]", i)
+		}
+	}
+	for i, entry := range p.AuthorizationList {
+		if len(entry.Address) == 0 {
+			return fmt.Errorf("[authorizationList] entry %d is missing required field [address]", i)
+		}
+	}
 	return nil
 }
 
 // SignTypedDataRequestParams request definition for eth_signTypedData.
 type SignTypedDataRequestParams struct {
-	// ApplicationID performing the typed data signature.
-	ApplicationID string
+	// ApplicationID performing the typed data signature. Taken from the request context, never from the body.
+	ApplicationID string `json:"-"`
 	// Address of the account that will sign the typed data.
 	Address string `json:"address"`
 	// TypedData is the EIP-712 typed structured data to be signed.
@@ -429,18 +237,12 @@ type signTypedDataParamsObject struct {
 // json.Number instead of being forced through float64, which would silently round values above 2^53
 // before signing. This is the primary decode path (ProcessParams tries it before the []any fallback).
 func (p *SignTypedDataRequestParams) UnmarshalJSON(data []byte) error {
-	trimmed := bytes.TrimSpace(data)
+	object := paramsObject(data)
+	if object == nil {
+		return errors.New("only one object is expected")
+	}
 	var obj signTypedDataParamsObject
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		var arr []signTypedDataParamsObject
-		if err := decodeUsingNumber(trimmed, &arr); err != nil {
-			return err
-		}
-		if len(arr) != 1 {
-			return fmt.Errorf("only one object is expected")
-		}
-		obj = arr[0]
-	} else if err := decodeUsingNumber(trimmed, &obj); err != nil {
+	if err := decodeUsingNumber(object, &obj); err != nil {
 		return err
 	}
 	p.Address = obj.Address
@@ -484,41 +286,41 @@ func (p *SignTypedDataRequestParams) ValidateParams() error {
 // rather than a wallet, and naming the fields removes the argument-order confusion between
 // personal_sign and eth_sign, which take their two arguments in opposite orders.
 type PersonalSignRequestParams struct {
-	// ApplicationID performing the signature.
-	ApplicationID string
+	// ApplicationID performing the signature. Taken from the request context, never from the body.
+	ApplicationID string `json:"-"`
 	// Address of the account that will sign the message.
 	Address string `json:"address"`
 	// Message is the 0x-prefixed hex encoding of the raw bytes to sign.
 	Message string `json:"message"`
 }
 
+// UnmarshalJSON decodes the personal_sign params from either the positional array form ([{...}]) or a
+// single object ({...}). One struct decode for both, matching what authorization read.
+func (p *PersonalSignRequestParams) UnmarshalJSON(data []byte) error {
+	object := paramsObject(data)
+	if object == nil {
+		return errors.New("only one object is expected")
+	}
+	// The local type sheds this method, so the decode below does not recurse.
+	type params PersonalSignRequestParams
+	var decoded params
+	if err := json.Unmarshal(object, &decoded); err != nil {
+		return err
+	}
+	*p = PersonalSignRequestParams(decoded)
+	return nil
+}
+
+// SetParamsFrom is the JSONRPCParams fallback, reached only when UnmarshalJSON has already rejected
+// the raw params. See SignTXRequestParams.SetParamsFrom.
 func (p *PersonalSignRequestParams) SetParamsFrom(params []any) error {
 	if len(params) != 1 {
 		return fmt.Errorf("only one object is expected")
 	}
-	paramMap, ok := params[0].(map[string]any)
-	if !ok {
+	if _, ok := params[0].(map[string]any); !ok {
 		return errors.New("a single object is expected")
 	}
-	addressParam, ok := paramMap["address"]
-	if !ok {
-		return errors.New("missing required field [address]")
-	}
-	addressValue, ok := addressParam.(string)
-	if !ok {
-		return errors.New("[address] must be of type string")
-	}
-	messageParam, ok := paramMap["message"]
-	if !ok {
-		return errors.New("missing required field [message]")
-	}
-	messageValue, ok := messageParam.(string)
-	if !ok {
-		return errors.New("[message] must be of type string")
-	}
-	p.Address = addressValue
-	p.Message = messageValue
-	return nil
+	return errors.New("could not decode personal_sign params; expected a single object with [address] and [message]")
 }
 
 func (p *PersonalSignRequestParams) ValidateParams() error {
