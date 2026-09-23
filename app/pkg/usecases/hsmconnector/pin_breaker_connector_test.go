@@ -224,7 +224,9 @@ func TestConnectorStopsRetryingARefusedPin(t *testing.T) {
 		require.Equal(t, before, manager.attempts.Load(), "only a verify that succeeds clears the breaker")
 	})
 
-	t.Run("a slot with neither a source nor a stored pin is refused without a login", func(t *testing.T) {
+	// Since the pin column went, a slot with no source has no PIN at all. It must say so rather than
+	// attempt an empty login.
+	t.Run("a slot with no pin source is refused without a login", func(t *testing.T) {
 		connector, manager := newConnector(t, t.TempDir())
 
 		input := listInput()
@@ -232,18 +234,8 @@ func TestConnectorStopsRetryingARefusedPin(t *testing.T) {
 		_, err := connector.ListAddresses(context.Background(), input)
 		require.Error(t, err)
 		require.True(t, errors.IsPreconditionFailed(err))
+		require.Contains(t, err.Error(), "no pin source configured")
 		require.Zero(t, manager.attempts.Load(), "no PIN means nothing to try")
-	})
-
-	t.Run("a slot still carrying a stored pin keeps working", func(t *testing.T) {
-		connector, manager := newConnector(t, t.TempDir())
-
-		input := listInput()
-		input.PinSource = ""
-		input.LegacyPin = "legacy"
-		_, err := connector.ListAddresses(context.Background(), input)
-		require.Error(t, err, "this fake refuses every PIN")
-		require.Equal(t, int32(1), manager.attempts.Load(), "the stored PIN must still be used")
 	})
 
 	t.Run("a module kind that does not log in is never blocked", func(t *testing.T) {

@@ -25,7 +25,7 @@ type HSMConnection struct {
 
 // LogValue implements slog.LogValuer so that logging an HSMConnection does not print the slot it
 // carries. HSMSlot redacts itself when logged directly, but slog does not resolve LogValuer on a
-// struct field, so without this the whole slot, including its PIN, would be marshalled.
+// struct field, so without this the whole slot, including its key material, would be marshalled.
 func (c HSMConnection) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.Any("slot", c.Slot),

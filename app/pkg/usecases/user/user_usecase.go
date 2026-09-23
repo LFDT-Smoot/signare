@@ -429,7 +429,6 @@ func (u *DefaultUserUseCase) addressesBackedByModule(ctx context.Context, hsmCon
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       hsmConnection.Slot.Slot,
 				PinSource:  hsmConnection.Slot.PinSource,
-				LegacyPin:  hsmConnection.Slot.Pin,
 				ModuleKind: hsmConnection.ModuleKind,
 			},
 		}
