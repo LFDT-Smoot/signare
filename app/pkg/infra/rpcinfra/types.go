@@ -152,6 +152,10 @@ func paramsObject(params json.RawMessage) json.RawMessage {
 // encoding/json matches a key to a struct field. Such an object decodes two ways, so it is refused
 // rather than resolved.
 //
+// Every key is checked, not only those matching a known field, and an exact repeat counts too. Both
+// are unambiguous to encoding/json, which ignores the one and keeps the last of the other, so this is
+// deliberately stricter: a request that cannot say plainly which value it means is refused.
+//
 // Only the object's own keys are checked; values are skipped whole, since nested caller data such as
 // an EIP-712 message may legitimately differ only by case. Keys are caller-supplied and bounded only
 // by the body limit, so the scan is one pass with a map lookup, never a pairwise comparison.
@@ -177,7 +181,10 @@ func rejectAmbiguousFieldNames(object json.RawMessage) error {
 		}
 		folded := foldName(name)
 		if previous, duplicate := seen[folded]; duplicate {
-			return fmt.Errorf("params name the same field twice: %q and %q",
+			if previous == name {
+				return fmt.Errorf("params declare the key %q more than once", truncateFieldName(name))
+			}
+			return fmt.Errorf("params declare the keys %q and %q, which resolve to the same name",
 				truncateFieldName(previous), truncateFieldName(name))
 		}
 		seen[folded] = name

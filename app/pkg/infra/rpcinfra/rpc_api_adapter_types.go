@@ -18,30 +18,38 @@ type GenerateAccountRequestParams struct {
 }
 
 type ImportAccountRequestParams struct {
-	// ApplicationID performing the Ethereum account import.
-	ApplicationID string
+	// ApplicationID performing the Ethereum account import. Taken from the request context, never from the body.
+	ApplicationID string `json:"-"`
 	// PrivateKey is the hexadecimal string representation of the 256-bit Ethereum account private key.
 	PrivateKey string `json:"privateKey"`
 }
 
+// UnmarshalJSON decodes the eth_importAccount params from either the positional array form ([{...}])
+// or a single object ({...}), so both forms resolve a field name the same way.
+func (p *ImportAccountRequestParams) UnmarshalJSON(data []byte) error {
+	object := paramsObject(data)
+	if object == nil {
+		return errors.New("only one object is expected")
+	}
+	// The local type sheds this method, so the decode below does not recurse.
+	type params ImportAccountRequestParams
+	var decoded params
+	if err := json.Unmarshal(object, &decoded); err != nil {
+		return err
+	}
+	*p = ImportAccountRequestParams(decoded)
+	return nil
+}
+
+// SetParamsFrom is the JSONRPCParams fallback. See SignTXRequestParams.SetParamsFrom.
 func (p *ImportAccountRequestParams) SetParamsFrom(params []any) error {
 	if len(params) != 1 {
 		return fmt.Errorf("only one object is expected")
 	}
-	paramMap, ok := params[0].(map[string]any)
-	if !ok {
+	if _, ok := params[0].(map[string]any); !ok {
 		return errors.New("a single object is expected")
 	}
-	privateKeyParam, ok := paramMap["privateKey"]
-	if !ok {
-		return errors.New("missing required field [privateKey]")
-	}
-	privateKey, ok := privateKeyParam.(string)
-	if !ok {
-		return errors.New("[privateKey] must be of type string")
-	}
-	p.PrivateKey = privateKey
-	return nil
+	return errors.New("could not decode eth_importAccount params; expected a single object with [privateKey]")
 }
 
 func (p *ImportAccountRequestParams) ValidateParams() error {
@@ -53,30 +61,38 @@ func (p *ImportAccountRequestParams) ValidateParams() error {
 
 // RemoveAccountRequestParams request definition
 type RemoveAccountRequestParams struct {
-	// ApplicationID requesting the Ethereum account removal.
-	ApplicationID string
+	// ApplicationID requesting the Ethereum account removal. Taken from the request context, never from the body.
+	ApplicationID string `json:"-"`
 	// Address is the Ethereum account to be removed.
 	Address string `json:"address"`
 }
 
+// UnmarshalJSON decodes the eth_removeAccount params from either the positional array form ([{...}])
+// or a single object ({...}), so both forms resolve a field name the same way.
+func (p *RemoveAccountRequestParams) UnmarshalJSON(data []byte) error {
+	object := paramsObject(data)
+	if object == nil {
+		return errors.New("only one object is expected")
+	}
+	// The local type sheds this method, so the decode below does not recurse.
+	type params RemoveAccountRequestParams
+	var decoded params
+	if err := json.Unmarshal(object, &decoded); err != nil {
+		return err
+	}
+	*p = RemoveAccountRequestParams(decoded)
+	return nil
+}
+
+// SetParamsFrom is the JSONRPCParams fallback. See SignTXRequestParams.SetParamsFrom.
 func (p *RemoveAccountRequestParams) SetParamsFrom(params []any) error {
 	if len(params) != 1 {
 		return fmt.Errorf("only one object is expected")
 	}
-	paramMap, ok := params[0].(map[string]any)
-	if !ok {
+	if _, ok := params[0].(map[string]any); !ok {
 		return errors.New("a single object is expected")
 	}
-	addressParam, ok := paramMap["address"]
-	if !ok {
-		return errors.New("missing required field [address]")
-	}
-	address, ok := addressParam.(string)
-	if !ok {
-		return errors.New("[address] must be of type string")
-	}
-	p.Address = address
-	return nil
+	return errors.New("could not decode eth_removeAccount params; expected a single object with [address]")
 }
 
 func (p *RemoveAccountRequestParams) ValidateParams() error {

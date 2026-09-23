@@ -133,6 +133,42 @@ func TestAuthorizeAccount_SignerIsTheAuthorizedAccount(t *testing.T) {
 	}
 }
 
+// TestAuthorizeAccount_SignerIsTheAuthorizedAccountForOneSpelling covers the half of the property
+// that a body naming the account twice cannot reach: agreement on a request that is actually served.
+// Every pair in the test above folds together and is refused at the gate, so its equality assertion
+// never runs. These bodies name the account once, in each spelling in turn, so the request is allowed
+// and both sides have to resolve it to the same account.
+//
+// It is also the case that caught the original bug from the other side: before the fix, an array-form
+// body spelled [{"From":...}] authorized the account and then failed to sign, because the handler
+// looked up the exact key "from".
+func TestAuthorizeAccount_SignerIsTheAuthorizedAccountForOneSpelling(t *testing.T) {
+	for _, method := range accountSigningMethods() {
+		for _, form := range []string{"array", "object"} {
+			for _, spelling := range keyCasings(method.accountKey) {
+				t.Run(fmt.Sprintf("%s/%s/%s", method.method, form, spelling), func(t *testing.T) {
+					object := fmt.Sprintf(`{%q:%q,%s}`, spelling, authorizedAccountAddress, method.siblingFields)
+					params := object
+					if form == "array" {
+						params = "[" + object + "]"
+					}
+					body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":%q,"params":%s}`, method.method, params)
+
+					authorized, status := authorizeAccountForTest(t, method.method, body)
+					require.Equal(t, http.StatusOK, status, "a request naming the account once must be served")
+					signer, signErr := method.signerAccount(json.RawMessage(params))
+					require.NoError(t, signErr, "a request the gate allowed must decode for signing")
+
+					require.Truef(t, strings.EqualFold(authorized, signer),
+						"authorized %s but would sign with %s", authorized, signer)
+					require.Truef(t, strings.EqualFold(authorizedAccountAddress, signer),
+						"expected signing with %s, got %s", authorizedAccountAddress, signer)
+				})
+			}
+		}
+	}
+}
+
 // TestAuthorizeAccount_SignerIsTheAuthorizedAccountInABatch runs the same property over the batch
 // entrypoint. FanOutRPCBatchRequest re-marshals each element before the authorization middleware sees
 // it, and that round trip only preserves an ambiguous params object because RPCRequest.Params is

@@ -50,7 +50,7 @@ func TestSingleParamsObject_RejectsAmbiguousFieldNames(t *testing.T) {
 	for name, params := range tests {
 		t.Run(name, func(t *testing.T) {
 			_, err := rpcinfra.SingleParamsObject(json.RawMessage(params))
-			require.ErrorContains(t, err, "name the same field twice")
+			require.ErrorContains(t, err, "params declare the key")
 		})
 	}
 }
@@ -183,4 +183,80 @@ func TestProcessParams_TypeErrorNamesTheField(t *testing.T) {
 			require.NotContains(t, rpcErr.Error(), "Go struct field", "internal type names must not reach the client")
 		})
 	}
+}
+
+// TestSingleParamsObject_RejectsKeysItCannotResolve records that the guard is stricter than
+// encoding/json on purpose. encoding/json ignores a key matching no field, and silently keeps the
+// last of an exact repeat; both are refused here, because a request that cannot say plainly which
+// value it means should not be guessed at.
+func TestSingleParamsObject_RejectsKeysItCannotResolve(t *testing.T) {
+	tests := map[string]struct{ params, message string }{
+		"exact repeat of a known field":    {`[{"from":"0xa","from":"0xb"}]`, `params declare the key "from" more than once`},
+		"exact repeat of an unknown field": {`[{"note":1,"note":2}]`, `params declare the key "note" more than once`},
+		"folded pair of unknown fields":    {`[{"note":1,"NOTE":2}]`, `params declare the keys "note" and "NOTE", which resolve to the same name`},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := rpcinfra.SingleParamsObject(json.RawMessage(tt.params))
+			require.EqualError(t, err, tt.message)
+		})
+	}
+}
+
+// TestProcessParams_EveryMethodReadsBothFormsAlike guards the contract json-rpc-api.md publishes:
+// both param forms are read identically, for every method that takes params. Before this, only the
+// three signing methods had an UnmarshalJSON, so eth_importAccount and eth_removeAccount accepted a
+// folded field name as an object and rejected it as a one-element array.
+func TestProcessParams_EveryMethodReadsBothFormsAlike(t *testing.T) {
+	tests := map[string]struct {
+		object string
+		decode func() (rpcinfra.JSONRPCParams, func() string)
+	}{
+		"eth_removeAccount": {`{"Address":"0xabc"}`, func() (rpcinfra.JSONRPCParams, func() string) {
+			p := &rpcinfra.RemoveAccountRequestParams{}
+			return p, func() string { return p.Address }
+		}},
+		"eth_importAccount": {`{"PrivateKey":"0xabc"}`, func() (rpcinfra.JSONRPCParams, func() string) {
+			p := &rpcinfra.ImportAccountRequestParams{}
+			return p, func() string { return p.PrivateKey }
+		}},
+		"eth_signTransaction": {`{"From":"0xabc","nonce":"0x1"}`, func() (rpcinfra.JSONRPCParams, func() string) {
+			p := &rpcinfra.SignTXRequestParams{}
+			return p, func() string { return p.From }
+		}},
+		"personal_sign": {`{"Address":"0xabc","message":"0xde"}`, func() (rpcinfra.JSONRPCParams, func() string) {
+			p := &rpcinfra.PersonalSignRequestParams{}
+			return p, func() string { return p.Address }
+		}},
+		"eth_signTypedData": {`{"Address":"0xabc","typedData":{}}`, func() (rpcinfra.JSONRPCParams, func() string) {
+			p := &rpcinfra.SignTypedDataRequestParams{}
+			return p, func() string { return p.Address }
+		}},
+	}
+
+	for method, tt := range tests {
+		t.Run(method, func(t *testing.T) {
+			asObject, readObject := tt.decode()
+			require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(tt.object), asObject))
+
+			asArray, readArray := tt.decode()
+			require.Nil(t, rpcinfra.ProcessParams(json.RawMessage("["+tt.object+"]"), asArray))
+
+			require.Equal(t, "0xabc", readObject())
+			require.Equal(t, readObject(), readArray(), "both param forms must resolve the field alike")
+		})
+	}
+}
+
+// TestProcessParams_ApplicationIDIsNotInjectable pins that the server-set field cannot be supplied by
+// the caller. It is tagged json:"-", which matters now that these types decode the whole object.
+func TestProcessParams_ApplicationIDIsNotInjectable(t *testing.T) {
+	var remove rpcinfra.RemoveAccountRequestParams
+	require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{"address":"0xa","applicationID":"evil"}]`), &remove))
+	require.Empty(t, remove.ApplicationID)
+
+	var sign rpcinfra.SignTXRequestParams
+	require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{"from":"0xa","nonce":"0x1","ApplicationID":"evil"}]`), &sign))
+	require.Empty(t, sign.ApplicationID)
 }
