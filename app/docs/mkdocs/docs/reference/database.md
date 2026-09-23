@@ -35,11 +35,15 @@ The application does not store HSM slot PINs. A slot records the name of the fil
 
 The `pin` column of `cfg_hardware_security_module_slot` has been dropped.
 
-**Every slot must resolve its PIN from a source before upgrading to this release.** There is no fallback: a slot with no `pinSource` fails every signing request until one is set, and Signare cannot recover the PIN for you. Migration `000005` checks this before it drops anything, so a deployment that has not moved its slots fails the upgrade instead of losing the credential.
+**Every PKCS#11 (SoftHSM) slot must resolve its PIN from a source before upgrading to this release.** There is no fallback: such a slot with no `pinSource` fails every signing request until one is set, and Signare cannot recover the PIN for you. Migration `000005` checks this before it drops anything, so a deployment that has not moved its slots fails the upgrade instead of losing the credential.
 
-Only PKCS#11 (SoftHSM) slots are checked. An AKV or Local Key Vault slot never authenticated with this column, so a stray value on one is discarded rather than treated as a credential.
+AKV and Local Key Vault deployments have nothing to do here. Those modules never authenticated with this column, the API refuses a `pinSource` on them, and they keep signing whether or not one is set. A stray value on such a slot is discarded rather than treated as a credential, and the migration does not check them.
 
-The intended path is to move every slot to a pin source on the release that introduced them, using `admin.slots.updatePinSource`, which verifies each source against the HSM before storing it. Upgrading across both releases in one step is supported but slower: the guard refuses, and each slot has to be moved by hand with the SQL below, without that verification.
+The intended path is to move every PKCS#11 slot to a pin source on the release that introduced them, using `admin.slots.updatePinSource`, which verifies each source against the HSM before storing it. Upgrading across both releases in one step is supported but slower: the guard refuses, and each slot has to be moved by hand with the SQL below, without that verification.
+
+A refusal surfaces as `signare upgrade` exiting with a panic carrying SQLSTATE `P0001` and the message above. `000004` has already committed by then, so the database is left with `pin_source` added and `signare_migrations` at version 5, marked dirty.
+
+**Do not recover by rolling back to a release older than the one that introduced pin sources.** Once any slot has been created or moved to a source by that release or this one, its `pin` is NULL, and the older mappers read the column into a plain string, so every slot read fails with `converting NULL to string is unsupported`, a module-wide listing included. Running the older `signare upgrade` afterwards panics either way: with the dirty flag still set it refuses the dirty version, and with the flag cleared it sees a version beyond its own step list, takes the downgrade branch and panics on an out-of-range step. Reverting migration `000005` does not help, because it restores the column empty. Recover forward, with the steps below.
 
 If the upgrade is refused, recover with SQL rather than through the API. The API route needs a release that already has `admin.slots.updatePinSource`, which the release you are upgrading from may not have:
 
