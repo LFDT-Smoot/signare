@@ -39,6 +39,8 @@ The `pin` column of `cfg_hardware_security_module_slot` has been dropped.
 
 Only PKCS#11 (SoftHSM) slots are checked. An AKV or Local Key Vault slot never authenticated with this column, so a stray value on one is discarded rather than treated as a credential.
 
+The intended path is to move every slot to a pin source on the release that introduced them, using `admin.slots.updatePinSource`, which verifies each source against the HSM before storing it. Upgrading across both releases in one step is supported but slower: the guard refuses, and each slot has to be moved by hand with the SQL below, without that verification.
+
 If the upgrade is refused, recover with SQL rather than through the API. The API route needs a release that already has `admin.slots.updatePinSource`, which the release you are upgrading from may not have:
 
 1. List the slots still holding a PIN. **This prints the PINs to your terminal**, so do it on a trusted console and clear the scrollback afterwards:
