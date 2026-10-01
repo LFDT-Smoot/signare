@@ -74,13 +74,10 @@ func (policyEnforcementPoint *RPCPolicyEnforcementPoint) AuthorizeAccount(next h
 			return
 		}
 
-		addr, err := getAddressFromParamsArray(ctx, authorizeAccountRPCBody, usesAddressParam)
+		addr, err := getSigningAccount(ctx, authorizeAccountRPCBody, usesAddressParam)
 		if err != nil {
-			addr, err = getAddressFromParamsObject(ctx, authorizeAccountRPCBody, usesAddressParam)
-			if err != nil {
-				policyEnforcementPoint.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusInvalidArgument))
-				return
-			}
+			policyEnforcementPoint.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusInvalidArgument))
+			return
 		}
 
 		authorizeAccountInput := AuthorizeAccountUserInput{
@@ -100,28 +97,16 @@ func (policyEnforcementPoint *RPCPolicyEnforcementPoint) AuthorizeAccount(next h
 	})
 }
 
-func getAddressFromParamsArray(ctx context.Context, params AuthorizeAccountRPCBody, usesAddressParam bool) (*address.Address, error) {
-	var rpcAddress []AuthorizeAccountRPCParams
-	err := json.Unmarshal(params.Params, &rpcAddress)
+// getSigningAccount returns the account the request signs with, from either param form. It uses the
+// same unwrap and the same struct decode as the handler, so the account authorized here is the one
+// signed with.
+func getSigningAccount(ctx context.Context, params AuthorizeAccountRPCBody, usesAddressParam bool) (*address.Address, error) {
+	object, err := rpcinfra.SingleParamsObject(params.Params)
 	if err != nil {
 		return nil, err
 	}
-	if len(rpcAddress) == 0 {
-		return nil, errors.New("no account params provided")
-	}
-	signer := rpcAddress[0].signerAddress(usesAddressParam)
-	addr, err := address.NewFromHexString(signer)
-	if err != nil {
-		logger.LogEntry(ctx).Errorf("invalid account address: %s", signer)
-		return nil, err
-	}
-	return &addr, nil
-}
-
-func getAddressFromParamsObject(ctx context.Context, params AuthorizeAccountRPCBody, usesAddressParam bool) (*address.Address, error) {
 	var rpcAddress AuthorizeAccountRPCParams
-	err := json.Unmarshal(params.Params, &rpcAddress)
-	if err != nil {
+	if err = json.Unmarshal(object, &rpcAddress); err != nil {
 		return nil, err
 	}
 	signer := rpcAddress.signerAddress(usesAddressParam)
