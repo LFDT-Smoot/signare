@@ -5,11 +5,13 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
-// TestSplitList covers the unset-flag case specifically: strings.Split returns a single empty element
-// for an empty string, and the default target passes no --operationIdInclusions, so an empty entry
-// would reach the operation IDs and fail the one-to-one check against the actions.
+// TestSplitList pins that an unset list flag yields no entries. strings.Split would yield one empty
+// entry instead, which only disappears today because an unset exclusions flag would produce the same
+// empty entry and cancel it: an accident rather than a rule.
 func TestSplitList(t *testing.T) {
 	tests := map[string]struct {
 		value string
@@ -123,5 +125,43 @@ func TestReadActions(t *testing.T) {
 func TestReadActionsMissingFile(t *testing.T) {
 	if _, err := readActions(filepath.Join(t.TempDir(), "absent.yaml")); err == nil {
 		t.Fatal("readActions on a missing file returned no error")
+	}
+}
+
+// TestExecuteCmd_ExclusionWinsOverFileInclusion runs the command end to end on a fixture set, so the
+// exclusion rule is checked on the path executeCmd takes and not only on the helper: a plain append
+// of the inclusions would leave the excluded action as an unmapped operation ID and go red here.
+func TestExecuteCmd_ExclusionWinsOverFileInclusion(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, contents string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+		return path
+	}
+	spec := write("openapi.yaml", "openapi: 3.0.0\ninfo:\n  title: fixture\n  version: \"1\"\npaths:\n  /foo:\n    get:\n      operationId: foo.get\n      responses:\n        \"200\":\n          description: ok\n")
+	generated := write("actions-generated.yaml", "actions:\n  - foo.get\n")
+	manual := write("actions-manual.yaml", "actions:\n  - rpc.method.live\n  - rpc.method.retired\n")
+	permissions := write("permissions.yaml", "permissions:\n  - id: p\n    actions:\n      - foo.get\n      - rpc.method.live\n")
+	roles := write("roles.yaml", "roles:\n  - id: r\n    permissions:\n      - p\n")
+
+	t.Cleanup(viper.Reset)
+	viper.Set(openAPISpecFilesFlag, spec)
+	viper.Set(actionsFilesFlag, generated+","+manual)
+	viper.Set(operationIdInclusionsFileFlag, manual)
+	viper.Set(permissionsFileFlag, permissions)
+	viper.Set(rolesFileFlag, roles)
+
+	// The retired action is declared and exempt but granted to no role, so the run must fail; this
+	// pins that the fixtures exercise the checks at all.
+	if err := executeCmd(nil, nil); err == nil {
+		t.Fatal("expected the retired action to be reported as assigned to no role")
+	}
+
+	// Excluding it removes it from the actions and from the inclusions alike, so every check holds.
+	viper.Set(operationIdExclusionsFlag, "rpc.method.retired")
+	if err := executeCmd(nil, nil); err != nil {
+		t.Fatalf("excluding the retired action should satisfy every check, got: %v", err)
 	}
 }

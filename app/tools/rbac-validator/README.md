@@ -14,7 +14,10 @@ Specifically, the tool runs the following checks:
 
 Run `make tools.validate_rbac` from the `app` directory, or `make tools.run_default` from here. Both
 use the RBAC files located in signare/app/include/rbac. `make lint` in the `app` directory depends on
-the former, so a pipeline calling that standardised step runs the validator too.
+the former, so a pipeline calling that standardised step runs the validator too. Two limits: `lint`
+runs only this tool's checks, so whether `actions-manual.yaml` holds nothing but published JSON-RPC
+methods is left to the RBAC coverage tests under `unit_test`; and running the validator builds this
+module, so `make lint` needs its dependencies in the module cache or network access to fetch them.
 
 Use `make tools.help` for more info about the command and its flags, and `make unit_test` for this
 module's own tests. They are a separate module, so the app module's `unit_test` delegates here.

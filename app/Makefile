@@ -33,7 +33,7 @@ unit_test:
 	@echo "Executing tests for application packages"
 	gotestsum --jsonfile ${ARTIFACTS_DIR}/unit_tests_results.json --format short-verbose --junitfile ${ARTIFACTS_DIR}/junit.xml -- -p 1 -tags=unit -timeout=5m -coverpkg=github.com/lfdt-smoot/signare/app/pkg/... -coverprofile=${ARTIFACTS_DIR}/signare.coverage.out github.com/lfdt-smoot/signare/app/pkg/...
 	$(call postProcess, signare, github.com/lfdt-smoot/signare/app, app)
-	@cd tools/rbac-validator; $(MAKE) unit_test
+	@$(MAKE) -C tools/rbac-validator unit_test
 
 .PHONY: race_test
 race_test:
@@ -113,7 +113,7 @@ tools.stop_docs:
 .PHONY: tools.validate_rbac
 tools.validate_rbac:
 	@echo "Validating the RBAC roles, permissions and actions"
-	@cd tools/rbac-validator; $(MAKE) tools.run_default
+	@$(MAKE) -C tools/rbac-validator tools.run_default
 
 .PHONY: tools.format
 tools.format:
