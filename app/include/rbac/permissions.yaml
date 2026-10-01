@@ -17,7 +17,8 @@ permissions:
       - admin.slots.describe
       - admin.slots.list
       - admin.slots.remove
-      - admin.slots.updatePin
+      - admin.slots.updatePinSource
+      - admin.slots.verifyPinSource
       - admin.slots.updateConfig
       - admin.users.create
       - admin.users.describe

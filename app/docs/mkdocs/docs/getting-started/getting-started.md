@@ -129,7 +129,16 @@ First, you need to have an application and a user with the role of `application-
     softhsm2-util --show-slots 
     ```
 
-6. Create a slot  pasting the generated slot id in the `slot` attribute:
+6. Write the slot PIN into the directory configured as
+   [`pinSourceDirectory`](../reference/configuration.md#softhsm-configuration). Signare reads the PIN
+   from this file and never stores it:
+
+    ```console
+    printf 'userpin' > /etc/signare/slot-pins/my-first-slot-pin
+    ```
+
+7. Create a slot, pasting the generated slot id in the `slot` attribute and the file name in
+   `pinSource`:
 
     ```console
     curl --location --request POST 'http://localhost:32325/admin/modules/my-first-hsm/slots' \
@@ -142,12 +151,12 @@ First, you need to have an application and a user with the role of `application-
         "spec": {
             "applicationId": "my-first-application",
             "slot": <your_generated_slot>,
-            "pin": <your_slot_pin>
+            "pinSource": "my-first-slot-pin"
         }
     }'
     ``` 
    
-7. Generate a new account:
+8. Generate a new account:
 
     ```console
     curl --location --request POST 'http://localhost:4545' \

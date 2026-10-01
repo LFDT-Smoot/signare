@@ -31,7 +31,11 @@ The signare currently does not support custom locations for specifying the CA ce
 
 ## Encryption
 
-The application stores the pin of each configured HSM slot in the database, so in addition to using a secure SSL mode for the connection between the application and the database server, we recommend using encryption at rest. Please, refer to the Data Partition Encryption section of PostgreSQL's encryption options [documentation](https://www.postgresql.org/docs/current/encryption-options.html){:target="_blank"}.
+The application does not store HSM slot PINs. A slot records the name of the file holding its PIN (see [`pinSourceDirectory`](./configuration.md#softhsm-configuration)), and the value is read from that file at login time.
+
+The `pin` column of `cfg_hardware_security_module_slot` is retained for one release so that slots created before this change keep working, and is dropped in the next. **Any PIN written before the upgrade must be rotated on the token**: the old value survives in database backups, WAL archives and dead tuples, and dropping the column does not remove it from those.
+
+The database still holds Local Key Vault private key material, and Local Key Vault is not for production use. In addition to using a secure SSL mode for the connection between the application and the database server, we recommend using encryption at rest. Please, refer to the Data Partition Encryption section of PostgreSQL's encryption options [documentation](https://www.postgresql.org/docs/current/encryption-options.html){:target="_blank"}.
 
 ## Schema
 

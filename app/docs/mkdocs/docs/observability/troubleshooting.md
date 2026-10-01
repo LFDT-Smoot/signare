@@ -37,7 +37,7 @@ To confirm, follow these steps:
 1. List the slot partitions in your HSM. 
 2. Confirm that your `application`'s HSM slot exists in the HSM device.
 
-**Solution 1:** if the slot exists, confirm that the pin of the slot, defined in the request, is correct.
+**Solution 1:** if the slot exists, confirm that the file named by the request's `pinSource` exists in the configured `pinSourceDirectory`, is readable by the signare process, and holds the correct PIN.
 
 **Solution 2:** if the slot does not exist, manually create the slot in your HSM and repeat the operation.
 
@@ -53,7 +53,7 @@ To confirm, follow these steps:
 1. List the slot partitions in your HSM.
 2. Confirm that your `application`'s HSM slot exists in the HSM device.
 
-**Solution 1:** if the slot exists, the slot configured for your `application` check if your configured slot's pin is correct.
+**Solution 1:** if the slot exists, check that the file named by your slot's `pinSource` holds the correct PIN. Run `admin.slots.verifyPinSource` to have the signare confirm it against the HSM.
 
 **Solution 2:** if the slot does not exist, create the slot in your HSM and try again.
 
@@ -122,7 +122,21 @@ If this is the case, the HTTP status code of the response is a `200` but RPC res
 
 **Solution 1:** if your application's slot does not exist, create it or change your application slot.
 
-**Solution 2:** if your application slot exists, check if the pin configured for your slot is correct.
+**Solution 2:** if your application slot exists, check that the file named by its `pinSource` holds the correct PIN.
+
+#### Case C: the slot is no longer being retried
+
+Every signing request for one application fails immediately, saying the slot is not being retried, and
+`hsm_slot_pin_breaker_open` is 1 for that slot.
+
+The signare logs in to the token on every operation, so it stops attempting a slot once the HSM has
+refused its PIN. This protects the token: an HSM locks the user PIN after a few failed logins, and
+without this one wrong secret would produce a failed login on every signing request.
+
+**Solution:** correct the file named by the slot's `pinSource`, then call `admin.slots.verifyPinSource`
+for that slot. Changing the file's content is enough on its own; the verify call confirms the fix
+against the HSM and is the safer order. If the PIN was already locked on the token, unlock it with your
+vendor's tooling first.
 
 ## General scenarios
 

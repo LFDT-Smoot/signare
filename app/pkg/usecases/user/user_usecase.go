@@ -428,7 +428,8 @@ func (u *DefaultUserUseCase) addressesBackedByModule(ctx context.Context, hsmCon
 		listAddressesInput := hsmconnector.ListAddressesInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       hsmConnection.Slot.Slot,
-				Pin:        hsmConnection.Slot.Pin,
+				PinSource:  hsmConnection.Slot.PinSource,
+				LegacyPin:  hsmConnection.Slot.Pin,
 				ModuleKind: hsmConnection.ModuleKind,
 			},
 		}

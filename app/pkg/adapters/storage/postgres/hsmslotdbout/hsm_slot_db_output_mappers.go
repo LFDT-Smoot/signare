@@ -99,7 +99,7 @@ func mapToCreateDB(slot hsmslot.HSMSlot) (*hsmslotdb.HSMSlotCreateDB, error) {
 			ApplicationID:      slot.ApplicationID,
 			HSMModuleID:        slot.HSMModuleID,
 			Slot:               slot.Slot,
-			Pin:                slot.Pin,
+			PinSource:          slot.PinSource,
 			Config:             string(configSerialized),
 			CreationDate:       slot.CreationDate.ToInt64(),
 			LastUpdate:         slot.LastUpdate.ToInt64(),
@@ -107,17 +107,17 @@ func mapToCreateDB(slot hsmslot.HSMSlot) (*hsmslotdb.HSMSlotCreateDB, error) {
 	}, nil
 }
 
-func mapToUpdatePinDB(slot hsmslot.HSMSlot) (*hsmslotdb.HSMSlotUpdatePinDB, error) {
+func mapToUpdatePinSourceDB(slot hsmslot.HSMSlot) (*hsmslotdb.HSMSlotUpdatePinSourceDB, error) {
 	if len(slot.ID) == 0 {
 		return nil, errors.Internal().WithMessage("'ID' cannot be empty")
 	}
-	if len(slot.Pin) == 0 {
-		return nil, errors.Internal().WithMessage("'Pin' cannot be empty")
+	if len(slot.PinSource) == 0 {
+		return nil, errors.Internal().WithMessage("'PinSource' cannot be empty")
 	}
-	return &hsmslotdb.HSMSlotUpdatePinDB{
+	return &hsmslotdb.HSMSlotUpdatePinSourceDB{
 		StandardID:      slot.StandardID,
 		ResourceVersion: slot.ResourceVersion,
-		Pin:             slot.Pin,
+		PinSource:       slot.PinSource,
 		LastUpdate:      slot.LastUpdate.ToInt64(),
 	}, nil
 }
@@ -166,6 +166,7 @@ func mapFromDB(db hsmslotdb.HSMSlotDB) (*hsmslot.HSMSlot, error) {
 		HSMModuleID:        db.HSMModuleID,
 		Slot:               db.Slot,
 		Pin:                db.Pin,
+		PinSource:          db.PinSource,
 		Config:             *dbConfigData,
 		InternalResourceID: entities.InternalResourceID(db.InternalResourceID),
 	}, nil

@@ -18,8 +18,13 @@ type HSMSlot struct {
 	HSMModuleID string `valid:"required"`
 	// Slot defines the logical container on the HSM.
 	Slot string `valid:"required"`
-	// Pin defines the alphanumeric code used for authentication in the HSM.
-	Pin string `valid:"required"`
+	// Pin is the deprecated cleartext code for slots created before PinSource existed. Only the slot-open
+	// read loads it, so it is empty on a slot from Get or a listing, and nothing writes it. PinSource
+	// wins where both are set. Goes when the column does.
+	Pin string `valid:"optional"`
+	// PinSource names the secret holding the PIN. A reference, not a value: the PIN is resolved at login
+	// time and never enters this struct.
+	PinSource string `valid:"optional"`
 	// Config defines the configuration for the HSM
 	Config SlotConfig `valid:"required"`
 }
@@ -101,8 +106,9 @@ type CreateHSMSlotInput struct {
 	HSMModuleID string `valid:"required"`
 	// Slot defines the logical container on the HSM.
 	Slot string `valid:"optional"`
-	// Pin defines the alphanumeric code used for authentication in the HSM.
-	Pin string `valid:"optional"`
+	// PinSource names the secret holding the PIN. Mandatory for a PKCS#11 module and rejected for the
+	// others, checked once the module kind is known.
+	PinSource string `valid:"optional"`
 	// Config defines the configuration for the HSM
 	Config SlotConfig `valid:"optional"`
 }
@@ -132,19 +138,31 @@ type GetHSMSlotByApplicationOutput struct {
 	HSMSlot
 }
 
-// EditPinInput configures the update of an HSMSlot's Pin.
-type EditPinInput struct {
+// EditPinSourceInput configures the update of an HSMSlot's PinSource.
+type EditPinSourceInput struct {
 	entities.StandardID
 	// ResourceVersion resource version for resource locking.
 	ResourceVersion string `valid:"required"`
-	// Pin defines the alphanumeric code used for authentication in the HSM.
-	Pin string `valid:"required"`
+	// PinSource names the secret holding the PIN.
+	PinSource string `valid:"required"`
 	// HSMModuleID represents the unique identifier of the slot's HSM.
 	HSMModuleID string `valid:"required"`
 }
 
-// EditPinOutput defines the output of editing an HSMSlot's Pin.
-type EditPinOutput struct {
+// EditPinSourceOutput defines the output of editing an HSMSlot's PinSource.
+type EditPinSourceOutput struct {
+	HSMSlot
+}
+
+// VerifyPinSourceInput configures the verification of an HSMSlot's current PinSource.
+type VerifyPinSourceInput struct {
+	entities.StandardID
+	// HSMModuleID represents the unique identifier of the slot's HSM.
+	HSMModuleID string `valid:"required"`
+}
+
+// VerifyPinSourceOutput defines the output of verifying an HSMSlot's PinSource.
+type VerifyPinSourceOutput struct {
 	HSMSlot
 }
 

@@ -10,6 +10,7 @@ import (
 	btcececdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 
 	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
+	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
@@ -63,6 +64,11 @@ func (d *DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddr
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "GenerateAddress")
 
+	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	if err != nil {
+		return nil, err
+	}
+
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
@@ -73,14 +79,18 @@ func (d *DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddr
 
 	generateKeyInput := signaturemanager.GenerateKeyInput{
 		Slot:   input.Slot,
-		Pin:    input.Pin,
+		Pin:    pin.value,
 		Tracer: tracer,
 	}
 	generateKeyOutput, err := digitalSignatureManager.GenerateKey(ctx, generateKeyInput)
+	d.recordLoginOutcome(pin, err)
 	if err != nil {
 		if signaturemanager.IsInvalidSlotError(err) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
 			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		if signaturemanager.IsPinIncorrectError(err) {
+			return nil, pinIncorrectError(err, input.Slot)
 		}
 		return nil, errors.InternalFromErr(err)
 	}
@@ -140,6 +150,11 @@ func (d *DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressI
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "RemoveAddress")
 
+	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	if err != nil {
+		return nil, err
+	}
+
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
@@ -150,15 +165,19 @@ func (d *DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressI
 
 	removeKeyInput := signaturemanager.RemoveKeyInput{
 		Slot:    input.Slot,
-		Pin:     input.Pin,
+		Pin:     pin.value,
 		Tracer:  tracer,
 		Address: input.Address,
 	}
 	_, err = digitalSignatureManager.RemoveKey(ctx, removeKeyInput)
+	d.recordLoginOutcome(pin, err)
 	if err != nil {
 		if signaturemanager.IsInvalidSlotError(err) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
 			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		if signaturemanager.IsPinIncorrectError(err) {
+			return nil, pinIncorrectError(err, input.Slot)
 		}
 		if signaturemanager.IsNotFoundError(err) {
 			msg := fmt.Sprintf("key for address [%s] not found", input.Address.String())
@@ -185,6 +204,11 @@ func (d *DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesI
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "ListAddresses")
 
+	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	if err != nil {
+		return nil, err
+	}
+
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
@@ -195,13 +219,17 @@ func (d *DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesI
 
 	listKeysInput := signaturemanager.ListKeysInput{
 		Slot:   input.Slot,
-		Pin:    input.Pin,
+		Pin:    pin.value,
 		Tracer: tracer,
 	}
 	keys, err := digitalSignatureManager.ListKeys(ctx, listKeysInput)
+	d.recordLoginOutcome(pin, err)
 	if err != nil {
 		if signaturemanager.IsInvalidSlotError(err) {
 			logger.LogEntry(ctx).Warnf("could not obtain keys from the configured HSM slot '%s' because it does not exist in the HSM of type '%s'", input.Slot, input.ModuleKind)
+		}
+		if signaturemanager.IsPinIncorrectError(err) {
+			return nil, pinIncorrectError(err, input.Slot)
 		}
 		return nil, errors.InternalFromErr(err).WithMessage("error listing addresses: %v", err)
 	}
@@ -454,6 +482,11 @@ func assembleRecoverableSignature(rawSig []byte, from address.Address, data []by
 
 // signAndRecover signs the payload via HSM and performs EC recovery to determine the V value.
 func (d *DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, tracer logger.Tracer, payload *entities.HexBytes) ([]byte, error) {
+	pin, pinErr := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	if pinErr != nil {
+		return nil, pinErr
+	}
+
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
@@ -464,7 +497,7 @@ func (d *DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, 
 
 	signInput := signaturemanager.SignInput{
 		Slot:   input.Slot,
-		Pin:    input.Pin,
+		Pin:    pin.value,
 		Tracer: tracer,
 		From:   input.From,
 		Data:   *payload,
@@ -489,10 +522,14 @@ func (d *DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, 
 	}
 
 	signOutput, err := digitalSignatureManager.Sign(ctx, signInput)
+	d.recordLoginOutcome(pin, err)
 	if err != nil {
 		if signaturemanager.IsInvalidSlotError(err) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
 			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		if signaturemanager.IsPinIncorrectError(err) {
+			return nil, pinIncorrectError(err, input.Slot)
 		}
 		return nil, errors.InternalFromErr(err)
 	}
@@ -594,6 +631,11 @@ func (d *DefaultUseCase) PersonalSign(ctx context.Context, input PersonalSignInp
 }
 
 func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, from address.Address, data []byte, tracer logger.Tracer) (*EthereumSignature, error) {
+	pin, pinErr := d.pinFor(ctx, slotData.ModuleKind, slotData.Slot, slotData.PinSource, slotData.LegacyPin)
+	if pinErr != nil {
+		return nil, pinErr
+	}
+
 	createInput := CreateInput{
 		ModuleKind: slotData.ModuleKind,
 	}
@@ -604,7 +646,7 @@ func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, 
 
 	signInput := signaturemanager.SignInput{
 		Slot:   slotData.Slot,
-		Pin:    slotData.Pin,
+		Pin:    pin.value,
 		Tracer: tracer,
 		From:   from,
 		Data:   data,
@@ -628,10 +670,14 @@ func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, 
 	}
 
 	signOutput, signErr := digitalSignatureManager.Sign(ctx, signInput)
+	d.recordLoginOutcome(pin, signErr)
 	if signErr != nil {
 		if signaturemanager.IsInvalidSlotError(signErr) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", slotData.Slot)
 			return nil, errors.BadGatewayFromErr(signErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		if signaturemanager.IsPinIncorrectError(signErr) {
+			return nil, pinIncorrectError(signErr, slotData.Slot)
 		}
 		return nil, errors.InternalFromErr(signErr)
 	}
@@ -673,6 +719,21 @@ func (d *DefaultUseCase) IsAlive(ctx context.Context, input IsAliveInput) (*IsAl
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "IsAlive")
 
+	// Resolved unconditionally, bypassing the breaker: this is the operation an administrator uses to
+	// establish that a source is right, so it is also what closes a breaker that is open.
+	if validateErr := ValidatePinSource(input.PinSource); validateErr != nil {
+		return nil, validateErr
+	}
+	pinValue, resolveErr := d.pinResolver.Resolve(ctx, input.PinSource)
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+	pin := &slotPin{
+		value:   pinValue,
+		key:     pinBreakerKey{moduleKind: input.ModuleKind, slot: input.Slot},
+		guarded: true,
+	}
+
 	createInput := CreateInput{
 		ModuleKind: input.ModuleKind,
 	}
@@ -683,18 +744,18 @@ func (d *DefaultUseCase) IsAlive(ctx context.Context, input IsAliveInput) (*IsAl
 
 	isAliveInput := signaturemanager.IsAliveInput{
 		Slot:   input.Slot,
-		Pin:    input.Pin,
+		Pin:    pin.value,
 		Tracer: tracer,
 	}
 	isAliveOutput, err := digitalSignatureManager.IsAlive(ctx, isAliveInput)
+	d.recordLoginOutcome(pin, err)
 	if err != nil {
 		if signaturemanager.IsInvalidSlotError(err) {
 			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
 			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		if signaturemanager.IsPinIncorrectError(err) {
-			msg := fmt.Sprintf("the pin provided for the slot '%s' is not correct", input.Slot)
-			return nil, errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+			return nil, pinIncorrectError(err, input.Slot)
 		}
 		return nil, errors.InternalFromErr(err)
 	}
@@ -727,12 +788,18 @@ var _ HSMConnector = new(DefaultUseCase)
 // DefaultUseCase implements the HSMConnector interface.
 type DefaultUseCase struct {
 	digitalSignatureManagerFactory DigitalSignatureManagerFactory
+	pinResolver                    PinResolver
+	breaker                        *pinBreaker
 }
 
 // DefaultUseCaseOptions options to create a new DefaultUseCase.
 type DefaultUseCaseOptions struct {
 	// DigitalSignatureManagerFactory defines the factory to create DigitalSignatureManager connections
 	DigitalSignatureManagerFactory DigitalSignatureManagerFactory
+	// PinResolver obtains the PIN named by a slot's source.
+	PinResolver PinResolver
+	// MetricRecorder records the open state of the per-slot PIN breaker. Optional.
+	MetricRecorder metricrecorder.MetricRecorder
 }
 
 // ProvideDefaultHSMConnector creates a new DefaultUseCase instance, returning an error if it fails.
@@ -740,8 +807,23 @@ func ProvideDefaultHSMConnector(options DefaultUseCaseOptions) (*DefaultUseCase,
 	if options.DigitalSignatureManagerFactory == nil {
 		return nil, errors.Internal().WithMessage("mandatory 'DigitalSignatureManagerFactory' was not provided")
 	}
+	if options.PinResolver == nil {
+		return nil, errors.Internal().WithMessage("mandatory 'PinResolver' was not provided")
+	}
+
+	var gauge metricrecorder.GaugeVector
+	if options.MetricRecorder != nil {
+		g, err := options.MetricRecorder.NewGaugeVector("hsm_slot_pin_breaker_open", []string{"slot", "moduleKind"}, "1 while a slot is not being retried because its PIN was refused, 0 otherwise")
+		if err != nil {
+			return nil, errors.InternalFromErr(err)
+		}
+		gauge = g
+	}
+
 	return &DefaultUseCase{
 		digitalSignatureManagerFactory: options.DigitalSignatureManagerFactory,
+		pinResolver:                    options.PinResolver,
+		breaker:                        newPinBreaker(gauge),
 	}, nil
 }
 
