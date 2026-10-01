@@ -30,7 +30,6 @@ func (adapter *DefaultAPIAdapter) AdaptGenerateAccount(ctx context.Context, data
 	generateAddressInput := hsmconnector.GenerateAddressInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			PinSource:  hsmConnection.Slot.PinSource,
-			LegacyPin:  hsmConnection.Slot.Pin,
 			Slot:       hsmConnection.Slot.Slot,
 			ModuleKind: hsmConnection.ModuleKind,
 		},
@@ -130,7 +129,6 @@ func (adapter *DefaultAPIAdapter) AdaptListAccounts(ctx context.Context, data rp
 	listAddressesInput := hsmconnector.ListAddressesInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			PinSource:  hsmConnection.Slot.PinSource,
-			LegacyPin:  hsmConnection.Slot.Pin,
 			Slot:       hsmConnection.Slot.Slot,
 			ModuleKind: hsmConnection.ModuleKind,
 		},
@@ -379,7 +377,6 @@ func adaptSlotConnectionData(moduleKind hsmconnector.ModuleKind, hsmConnection *
 	if moduleKind == hsmconnector.SoftHSMModuleKind {
 		slotConnectionData.Slot = hsmConnection.Slot.Slot
 		slotConnectionData.PinSource = hsmConnection.Slot.PinSource
-		slotConnectionData.LegacyPin = hsmConnection.Slot.Pin
 	}
 	if moduleKind == hsmconnector.AKVModuleKind {
 		slotConnectionData.Config.AKV = make([]hsmconnector.AKVConfig, len(hsmConnection.Slot.Config.AKV))

@@ -165,7 +165,6 @@ func mapFromDB(db hsmslotdb.HSMSlotDB) (*hsmslot.HSMSlot, error) {
 		ApplicationID:      db.ApplicationID,
 		HSMModuleID:        db.HSMModuleID,
 		Slot:               db.Slot,
-		Pin:                db.Pin,
 		PinSource:          db.PinSource,
 		Config:             *dbConfigData,
 		InternalResourceID: entities.InternalResourceID(db.InternalResourceID),

@@ -138,6 +138,20 @@ for that slot. Changing the file's content is enough on its own; the verify call
 against the HSM and is the safer order. If the PIN was already locked on the token, unlock it with your
 vendor's tooling first.
 
+#### Case D: the slot names no pin source
+
+Every signing request for one application fails with `slot '<slot>' has no pin source configured`, while
+the slot exists, the HSM is reachable and `hsm_slot_pin_breaker_open` is 0.
+
+This is an upgrade problem, not a runtime one. The slot predates pin sources and was never moved to
+one, so Signare holds no credential for it. `admin.slots.describe` shows the slot with no `pinSource`.
+
+**Solution:** write the slot's PIN into a file in the configured `pinSourceDirectory`, then point the
+slot at it with `admin.slots.updatePinSource`, which verifies it against the HSM before storing it.
+Signare cannot recover the PIN for you: if it is not known out of band, reset it on the token with your
+vendor's tooling first. See the upgrade precondition in the
+[database reference](../reference/database.md).
+
 ## General scenarios
 
 This section contains a list of scenarios, each of which contains instructions that include actions that are appropriate to the scenario. Note that more than one scenario may apply to a given issue.

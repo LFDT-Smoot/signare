@@ -14,9 +14,6 @@ type HSMSlotDB struct {
 	HSMModuleID string `storage:"hardware_security_module_id"`
 	// Slot identifier within the HSM
 	Slot string `storage:"slot"`
-	// Pin is the deprecated cleartext PIN of a slot created before PinSource existed. Only
-	// getByApplication selects it, so it is empty on every other read, and nothing writes it.
-	Pin string `storage:"pin"`
 	// PinSource names the secret holding the PIN, resolved at login time.
 	PinSource string `storage:"pin_source"`
 	// Config the config of the HSM Slot

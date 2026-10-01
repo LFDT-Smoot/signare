@@ -12,8 +12,8 @@ import (
 )
 
 // connection is the persistence connection of the app InitializeApp last built, exposed so a test can
-// write a row the API can no longer produce. The only use today is a slot carrying a legacy cleartext
-// pin, which creation stopped writing.
+// write a row the API cannot produce. The only use today is a slot naming no pin source, which both
+// creation and EditPinSource refuse.
 var connection sql.Connection
 
 // Connection returns the persistence connection of the app built by InitializeApp.

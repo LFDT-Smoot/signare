@@ -64,7 +64,7 @@ func (d *DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddr
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "GenerateAddress")
 
-	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (d *DefaultUseCase) RemoveAddress(ctx context.Context, input RemoveAddressI
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "RemoveAddress")
 
-	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func (d *DefaultUseCase) ListAddresses(ctx context.Context, input ListAddressesI
 	tracer.AddProperty("moduleKind", input.ModuleKind)
 	tracer.AddProperty("operation", "ListAddresses")
 
-	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	pin, err := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource)
 	if err != nil {
 		return nil, err
 	}
@@ -482,7 +482,7 @@ func assembleRecoverableSignature(rawSig []byte, from address.Address, data []by
 
 // signAndRecover signs the payload via HSM and performs EC recovery to determine the V value.
 func (d *DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, tracer logger.Tracer, payload *entities.HexBytes) ([]byte, error) {
-	pin, pinErr := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource, input.LegacyPin)
+	pin, pinErr := d.pinFor(ctx, input.ModuleKind, input.Slot, input.PinSource)
 	if pinErr != nil {
 		return nil, pinErr
 	}
@@ -631,7 +631,7 @@ func (d *DefaultUseCase) PersonalSign(ctx context.Context, input PersonalSignInp
 }
 
 func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, from address.Address, data []byte, tracer logger.Tracer) (*EthereumSignature, error) {
-	pin, pinErr := d.pinFor(ctx, slotData.ModuleKind, slotData.Slot, slotData.PinSource, slotData.LegacyPin)
+	pin, pinErr := d.pinFor(ctx, slotData.ModuleKind, slotData.Slot, slotData.PinSource)
 	if pinErr != nil {
 		return nil, pinErr
 	}

@@ -65,7 +65,6 @@ CREATE TABLE cfg_hardware_security_module_slot (
     hardware_security_module_id VARCHAR(64) NOT NULL,
     application_id VARCHAR(64) NOT NULL,
     slot VARCHAR(256) NULL,
-    pin VARCHAR(256) NULL DEFAULT '',
     pin_source VARCHAR(256) NOT NULL DEFAULT '',
     configuration TEXT NULL,
     creation_date BIGINT NULL,

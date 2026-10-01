@@ -18,10 +18,6 @@ type HSMSlot struct {
 	HSMModuleID string `valid:"required"`
 	// Slot defines the logical container on the HSM.
 	Slot string `valid:"required"`
-	// Pin is the deprecated cleartext code for slots created before PinSource existed. Only the slot-open
-	// read loads it, so it is empty on a slot from Get or a listing, and nothing writes it. PinSource
-	// wins where both are set. Goes when the column does.
-	Pin string `valid:"optional"`
 	// PinSource names the secret holding the PIN. A reference, not a value: the PIN is resolved at login
 	// time and never enters this struct.
 	PinSource string `valid:"optional"`
@@ -31,10 +27,12 @@ type HSMSlot struct {
 
 // LogValue implements slog.LogValuer so that logging an HSMSlot emits only its identifying fields.
 //
-// Pin is the code that unlocks the signing keys, and Config may hold Local Key Vault private key
-// material, so neither is emitted. This is a guard on the type rather than a fix at one call site: a
-// tracer property or a wrapped error anywhere can otherwise put the whole struct in front of a
-// handler, and the JSON handler would marshal every field.
+// Config may hold Local Key Vault private key material, so it is not emitted. This is a guard on the
+// type rather than a fix at one call site: a tracer property or a wrapped error anywhere can otherwise
+// put the whole struct in front of a handler, and the JSON handler would marshal every field.
+//
+// PinSource is emitted: it names a secret rather than holding one, the API returns it on SlotDetail,
+// and it is what an operator needs to act on a slot that cannot open its token.
 //
 // It protects the value and pointer forms, which is what log call sites use. It does NOT extend to an
 // HSMSlot reached inside a bare slice or map: slog resolves LogValuer on the attribute value itself,
@@ -47,6 +45,7 @@ func (s HSMSlot) LogValue() slog.Value {
 		slog.String("applicationId", s.ApplicationID),
 		slog.String("hsmModuleId", s.HSMModuleID),
 		slog.String("slot", s.Slot),
+		slog.String("pinSource", s.PinSource),
 	)
 }
 
@@ -177,7 +176,7 @@ type EditConfigInput struct {
 	HSMModuleID string `valid:"required"`
 }
 
-// EditConfigOutput defines the output of editing an HSMSlot's Pin.
+// EditConfigOutput defines the output of editing an HSMSlot's Config.
 type EditConfigOutput struct {
 	HSMSlot
 }
@@ -268,7 +267,7 @@ type HSMSlotCollection struct {
 
 // LogValue implements slog.LogValuer so that logging a collection does not print the slots it carries.
 // HSMSlot redacts itself when logged directly, but slog does not resolve LogValuer on slice elements,
-// so without this every slot in the page, including its PIN, would be marshalled.
+// so without this every slot in the page, including its key material, would be marshalled.
 func (c HSMSlotCollection) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.Int("items", len(c.Items)),
