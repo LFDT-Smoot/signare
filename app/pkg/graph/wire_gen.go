@@ -17,6 +17,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/httpin"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/httpmiddlewarein/pepin"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/metricsout"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/pinsource/infile/pinsourceinfile"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/rpcin"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/infile/pipinfile"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/infile/roleinfile"
@@ -722,8 +723,14 @@ func initializeUseCases(repositories *repositoriesGraph, metricRecorder metricre
 	if err != nil {
 		return nil, err
 	}
+	pinResolver, err := providePinResolver(config)
+	if err != nil {
+		return nil, err
+	}
 	hsmconnectorDefaultUseCaseOptions := hsmconnector.DefaultUseCaseOptions{
 		DigitalSignatureManagerFactory: defaultDigitalSignatureManagerFactory,
+		PinResolver:                    pinResolver,
+		MetricRecorder:                 metricRecorder,
 	}
 	hsmconnectorDefaultUseCase, err := hsmconnector.ProvideDefaultHSMConnector(hsmconnectorDefaultUseCaseOptions)
 	if err != nil {
@@ -1050,9 +1057,21 @@ type useCasesGraph struct {
 	DigitalSignatureManagerFactory hsmconnector.DigitalSignatureManagerFactory
 }
 
-var useCasesSet = wire.NewSet(wire.Struct(new(useCasesGraph), "*"), transactionalmanager.ProvideTransactionalManager, wire.Bind(new(transactionalmanager.TransactionalManagerUseCase), new(*transactionalmanager.TransactionalManager)), wire.Struct(new(transactionalmanager.TransactionalManagerOptions), "*"), referentialintegrity.ProvideDefaultUseCase, wire.Bind(new(referentialintegrity.ReferentialIntegrityUseCase), new(*referentialintegrity.DefaultUseCase)), wire.Struct(new(referentialintegrity.DefaultUseCaseOptions), "*"), application.ProvideDefaultUseCase, wire.Bind(new(application.ApplicationUseCase), new(*application.DefaultUseCase)), wire.Struct(new(application.DefaultUseCaseOptions), "*"), user.ProvideDefaultUseCase, wire.Bind(new(user.UserUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUserUseCaseOptions), "*"), user.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(user.AccountUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUseCaseTransactionalDecoratorOptions), "*"), admin.ProvideDefaultUseCase, wire.Bind(new(admin.AdminUseCase), new(*admin.DefaultUseCase)), wire.Struct(new(admin.DefaultUseCaseOptions), "*"), hsmmodule.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmmodule.HSMModuleUseCase), new(*hsmmodule.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmmodule.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmmodule.ProvideDefaultHSMModuleUseCase, wire.Struct(new(hsmmodule.DefaultUseCaseOptions), "*"), hsmslot.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmslot.HSMSlotUseCase), new(*hsmslot.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmslot.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmslot.ProvideDefaultUseCase, wire.Struct(new(hsmslot.DefaultUseCaseOptions), "*"), hsmconnector.ProvideDefaultHSMConnector, wire.Bind(new(hsmconnector.HSMConnector), new(*hsmconnector.DefaultUseCase)), wire.Struct(new(hsmconnector.DefaultUseCaseOptions), "*"), provideDefaultRoleStorageInFile, role.ProvideDefaultRoleUseCase, wire.Bind(new(role.RoleUseCase), new(*role.DefaultRoleUseCase)), wire.Struct(new(role.DefaultRoleUseCaseOptions), "*"), provideSoftHSMConfiguration,
+var useCasesSet = wire.NewSet(wire.Struct(new(useCasesGraph), "*"), transactionalmanager.ProvideTransactionalManager, wire.Bind(new(transactionalmanager.TransactionalManagerUseCase), new(*transactionalmanager.TransactionalManager)), wire.Struct(new(transactionalmanager.TransactionalManagerOptions), "*"), referentialintegrity.ProvideDefaultUseCase, wire.Bind(new(referentialintegrity.ReferentialIntegrityUseCase), new(*referentialintegrity.DefaultUseCase)), wire.Struct(new(referentialintegrity.DefaultUseCaseOptions), "*"), application.ProvideDefaultUseCase, wire.Bind(new(application.ApplicationUseCase), new(*application.DefaultUseCase)), wire.Struct(new(application.DefaultUseCaseOptions), "*"), user.ProvideDefaultUseCase, wire.Bind(new(user.UserUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUserUseCaseOptions), "*"), user.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(user.AccountUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUseCaseTransactionalDecoratorOptions), "*"), admin.ProvideDefaultUseCase, wire.Bind(new(admin.AdminUseCase), new(*admin.DefaultUseCase)), wire.Struct(new(admin.DefaultUseCaseOptions), "*"), hsmmodule.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmmodule.HSMModuleUseCase), new(*hsmmodule.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmmodule.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmmodule.ProvideDefaultHSMModuleUseCase, wire.Struct(new(hsmmodule.DefaultUseCaseOptions), "*"), hsmslot.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmslot.HSMSlotUseCase), new(*hsmslot.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmslot.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmslot.ProvideDefaultUseCase, wire.Struct(new(hsmslot.DefaultUseCaseOptions), "*"), hsmconnector.ProvideDefaultHSMConnector, wire.Bind(new(hsmconnector.HSMConnector), new(*hsmconnector.DefaultUseCase)), wire.Struct(new(hsmconnector.DefaultUseCaseOptions), "*"), provideDefaultRoleStorageInFile, role.ProvideDefaultRoleUseCase, wire.Bind(new(role.RoleUseCase), new(*role.DefaultRoleUseCase)), wire.Struct(new(role.DefaultRoleUseCaseOptions), "*"), providePinResolver,
+	provideSoftHSMConfiguration,
 	provideAKVConfiguration, hsmconnector.ProvideDefaultDigitalSignatureManagerFactory, wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)), wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"), hsmconnection.ProvideDefaultHSMConnectionResolver, wire.Bind(new(hsmconnection.Resolver), new(*hsmconnection.DefaultHSMConnectionResolver)), wire.Struct(new(hsmconnection.DefaultHSMConnectionResolverOptions), "*"),
 )
+
+// providePinResolver builds the resolver that turns a slot's pin source into the PIN it names. The
+// directory is optional, so a deployment with no PKCS#11 slot, or one whose slots still carry a stored
+// PIN, starts without it and only hears about it if a source is actually used.
+func providePinResolver(config Config) (hsmconnector.PinResolver, error) {
+	options := pinsourceinfile.ResolverOptions{}
+	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.SoftHSM != nil {
+		options.Directory = config.Libraries.HSMModules.SoftHSM.PinSourceDirectory
+	}
+	return pinsourceinfile.NewResolver(options)
+}
 
 func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {
 	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.SoftHSM != nil {

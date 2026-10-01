@@ -46,12 +46,19 @@ Follow the steps below to start up for the first time:
 4. Spin up Signare, it's key to use the `--signer-administrator` flag as in the command below to follow this guide successfully:
 
     ```console
-    signare --listen-address 0.0.0.0 --http-port 32325 --rpc-port 4545 --config <path_to_repository>/deployment/examples/config --signer-administrator owner
+    signare --http-port 32325 --rpc-port 4545 --config <path_to_repository>/deployment/examples/config --signer-administrator owner
     ```
 
 !!! tip
 
     You can adapt the configuration and flags as needed, for more in depth information take a look at the [configuration reference](../reference/configuration.md).
+
+!!! warning
+
+    This guide runs Signare on `127.0.0.1`, the default for `--listen-address`, and every request below
+    is sent from the same host. Signare does not authenticate callers: the `X-Auth-RpcUserId` header
+    below is taken at face value. Before exposing it on any other address, read the
+    [deployment requirements](../reference/security.md#deployment-requirements).
 
 ## Creating an account
 
@@ -129,7 +136,16 @@ First, you need to have an application and a user with the role of `application-
     softhsm2-util --show-slots 
     ```
 
-6. Create a slot  pasting the generated slot id in the `slot` attribute:
+6. Write the slot PIN into the directory configured as
+   [`pinSourceDirectory`](../reference/configuration.md#softhsm-configuration). Signare reads the PIN
+   from this file and never stores it:
+
+    ```console
+    printf 'userpin' > /etc/signare/slot-pins/my-first-slot-pin
+    ```
+
+7. Create a slot, pasting the generated slot id in the `slot` attribute and the file name in
+   `pinSource`:
 
     ```console
     curl --location --request POST 'http://localhost:32325/admin/modules/my-first-hsm/slots' \
@@ -142,12 +158,12 @@ First, you need to have an application and a user with the role of `application-
         "spec": {
             "applicationId": "my-first-application",
             "slot": <your_generated_slot>,
-            "pin": <your_slot_pin>
+            "pinSource": "my-first-slot-pin"
         }
     }'
     ``` 
    
-7. Generate a new account:
+8. Generate a new account:
 
     ```console
     curl --location --request POST 'http://localhost:4545' \

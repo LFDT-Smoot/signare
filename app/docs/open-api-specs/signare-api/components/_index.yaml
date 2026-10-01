@@ -24,8 +24,8 @@ schemas:
     $ref: ./schemas/admin/SlotDetailConfig.yaml
   SlotCollection:
     $ref: ./schemas/admin/SlotCollection.yaml
-  SlotUpdatePin:
-    $ref: ./schemas/admin/SlotUpdatePin.yaml
+  SlotUpdatePinSource:
+    $ref: ./schemas/admin/SlotUpdatePinSource.yaml
   SlotUpdateConfig:
     $ref: ./schemas/admin/SlotUpdateConfig.yaml
   AdminUserDetail:

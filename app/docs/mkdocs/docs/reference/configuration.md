@@ -35,6 +35,7 @@ metrics:
 hsmmodules:
   softhsm:
     lib: '/usr/local/lib/softhsm/libsofthsm2.so'
+    pinSourceDirectory: '/etc/signare/slot-pins'
   akv:
     url: 'https://signare.vault.azure.net/'
 server:
@@ -57,6 +58,11 @@ server:
       `SIGNARE_DATABASE_POSTGRESQL_PASSWORD` environment variable (see below); the `__CHANGE_ME__`
       placeholder is intentionally invalid.
     - `info` is the recommended log level. `debug` can emit internal stack traces.
+    - Leave `--listen-address` at `127.0.0.1` unless a proxy, sidecar or mesh policy is the only route
+      to the address you widen it to. Signare authenticates no one: it trusts the identity headers
+      named by `requestContext` below, so a reachable listener is an unauthenticated one. Signare logs
+      a startup warning when the bind address is not loopback. See the
+      [deployment requirements](./security.md#deployment-requirements){:target="_blank"}.
 
 !!! info "Supplying configuration via the environment"
 
@@ -139,7 +145,7 @@ Let us dive into the different attributes:
 
 | Name                    | Type   | Required | Description                                          | Default Value (if any) |
 |-------------------------|--------|:--------:|------------------------------------------------------|------------------------|
-| **port**                | int    |    ✗     | Port number where Prometheus metrics will be exposed | 9780                   |
+| **port**                | int    |    ✗     | Port number where Prometheus metrics will be exposed | 9785                   |
 | **path**                | string |    ✗     | URL path where prometheus will listen                | /metrics               |
 | **maxRequestsInFlight** | int    |    ✗     | Number of concurrent HTTP requests                   | 10                     |
 | **timeoutInMillis**     | int    |    ✗     | Number of millis until timeout                       | 30000                  |
@@ -156,9 +162,30 @@ Signare provides support for different HSM types. Not all the supported HSMs req
 
 #### SoftHSM Configuration
 
-| Name        | Type   | Required | Description                              | Default Value (if any) |
-|-------------|--------|:--------:|------------------------------------------|------------------------|
-| **library** | string |    ✔     | Library path to the softHSM installation |                        |
+| Name                   | Type   | Required | Description                                        | Default Value (if any) |
+|------------------------|--------|:--------:|----------------------------------------------------|------------------------|
+| **lib**                | string |    ✔     | Library path to the softHSM installation           |                        |
+| **pinSourceDirectory** | string |    ✗     | Directory holding one file per slot PIN            |                        |
+
+Signare does not store slot PINs. A slot records a `pinSource`, the name of a file in
+`pinSourceDirectory`, and the PIN is read from that file each time Signare logs in to the token. A
+rotated secret therefore takes effect without a restart.
+
+`pinSourceDirectory` is required once any slot names a source; a deployment with only AKV or Local Key
+Vault modules does not need it. A configured directory must exist at startup, or the process fails.
+
+A `pinSource` is a single name: no path separators, no `..`, and only letters, digits, `.`, `_` and `-`.
+Anything else is rejected, so a slot cannot *name* a file outside the directory. Symlinks inside the
+directory are followed, which is what makes a Kubernetes secret projection work, and a symlink placed
+there can point anywhere. Write access to `pinSourceDirectory` is therefore equivalent to control of
+every slot PIN: grant it to nothing but the process that populates the secrets.
+
+Each file holds the PIN and nothing else. A single trailing line ending is stripped, `\n`, `\r\n` or a
+lone `\r`, so `echo -n 'mypin' > slot-1-pin` and `echo 'mypin' > slot-1-pin` are equivalent; any other
+whitespace, including a trailing space or tab, is part of the PIN. A file over 1 KiB is rejected.
+
+The files must be readable by the Signare process and by nothing else. In Kubernetes, mount a Secret at
+`pinSourceDirectory` with `defaultMode: 0400` and set the pod's `fsGroup` to the group Signare runs as.
 
 #### AKV Configuration
 
@@ -193,9 +220,24 @@ Let us delve deeper into the specifics to further describe the flag options:
 |--------------------------|--------|:--------:|--------------------------------------------------------------|------------------------|
 | **signer-administrator** | string |    ✔     | Id of Signare's initial admin                            |                        |
 | **config**               | string |    ✔     | Path to where the config yml file is stored                  |                        |
-| **listen-address**       | string |    ✗     | Address where Signare will listen                        | 0.0.0.0                |
+| **listen-address**       | string |    ✗     | Address where Signare will listen, on all three listeners    | 127.0.0.1              |
 | **http-port**            | int    |    ✗     | Number of the port where REST API methods will be hosted     | 32325                  |
 | **rpc-port**             | int    |    ✗     | Number of the port where JSON RPC API methods will be hosted | 4545                   |
+
+!!! warning "`listen-address` binds every listener"
+
+    `listen-address` governs the REST, JSON-RPC and Prometheus metrics listeners alike; only their
+    ports are configured separately.
+
+    It defaults to `127.0.0.1`, which is the only value that needs no further protection. Signare
+    authenticates no one, so any address a client can reach is an address from which it can act as any
+    user. Set it to `0.0.0.0` only where a proxy, sidecar or mesh policy is the sole route in, and read
+    the [deployment requirements](./security.md#deployment-requirements){:target="_blank"} first.
+    Signare logs a startup warning whenever the bind address is not loopback.
+
+    A container that publishes its ports has to pass `--listen-address 0.0.0.0` explicitly: a loopback
+    bind inside the container is not reachable from the published port. Publish it to the proxy, not to
+    the host.
 
 
 

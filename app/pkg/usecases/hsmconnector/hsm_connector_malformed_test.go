@@ -80,8 +80,11 @@ func (f *malformedSignatureFactory) Reset(_ context.Context, _ hsmconnector.Modu
 func connectorWithBackendSignature(t *testing.T, sig []byte) hsmconnector.HSMConnector {
 	t.Helper()
 	factory := &malformedSignatureFactory{manager: &malformedSignatureManager{signature: sig}}
+	pinResolver, err := signaturemanagertesthelper.NewPinResolver()
+	require.NoError(t, err)
 	connector, err := hsmconnector.ProvideDefaultHSMConnector(hsmconnector.DefaultUseCaseOptions{
 		DigitalSignatureManagerFactory: factory,
+		PinResolver:                    pinResolver,
 	})
 	require.NoError(t, err)
 	return connector
@@ -106,7 +109,7 @@ func TestDefaultUseCase_SignTx_MalformedBackendSignature(t *testing.T) {
 		return hsmconnector.SignTxInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			ChainID: *chainIDHex,
@@ -136,7 +139,7 @@ func TestDefaultUseCase_SignTypedData(t *testing.T) {
 	signTypedDataInput := hsmconnector.SignTypedDataInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			Slot:       slotID,
-			Pin:        slotPin,
+			PinSource:  slotPinSource,
 			ModuleKind: hsmconnector.SoftHSMModuleKind,
 		},
 		ChainID:   entities.HexInt256{Int256: entities.Int256{Int: *big.NewInt(1)}},
@@ -158,7 +161,7 @@ func TestDefaultUseCase_SignTypedData_InvalidTypedData(t *testing.T) {
 	signTypedDataOutput, err := app.HSMConnector.SignTypedData(ctx, hsmconnector.SignTypedDataInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			Slot:       slotID,
-			Pin:        slotPin,
+			PinSource:  slotPinSource,
 			ModuleKind: hsmconnector.SoftHSMModuleKind,
 		},
 		ChainID:   entities.HexInt256{Int256: entities.Int256{Int: *big.NewInt(1)}},
@@ -220,7 +223,7 @@ func TestDefaultUseCase_SignTypedData_EncoderErrorIsInvalidArgument(t *testing.T
 			signTypedDataOutput, err := app.HSMConnector.SignTypedData(ctx, hsmconnector.SignTypedDataInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 				ChainID:   entities.HexInt256{Int256: entities.Int256{Int: *big.NewInt(1)}},
@@ -240,7 +243,7 @@ func TestDefaultUseCase_SignTypedData_MalformedBackendSignature(t *testing.T) {
 		return hsmconnector.SignTypedDataInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			ChainID:   entities.HexInt256{Int256: entities.Int256{Int: *big.NewInt(1)}},
@@ -308,7 +311,7 @@ func TestDefaultUseCase_PersonalSign_RecoversSigner(t *testing.T) {
 	out, err := app.HSMConnector.PersonalSign(ctx, hsmconnector.PersonalSignInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			Slot:       slotID,
-			Pin:        slotPin,
+			PinSource:  slotPinSource,
 			ModuleKind: hsmconnector.SoftHSMModuleKind,
 		},
 		Address: expected,
@@ -348,7 +351,7 @@ func TestDefaultUseCase_PersonalSign_MessageIsBoundToTheSignature(t *testing.T) 
 		return hsmconnector.PersonalSignInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			Address: signer,
@@ -369,7 +372,7 @@ func TestDefaultUseCase_PersonalSign_RejectsEmptyMessage(t *testing.T) {
 	out, err := app.HSMConnector.PersonalSign(ctx, hsmconnector.PersonalSignInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			Slot:       slotID,
-			Pin:        slotPin,
+			PinSource:  slotPinSource,
 			ModuleKind: hsmconnector.SoftHSMModuleKind,
 		},
 		Address: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -384,7 +387,7 @@ func TestDefaultUseCase_PersonalSign_RejectsEmptyAddress(t *testing.T) {
 	out, err := app.HSMConnector.PersonalSign(ctx, hsmconnector.PersonalSignInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			Slot:       slotID,
-			Pin:        slotPin,
+			PinSource:  slotPinSource,
 			ModuleKind: hsmconnector.SoftHSMModuleKind,
 		},
 		Message: []byte("hello"),

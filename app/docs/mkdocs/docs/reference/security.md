@@ -30,6 +30,38 @@ The diagram below displays a `security gateway` as an abstraction of the securit
   <figcaption>signare security architecture diagram</figcaption>
 </figure>
 
+### Deployment requirements
+
+The security gateway is not an optional layer of the diagram. The signare performs no authentication of
+its own: it reads the caller's identity from two request headers and trusts what it finds. Anything
+that can reach a signare listener can therefore name any user, including the signer administrator, with
+no credential at all.
+
+Those two headers are `X-Auth-UserId` and `X-Auth-ApplicationId` by default, but they are deployment
+settings, not fixed names. `requestContext.userRequestHeader` and
+`requestContext.applicationRequestHeader` replace them wholesale, and the value is taken verbatim with
+no check on its shape or prefix. The bundled example configuration already renames them, so do not
+assume the `X-Auth-` prefix is what your deployment uses.
+
+A deployment must satisfy all of the following:
+
+1. **The signare is not reachable except through the gateway.** `--listen-address` defaults to
+   `127.0.0.1` for this reason. Widening it puts the API within reach of every host that can route to
+   the address, and the signare logs a startup warning when it is not loopback.
+2. **The gateway authenticates every caller** before forwarding the request.
+3. **The gateway sets the two identity headers from the verified identity, and strips whatever the
+   client sent for them.** The headers to strip are whichever names
+   `requestContext.userRequestHeader` and `requestContext.applicationRequestHeader` are configured
+   with, defaulting to `X-Auth-UserId` and `X-Auth-ApplicationId`. A gateway that strips `X-Auth-*`
+   while the deployment has renamed the headers to something outside that prefix strips nothing that
+   matters, and the client goes on asserting its own identity. A gateway that forwards a
+   client-supplied identity header authenticates nobody, regardless of how it authenticated the
+   connection.
+
+A TLS sidecar or a service mesh satisfies the first requirement only as far as its policy restricts
+who may connect. Mutual TLS authenticates the gateway, not the caller, so requirements 2 and 3 still
+have to be met by whatever terminates the request.
+
 ## Authorization
 
 Users access the signare by making HTTP requests to its APIs. When a request reaches the API, the middleware have to authorize the access. 

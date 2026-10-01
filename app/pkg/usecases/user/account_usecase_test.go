@@ -485,7 +485,7 @@ func TestDefaultUseCase_DeleteAllAccountsForAddress(t *testing.T) {
 		ApplicationID: applicationID,
 		HSMModuleID:   hsmModuleID,
 		Slot:          slotID,
-		Pin:           slotPin,
+		PinSource:     slotPinSource,
 	}
 	createHSMSlotOutput, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, createHSMSlotInput)
 	require.NoError(t, createHSMSlotErr)

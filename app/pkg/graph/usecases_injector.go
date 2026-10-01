@@ -11,6 +11,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 
 	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/pinsource/infile/pinsourceinfile"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/infile/roleinfile"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
@@ -97,6 +98,7 @@ var useCasesSet = wire.NewSet(
 	wire.Struct(new(role.DefaultRoleUseCaseOptions), "*"),
 
 	// Digital Signature Manager DigitalSignatureManagerFactory
+	providePinResolver,
 	provideSoftHSMConfiguration,
 	provideAKVConfiguration,
 	hsmconnector.ProvideDefaultDigitalSignatureManagerFactory,
@@ -127,6 +129,17 @@ func initializeUseCases(
 		),
 	)
 	return &useCasesGraph{}, nil
+}
+
+// providePinResolver builds the resolver that turns a slot's pin source into the PIN it names. The
+// directory is optional, so a deployment with no PKCS#11 slot, or one whose slots still carry a stored
+// PIN, starts without it and only hears about it if a source is actually used.
+func providePinResolver(config Config) (hsmconnector.PinResolver, error) {
+	options := pinsourceinfile.ResolverOptions{}
+	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.SoftHSM != nil {
+		options.Directory = config.Libraries.HSMModules.SoftHSM.PinSourceDirectory
+	}
+	return pinsourceinfile.NewResolver(options)
 }
 
 func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {

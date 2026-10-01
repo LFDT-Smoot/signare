@@ -48,7 +48,7 @@ type MetricsConfig struct {
 
 // PrometheusConfig Prometheus configuration for the metric recorder
 type PrometheusConfig struct {
-	// Port where prometheus metrics will be exposed. Default 9780 aligned with not used port from https://github.com/prometheus/prometheus/wiki/Default-port-allocations
+	// Port where prometheus metrics will be exposed. Default 9785, from the unallocated range in https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 	Port *int `valid:"optional"`
 	// Path where prometheus is
 	Path *string `valid:"optional"`
@@ -79,6 +79,8 @@ type HSMModules struct {
 // SoftHSMConfig configures a SoftHSM.
 type SoftHSMConfig struct {
 	Library string `mapstructure:"lib" valid:"required"`
+	// PinSourceDirectory holds one file per slot PIN, each named by the source a slot records.
+	PinSourceDirectory string `mapstructure:"pinSourceDirectory" valid:"optional"`
 }
 
 // AKVConfig configures AKV.
