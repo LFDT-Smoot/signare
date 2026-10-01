@@ -4,7 +4,7 @@ info:
   description: signare public API spec
   version: 1.0.0
 servers:
-  - url: http://localhost:34343
+  - url: http://localhost:32325
     description: Local test
 tags:
   - name: Admin

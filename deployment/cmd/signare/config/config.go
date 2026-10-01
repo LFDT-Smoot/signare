@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"strings"
 
 	"github.com/asaskevich/govalidator"
@@ -93,17 +94,92 @@ func (c *StaticConfiguration) ServerLimits() (maxBodyBytes int64, maxHeaderBytes
 // production deployment. It performs no logging so the caller controls how the warnings are surfaced.
 // Currently it flags any sslmode that does not guarantee an encrypted connection (see secureSSLModes),
 // which would send all database traffic (including the HSM slot credentials stored in the database) in
-// cleartext.
+// cleartext. Each check guards its own configuration section, so an absent section silences that check
+// alone and not the rest.
 func (c *StaticConfiguration) InsecureSettingsWarnings() []string {
-	if c == nil || c.DatabaseInfo.PostgreSQL == nil {
+	if c == nil {
 		return nil
 	}
 	var warnings []string
-	sslMode := strings.ToLower(strings.TrimSpace(c.DatabaseInfo.PostgreSQL.SSLMode))
-	if !secureSSLModes[sslMode] {
-		warnings = append(warnings, fmt.Sprintf("database.postgresql.sslmode is set to %q: database traffic, including the HSM slot credentials stored in the database, may be sent unencrypted. Set sslmode to 'require' or stronger ('verify-ca', 'verify-full') for production.", c.DatabaseInfo.PostgreSQL.SSLMode))
+	if c.DatabaseInfo.PostgreSQL != nil {
+		sslMode := strings.ToLower(strings.TrimSpace(c.DatabaseInfo.PostgreSQL.SSLMode))
+		if !secureSSLModes[sslMode] {
+			warnings = append(warnings, fmt.Sprintf("database.postgresql.sslmode is set to %q: database traffic, including the HSM slot credentials stored in the database, may be sent unencrypted. Set sslmode to 'require' or stronger ('verify-ca', 'verify-full') for production.", c.DatabaseInfo.PostgreSQL.SSLMode))
+		}
 	}
 	return warnings
+}
+
+// loopbackHostname is the only name treated as loopback. Resolving any other name would need a DNS
+// lookup at startup, whose answer can change under the process, so a name is never assumed safe.
+const loopbackHostname = "localhost"
+
+// ListenAddressHost returns the host a configured bind address names: whitespace trimmed, and one pair
+// of surrounding brackets removed from an IPv6 literal. An operator may reasonably write either "::1"
+// or "[::1]", and net.JoinHostPort brackets whatever it is handed, so the bracketed form has to be
+// unwrapped once or it reaches the listener double-bracketed and unbindable.
+//
+// Both the listener and InsecureListenAddressWarnings judge this value, so the address they bind and
+// the address they vet cannot diverge. It is idempotent.
+func ListenAddressHost(listenAddress string) string {
+	host := strings.TrimSpace(listenAddress)
+	// Unwrapped only when unwrapping yields an address, or nothing at all: net.Listen reads "[]:port"
+	// as a bind-everything address, so "[]" has to reach the check as the empty host it is. That keeps
+	// this idempotent, since the result never has brackets left to strip, and it leaves a malformed
+	// value such as "[[::1]]" alone so the warning check and the listener both reject it rather than
+	// one of them guessing at it.
+	if len(host) > 1 && strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		if inner := host[1 : len(host)-1]; inner == "" || isIPLiteral(inner) {
+			host = inner
+		}
+	}
+	return host
+}
+
+func isIPLiteral(host string) bool {
+	_, err := netip.ParseAddr(host)
+	return err == nil
+}
+
+// InsecureListenAddressWarnings returns human-readable warnings for a bind address that puts Signare
+// within reach of anything but the local host. It performs no logging so the caller controls how the
+// warnings are surfaced.
+//
+// Signare authenticates no one: it reads the caller's identity from the request headers and trusts it,
+// which is only safe while the sole route to the listener is a proxy that sets those headers from a
+// verified identity. A reachable listener is therefore an unauthenticated one, so any address that
+// cannot be confirmed to be loopback warns.
+//
+// This is a function rather than a method on StaticConfiguration because the bind address is a
+// command-line flag, and because only the serving command may call it: the upgrade command runs
+// migrations and exits without opening a listener.
+func InsecureListenAddressWarnings(listenAddress string) []string {
+	host := ListenAddressHost(listenAddress)
+	// ToLower rather than EqualFold: EqualFold applies Unicode simple folding, under which the long s
+	// in "localhoſt" equals "localhost", and a name the resolver will reject must not read as loopback.
+	if strings.ToLower(host) == loopbackHostname {
+		return nil
+	}
+
+	// netip rather than net.ParseIP, so a zoned literal such as "fe80::1%eth0" is classified on its
+	// address bits instead of falling through unparsed. The listener accepts a zone, so the check has
+	// to understand one.
+	var exposure string
+	switch addr, err := netip.ParseAddr(host); {
+	case err == nil && addr.IsLoopback():
+		return nil
+	case host == "", err == nil && addr.Unmap().IsUnspecified():
+		// The empty string and the unspecified addresses ("0.0.0.0", "::") all bind every interface.
+		// Unmap first: IsUnspecified does not unmap, so "::ffff:0.0.0.0" would otherwise read as an
+		// ordinary routable address, while net.Listen binds every interface for it.
+		exposure = "binds every network interface"
+	case err == nil:
+		exposure = "is reachable from every host that can route to it"
+	default:
+		exposure = "cannot be confirmed to be loopback"
+	}
+
+	return []string{fmt.Sprintf("--listen-address is set to %q, which %s. Signare does not authenticate callers: it reads the caller's identity from the request headers named by requestContext (X-Auth-UserId and X-Auth-ApplicationId by default) and trusts it, so anything that can reach the listener can act as any user, including the signer administrator. Bind a loopback address (127.0.0.1) and front Signare with a proxy that authenticates the caller, sets those headers from the verified identity, and strips whatever the client sent for them.", listenAddress, exposure)}
 }
 
 // Logger specification
@@ -164,7 +240,7 @@ type MetricsConfig struct {
 
 // PrometheusMetricsConfig provides configuration to expose prometheus metrics
 type PrometheusMetricsConfig struct {
-	// Port where prometheus metrics will be exposed. Default 9780 aligned with not used port from https://github.com/prometheus/prometheus/wiki/Default-port-allocations
+	// Port where prometheus metrics will be exposed. Default 9785, from the unallocated range in https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 	Port *int `mapstructure:"port" valid:"optional"`
 	// Path where prometheus
 	Path *string `mapstructure:"path" valid:"optional"`

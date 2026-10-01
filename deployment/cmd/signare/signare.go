@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -30,7 +32,10 @@ import (
 const (
 	name = "signare"
 
-	defaultAllAddresses   = "0.0.0.0"
+	// defaultListenAddress binds loopback only. Signare authenticates no one: it trusts the caller
+	// identity a fronting proxy puts in the request headers, so a listener anything else can reach is
+	// an unauthenticated one. Widening this is a deployment decision, made explicitly.
+	defaultListenAddress  = "127.0.0.1"
 	defaultPrometheusPort = 9785
 	defaultHTTPPort       = 32325
 	defaultRPCPort        = 4545
@@ -77,7 +82,7 @@ func main() {
 }
 
 func configureCmd(srcCmd *cobra.Command) {
-	srcCmd.Flags().String(flags.ListenAddressFlag, defaultAllAddresses, "Listening address")
+	srcCmd.Flags().String(flags.ListenAddressFlag, defaultListenAddress, "Listening address, shared by the REST, JSON-RPC and metrics listeners")
 	err := viper.BindPFlag(flags.ListenAddressFlag, srcCmd.Flags().Lookup(flags.ListenAddressFlag))
 	if err != nil {
 		panic(err)
@@ -125,12 +130,10 @@ func checkRequiredFlags(cmd *cobra.Command, _ []string) error {
 func startServer(_ *cobra.Command, _ []string) {
 	ctxMainWithCancellation, mainCancel := context.WithCancel(context.Background())
 
-	var addr string
-	if viper.GetString(flags.ListenAddressFlag) == defaultAllAddresses {
-		addr = fmt.Sprintf(":%d", viper.GetInt(flags.HTTPPortFlag))
-	} else {
-		addr = fmt.Sprintf("%s:%d", viper.GetString(flags.ListenAddressFlag), viper.GetInt(flags.HTTPPortFlag))
-	}
+	// Normalised once, here, so the safety check and all three listeners judge the same string. An
+	// untrimmed value reaches net.Listen as a hostname and fails the lookup, and a bracketed IPv6
+	// literal would be bracketed a second time by listenerAddress.
+	listenAddress := config.ListenAddressHost(viper.GetString(flags.ListenAddressFlag))
 
 	staticConfigPath := viper.GetString(flags.SignareConfigPathFlag)
 	if staticConfigPath == "" {
@@ -143,6 +146,9 @@ func startServer(_ *cobra.Command, _ []string) {
 	}
 
 	for _, warning := range staticConfig.InsecureSettingsWarnings() {
+		logger.LogEntry(ctxMainWithCancellation).Warn(warning)
+	}
+	for _, warning := range config.InsecureListenAddressWarnings(listenAddress) {
 		logger.LogEntry(ctxMainWithCancellation).Warn(warning)
 	}
 
@@ -163,19 +169,12 @@ func startServer(_ *cobra.Command, _ []string) {
 
 	maxBodyBytes, maxHeaderBytes := staticConfig.ServerLimits()
 
-	httpServer := startMainServer(addr, *appGraph, maxBodyBytes, maxHeaderBytes)
-	var rpcServerAddress string
-	if viper.GetString(flags.ListenAddressFlag) == defaultAllAddresses {
-		rpcServerAddress = fmt.Sprintf(":%d", viper.GetInt(flags.RPCPortFlag))
-	} else {
-		rpcServerAddress = fmt.Sprintf("%s:%d", viper.GetString(flags.ListenAddressFlag), viper.GetInt(flags.RPCPortFlag))
-	}
-
-	rpcServer := startRPCServer(rpcServerAddress, *appGraph, maxBodyBytes, maxHeaderBytes)
+	httpServer := startMainServer(listenerAddress(listenAddress, viper.GetInt(flags.HTTPPortFlag)), *appGraph, maxBodyBytes, maxHeaderBytes)
+	rpcServer := startRPCServer(listenerAddress(listenAddress, viper.GetInt(flags.RPCPortFlag)), *appGraph, maxBodyBytes, maxHeaderBytes)
 
 	var metricsServer *http.Server
 	if staticConfig.MetricsConfig != nil {
-		metricsServer, err = startMetricsServers(staticConfig, *appGraph, maxHeaderBytes)
+		metricsServer, err = startMetricsServers(listenAddress, staticConfig, *appGraph, maxHeaderBytes)
 		if err != nil {
 			panic(err)
 		}
@@ -221,6 +220,29 @@ func startServer(_ *cobra.Command, _ []string) {
 	}
 }
 
+// listenerAddress builds the bind address for a listener from the --listen-address flag and a port.
+// Every listener (main, RPC and metrics) goes through it, so the flag governs all three and cannot be
+// honoured by two of them and not the third.
+//
+// net.JoinHostPort, not a "%s:%d", because an IPv6 host has to be bracketed: "::1" would otherwise
+// yield "::1:32325", which net.Listen rejects as having too many colons. JoinHostPort brackets any
+// host containing a colon without checking for brackets already there, so host must have come through
+// config.ListenAddressHost, which is where a bracketed literal is unwrapped.
+func listenerAddress(host string, port int) string {
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+// metricsListenerAddress builds the metrics bind address, from --listen-address and the configured
+// Prometheus port. The metrics listener shares the bind address of the REST and JSON-RPC listeners;
+// only its port is configured separately.
+func metricsListenerAddress(host string, prometheusConfig *config.PrometheusMetricsConfig) string {
+	port := defaultPrometheusPort
+	if prometheusConfig.Port != nil {
+		port = *prometheusConfig.Port
+	}
+	return listenerAddress(host, port)
+}
+
 // newHTTPServer builds an *http.Server with the shared slow-client and idle-connection timeouts and the
 // configured maximum header size, applied to every listener (main, RPC, and metrics).
 func newHTTPServer(addr string, handler http.Handler, maxHeaderBytes int) *http.Server {
@@ -261,16 +283,12 @@ func startRPCServer(addr string, appGraph graph.ApplicationGraph, maxBodyBytes i
 	return srv
 }
 
-func startMetricsServers(staticConfig *config.StaticConfiguration, appGraph graph.ApplicationGraph, maxHeaderBytes int) (*http.Server, error) {
+func startMetricsServers(host string, staticConfig *config.StaticConfiguration, appGraph graph.ApplicationGraph, maxHeaderBytes int) (*http.Server, error) {
 	if staticConfig.MetricsConfig.PrometheusMetricsConfig == nil {
 		return nil, errors.New("unknown metric option to start server listener")
 	}
 	router := appGraph.MetricServer()
-	port := defaultPrometheusPort
-	if staticConfig.MetricsConfig.PrometheusMetricsConfig.Port != nil {
-		port = *staticConfig.MetricsConfig.PrometheusMetricsConfig.Port
-	}
-	addr := fmt.Sprintf(":%d", port)
+	addr := metricsListenerAddress(host, staticConfig.MetricsConfig.PrometheusMetricsConfig)
 	// No request-body cap here: the metrics endpoint serves bodyless Prometheus scrape GETs. Only the
 	// header limit applies; the body cap is reserved for the REST and JSON-RPC entrypoints.
 	prometheusMetricsSrv := newHTTPServer(addr, handlers.LoggingHandler(os.Stdout, router.MainRouter()), maxHeaderBytes)
