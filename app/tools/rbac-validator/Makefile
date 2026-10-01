@@ -2,6 +2,9 @@ SHELL=/bin/bash -o pipefail
 
 SIGNARE_DIR=$(shell cd ../..; pwd)
 
+# Every flag is passed, the two list flags as empty, because viper reads an unset flag from the
+# environment and a stray OPERATIONIDINCLUSIONS or OPERATIONIDEXCLUSIONS would otherwise turn a
+# failing validation into a pass.
 .PHONY: tools.run_default
 tools.run_default:
 	@go run ./cmd/rbac_validator.go \
@@ -9,8 +12,17 @@ tools.run_default:
       --rolesFilePath $(SIGNARE_DIR)/include/rbac/roles.yaml \
       --permissionsFilePath $(SIGNARE_DIR)/include/rbac/permissions.yaml \
       --actionsFilesPath $(SIGNARE_DIR)/include/rbac/actions-generated.yaml,$(SIGNARE_DIR)/include/rbac/actions-manual.yaml \
-      --operationIdInclusions rpc.method.eth_generateAccount,rpc.method.eth_importAccount,rpc.method.eth_removeAccount,rpc.method.eth_accounts,rpc.method.eth_signTransaction,rpc.method.eth_signTypedData,rpc.method.personal_sign
+      --operationIdInclusionsFilePath $(SIGNARE_DIR)/include/rbac/actions-manual.yaml \
+      --operationIdInclusions "" \
+      --operationIdExclusions ""
 
 .PHONY: tools.help
 tools.help:
 	@go run ./cmd/rbac_validator.go --help
+
+# This module is outside the app module, so app's unit_test does not reach it on its own. It delegates
+# here instead, which is also what a pipeline should call.
+.PHONY: unit_test
+unit_test:
+	@echo "Executing tests for the rbac-validator tool"
+	@go test ./...

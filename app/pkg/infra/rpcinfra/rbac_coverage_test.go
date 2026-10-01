@@ -1,6 +1,7 @@
 package rpcinfra_test
 
 import (
+	"strings"
 	"testing"
 
 	embedded "github.com/lfdt-smoot/signare/app"
@@ -59,5 +60,33 @@ func TestRBACCoverage_EveryPublishedMethodIsRegisteredAndGrantable(t *testing.T)
 			"method %q is published but its action %q is missing from actions-manual.yaml", method, action)
 		require.Truef(t, granted[action],
 			"method %q is published but its action %q is granted by no permission, so it is denied for every user", method, action)
+	}
+}
+
+// TestRBACCoverage_ManualActionsNameOnlyPublishedMethods guards the reverse direction, which the
+// rbac-validator cannot. That file is its exemption list from the API spec check, so an entry naming a
+// method that does not exist clears that check and is caught only by the orphan-action check, which a
+// grant in permissions.yaml then satisfies: exactly the shape a copy-paste into both files produces.
+// Only the Go code knows which methods are published. With the test above this pins the file to
+// SupportedMethods in both directions, so an exemption is legitimate only if it names a live method.
+func TestRBACCoverage_ManualActionsNameOnlyPublishedMethods(t *testing.T) {
+	manualBytes, err := embedded.RBACFiles.ReadFile("include/rbac/actions-manual.yaml")
+	require.NoError(t, err)
+	var manual manualActionsFile
+	require.NoError(t, yaml.Unmarshal(manualBytes, &manual))
+
+	published := make(map[string]bool, len(rpcinfra.SupportedMethods))
+	for _, method := range rpcinfra.SupportedMethods {
+		published[method] = true
+	}
+
+	for _, action := range manual.Actions {
+		method, isRPCAction := strings.CutPrefix(action, rpcActionPrefix)
+		require.Truef(t, isRPCAction,
+			"action %q in actions-manual.yaml is outside the %q namespace; the file is the exemption list for the API spec check, so only RPC method actions belong in it",
+			action, rpcActionPrefix)
+		require.Truef(t, published[method],
+			"action %q in actions-manual.yaml names method %q, which is not in SupportedMethods, so it is exempt from the API spec check without being published anywhere",
+			action, method)
 	}
 }
