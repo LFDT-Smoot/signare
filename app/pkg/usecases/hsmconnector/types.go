@@ -82,8 +82,9 @@ type DeriveAddressFromPrivateKeyOutput struct {
 type SlotConnectionData struct {
 	// Slot to be accessed.
 	Slot string `valid:"optional"`
-	// Pin that grants access to the slot.
-	Pin string `valid:"optional"`
+	// PinSource names the secret holding the PIN that grants access to the slot. It is a reference, not
+	// the PIN: the value is resolved inside this package, immediately before the login that needs it.
+	PinSource string `valid:"optional"`
 	// Config of the slot.
 	Config SlotConfig `valid:"optional"`
 	// ModuleKind of the Hardware Security Module.
@@ -258,8 +259,8 @@ type CloseAllOutput struct {
 type IsAliveInput struct {
 	// Slot to be accessed.
 	Slot string `valid:"required"`
-	// Pin that grants access to the slot.
-	Pin string `valid:"required"`
+	// PinSource names the secret holding the PIN that grants access to the slot.
+	PinSource string `valid:"required"`
 	// ModuleKind of the Hardware Security Module.
 	ModuleKind ModuleKind `valid:"in(SoftHSM)"`
 }

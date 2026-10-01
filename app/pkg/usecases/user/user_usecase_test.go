@@ -37,6 +37,7 @@ var (
 
 	chainID          = entities.NewInt256FromInt(44844)
 	slotPin          = signaturemanagertesthelper.SlotPin
+	slotPinSource    = signaturemanagertesthelper.SlotPinSource
 	hsmLoadedAddress = signaturemanagertesthelper.ImportedKeyAddress
 
 	app graph.GraphShared
@@ -855,7 +856,7 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 		ApplicationID: currentTestApplication.ID,
 		HSMModuleID:   hsm.ID,
 		Slot:          slotID,
-		Pin:           slotPin,
+		PinSource:     slotPinSource,
 	}
 	createHSMSlotOutput, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, createHSMSlotInput)
 	require.NoError(t, createHSMSlotErr)
@@ -977,7 +978,7 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       hsmConnection.Slot.Slot,
-				Pin:        hsmConnection.Slot.Pin,
+				PinSource:  hsmConnection.Slot.PinSource,
 				ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
 			},
 		}
@@ -1025,7 +1026,7 @@ func TestDefaultUseCase_AddUserAccounts(t *testing.T) {
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       hsmConnection.Slot.Slot,
-				Pin:        hsmConnection.Slot.Pin,
+				PinSource:  hsmConnection.Slot.PinSource,
 				ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
 			},
 		}
@@ -1117,7 +1118,7 @@ func TestDefaultUseCase_RemoveUserAccount(t *testing.T) {
 			ApplicationID: createdApplication.ID,
 			HSMModuleID:   hsm.ID,
 			Slot:          slotID,
-			Pin:           slotPin,
+			PinSource:     slotPinSource,
 		}
 		createHSMSlotOutput, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, createHSMSlotInput)
 		require.NoError(t, createHSMSlotErr)
@@ -1147,7 +1148,7 @@ func TestDefaultUseCase_RemoveUserAccount(t *testing.T) {
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       hsmConnection.Slot.Slot,
-				Pin:        hsmConnection.Slot.Pin,
+				PinSource:  hsmConnection.Slot.PinSource,
 				ModuleKind: hsmconnector.ModuleKind(hsmConnection.ModuleKind),
 			},
 		}

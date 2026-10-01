@@ -36,7 +36,7 @@ var (
 	chainID       = entities.NewInt256FromInt(44844)
 	chainIDHex    = entities.NewHexInt256(big.NewInt(44844))
 	validAddress  = address.MustNewFromHexString("0x970e8128ab834e8eac17ab8e3812f010678cf791")
-	slotPin       = signaturemanagertesthelper.SlotPin
+	slotPinSource = signaturemanagertesthelper.SlotPinSource
 )
 
 func TestMain(m *testing.M) {
@@ -63,9 +63,13 @@ func TestMain(m *testing.M) {
 }
 
 func TestProvideDefaultUseCase(t *testing.T) {
+	pinResolver, resolverErr := signaturemanagertesthelper.NewPinResolver()
+	require.NoError(t, resolverErr)
+
 	t.Run("success", func(t *testing.T) {
 		options := hsmconnector.DefaultUseCaseOptions{
 			DigitalSignatureManagerFactory: app.DigitalSignatureManagerFactory,
+			PinResolver:                    pinResolver,
 		}
 		defaultUseCase, err := hsmconnector.ProvideDefaultHSMConnector(options)
 		require.NoError(t, err)
@@ -74,12 +78,21 @@ func TestProvideDefaultUseCase(t *testing.T) {
 	t.Run("nil digitalSignatureManagerFactory", func(t *testing.T) {
 		options := hsmconnector.DefaultUseCaseOptions{
 			DigitalSignatureManagerFactory: nil,
+			PinResolver:                    pinResolver,
 		}
 		defaultUseCase, err := hsmconnector.ProvideDefaultHSMConnector(options)
 		require.Error(t, err)
 		require.Nil(t, defaultUseCase)
 	})
-
+	t.Run("nil pinResolver", func(t *testing.T) {
+		options := hsmconnector.DefaultUseCaseOptions{
+			DigitalSignatureManagerFactory: app.DigitalSignatureManagerFactory,
+			PinResolver:                    nil,
+		}
+		defaultUseCase, err := hsmconnector.ProvideDefaultHSMConnector(options)
+		require.Error(t, err)
+		require.Nil(t, defaultUseCase)
+	})
 }
 
 func TestDefaultUseCase_GenerateAddress(t *testing.T) {
@@ -87,7 +100,7 @@ func TestDefaultUseCase_GenerateAddress(t *testing.T) {
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -99,7 +112,7 @@ func TestDefaultUseCase_GenerateAddress(t *testing.T) {
 		removeAddressInput := hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			Address: generateAddressOutput.Address,
@@ -113,7 +126,7 @@ func TestDefaultUseCase_GenerateAddress(t *testing.T) {
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: "invalid module kind",
 			},
 		}
@@ -129,7 +142,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 		createAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -141,7 +154,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 			Address: createAddressOutput.Address,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -154,7 +167,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 		removeAddressInput := hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: "invalid type",
 			},
 			Address: validAddress,
@@ -167,7 +180,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 		removeAddressInput = hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			Address: address.ZeroAddress,
@@ -183,7 +196,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 			Address: validAddress,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -199,7 +212,7 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 		createAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -213,7 +226,7 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 		listAddressInput := hsmconnector.ListAddressesInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -246,7 +259,7 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 		listAddressInput := hsmconnector.ListAddressesInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: "invalid module kind",
 			},
 		}
@@ -311,7 +324,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -344,7 +357,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From:     address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -367,7 +380,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -404,7 +417,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -453,7 +466,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -497,7 +510,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -533,7 +546,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -574,7 +587,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -622,7 +635,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -675,7 +688,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -725,7 +738,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -774,7 +787,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -815,7 +828,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -861,7 +874,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From:     address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -886,7 +899,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -914,7 +927,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -943,7 +956,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -978,7 +991,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1022,7 +1035,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1068,7 +1081,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1114,7 +1127,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1172,7 +1185,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1204,7 +1217,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1242,7 +1255,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1289,7 +1302,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1333,7 +1346,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1381,7 +1394,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1428,7 +1441,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1471,7 +1484,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1544,7 +1557,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 				ChainID: *chainIDHex,
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 				From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1589,7 +1602,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 				ChainID: *chainIDHex,
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 				From:  address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1614,7 +1627,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1651,7 +1664,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1688,7 +1701,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1724,7 +1737,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1756,7 +1769,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1789,7 +1802,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1835,7 +1848,7 @@ func TestDefaultUseCase_SignTx_RejectsNonPositiveChainID(t *testing.T) {
 	from := address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress)
 	slot := hsmconnector.SlotConnectionData{
 		Slot:       slotID,
-		Pin:        slotPin,
+		PinSource:  slotPinSource,
 		ModuleKind: hsmconnector.SoftHSMModuleKind,
 	}
 
@@ -1922,7 +1935,7 @@ func provisionTest(ctx context.Context) error {
 		ApplicationID: applicationID,
 		HSMModuleID:   moduleID,
 		Slot:          slotID,
-		Pin:           slotPin,
+		PinSource:     slotPinSource,
 	}
 	_, err = app.HSMSlotUseCase.CreateHSMSlot(ctx, createSlotInput)
 	if err != nil {
@@ -1948,7 +1961,7 @@ func Benchmark_Concurrent_SignTx(b *testing.B) {
 				ChainID: *chainIDHex,
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 				From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1991,7 +2004,7 @@ func Benchmark_Concurrent_GenerateAddress(b *testing.B) {
 			generateAddressInput := hsmconnector.GenerateAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -2015,7 +2028,7 @@ func Benchmark_Concurrent_RemoveAddress(b *testing.B) {
 			generateAddressInput := hsmconnector.GenerateAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -2027,7 +2040,7 @@ func Benchmark_Concurrent_RemoveAddress(b *testing.B) {
 			removeAddressInput := hsmconnector.RemoveAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 				Address: generateAddressOutput.Address,
@@ -2052,7 +2065,7 @@ func Benchmark_Concurrent_ListAddresses(b *testing.B) {
 			createAddressInput := hsmconnector.GenerateAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -2068,7 +2081,7 @@ func Benchmark_Concurrent_ListAddresses(b *testing.B) {
 			listAddressInput := hsmconnector.ListAddressesInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -2092,7 +2105,7 @@ func Benchmark_Concurrent_IsAlive(b *testing.B) {
 			defer wg.Done()
 			isAliveInput := hsmconnector.IsAliveInput{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			}
 			_, err := app.HSMConnector.IsAlive(ctx, isAliveInput)

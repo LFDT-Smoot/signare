@@ -6,7 +6,7 @@
             hardware_security_module_id,
             application_id,
             slot,
-            pin,
+            pin_source,
             configuration,
             creation_date,
             last_update,
@@ -17,7 +17,7 @@
             :hardware_security_module_id,
             :application_id,
             :slot,
-            :pin,
+            :pin_source,
             :configuration,
             :creation_date,
             :last_update,
@@ -31,7 +31,7 @@
             hardware_security_module_id,
             application_id,
             slot,
-            pin,
+            pin_source,
             configuration,
             creation_date,
             last_update,
@@ -62,7 +62,7 @@
             hardware_security_module_id,
             application_id,
             slot,
-            pin,
+            pin_source,
             configuration,
             creation_date,
             last_update,
@@ -79,7 +79,7 @@
             hardware_security_module_id,
             application_id,
             slot,
-            pin,
+            pin_source,
             configuration,
             creation_date,
             last_update,
@@ -100,11 +100,11 @@
             id=:id AND
             resource_version=:resource_version
     </statement>
-    <statement id="updatePin">
+    <statement id="updatePinSource">
         UPDATE
             cfg_hardware_security_module_slot
         SET
-            pin=:pin,
+            pin_source=:pin_source,
             last_update=:last_update,
             resource_version=:new_resource_version
         WHERE
