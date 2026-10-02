@@ -22,20 +22,6 @@ type GenerateKeyOutput struct {
 	Address address.Address `json:"address"`
 }
 
-// DeriveAddressFromPrivateKeyInput for account import requests.
-type DeriveAddressFromPrivateKeyInput struct {
-	// PrivateKey
-	PrivateKey entities.HexBytes
-	// Tracer to log what is needed
-	Tracer logger.Tracer
-}
-
-// DeriveAddressFromPrivateKeyOutput for account import responses.
-type DeriveAddressFromPrivateKeyOutput struct {
-	// Address derived from the private key's public key.
-	Address address.Address `json:"address"`
-}
-
 // RemoveKeyInput for account removal requests.
 type RemoveKeyInput struct {
 	// Slot the slot to look for the keys

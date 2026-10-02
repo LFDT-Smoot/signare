@@ -27,6 +27,19 @@ func (adapter *DefaultAPIAdapter) AdaptGenerateAccount(ctx context.Context, data
 		return nil, adaptError(err)
 	}
 
+	// A Local Key Vault keeps its keys in the slot configuration, which only the slot use case writes.
+	if hsmConnection.ModuleKind == hsmconnector.LKVModuleKind {
+		generateLocalKeyInput := hsmslot.GenerateLocalKeyInput{
+			StandardID: hsmConnection.Slot.StandardID,
+		}
+		out, generateErr := adapter.slotUseCase.GenerateLocalKey(ctx, generateLocalKeyInput)
+		if generateErr != nil {
+			return nil, adaptError(generateErr)
+		}
+		response := out.Address.String()
+		return &response, nil
+	}
+
 	generateAddressInput := hsmconnector.GenerateAddressInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
 			PinSource:  hsmConnection.Slot.PinSource,
@@ -39,47 +52,6 @@ func (adapter *DefaultAPIAdapter) AdaptGenerateAccount(ctx context.Context, data
 		return nil, adaptError(err)
 	}
 	response := out.Address.String()
-	return &response, nil
-}
-
-func (adapter *DefaultAPIAdapter) AdaptImportAccount(ctx context.Context, data rpcinfra.ImportAccountRequestParams) (*string, *rpcerrors.RPCError) {
-	if len(data.PrivateKey) == 0 {
-		return nil, rpcerrors.NewInvalidRequest()
-	}
-
-	privateKey, err := entities.NewHexBytesFromString(data.PrivateKey)
-	if err != nil {
-		return nil, rpcerrors.NewInvalidParamsFromErr(err)
-	}
-
-	getHSMConnectionInput := hsmconnection.ByApplicationInput{
-		ApplicationID: data.ApplicationID,
-	}
-	hsmConnection, err := adapter.hsmConnectionResolver.ByApplication(ctx, getHSMConnectionInput)
-	if err != nil {
-		return nil, adaptError(err)
-	}
-
-	deriveAddressInput := hsmconnector.DeriveAddressFromPrivateKeyInput{
-		PrivateKey: privateKey,
-		ModuleKind: hsmConnection.ModuleKind,
-	}
-	deriveAddressOutput, err := adapter.hsmConnector.DeriveAddressFromPrivateKey(ctx, deriveAddressInput)
-	if err != nil {
-		return nil, adaptError(err)
-	}
-
-	addLocalKeyInput := hsmslot.AddLocalKeyInput{
-		StandardID: hsmConnection.Slot.StandardID,
-		PrivateKey: privateKey,
-		Address:    deriveAddressOutput.Address,
-	}
-	err = adapter.slotUseCase.AddLocalKey(ctx, addLocalKeyInput)
-	if err != nil {
-		return nil, adaptError(err)
-	}
-
-	response := deriveAddressOutput.Address.String()
 	return &response, nil
 }
 
@@ -117,7 +89,7 @@ func (adapter *DefaultAPIAdapter) AdaptListAccounts(ctx context.Context, data rp
 		}
 		out, listErr := adapter.slotUseCase.ListLocalKeys(ctx, listLocalKeysInput)
 		if listErr != nil {
-			return nil, adaptError(err)
+			return nil, adaptError(listErr)
 		}
 		response := make([]string, len(out.Addresses))
 		for i, addr := range out.Addresses {

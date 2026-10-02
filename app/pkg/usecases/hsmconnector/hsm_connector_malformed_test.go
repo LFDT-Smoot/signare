@@ -34,10 +34,6 @@ func (m *malformedSignatureManager) GenerateKey(_ context.Context, _ signaturema
 	return &signaturemanager.GenerateKeyOutput{}, nil
 }
 
-func (m *malformedSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, _ signaturemanager.DeriveAddressFromPrivateKeyInput) (*signaturemanager.DeriveAddressFromPrivateKeyOutput, error) {
-	return &signaturemanager.DeriveAddressFromPrivateKeyOutput{}, nil
-}
-
 func (m *malformedSignatureManager) RemoveKey(_ context.Context, _ signaturemanager.RemoveKeyInput) (*signaturemanager.RemoveKeyOutput, error) {
 	return &signaturemanager.RemoveKeyOutput{}, nil
 }

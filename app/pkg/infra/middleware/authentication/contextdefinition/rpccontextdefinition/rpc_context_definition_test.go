@@ -16,6 +16,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/infra/middleware/authentication/contextdefinition/rpccontextdefinition"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
+	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra/rpcerrors"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/require"
@@ -26,8 +27,8 @@ const (
 	rpcRouteName     = "rpc.method"
 )
 
-// noopResponseHandler is a minimal HTTPResponseHandler. DefineAction only invokes it on malformed
-// requests, which these tests do not exercise.
+// noopResponseHandler is a minimal HTTPResponseHandler for the tests that only inspect the action a
+// registered method is given.
 type noopResponseHandler struct{}
 
 func (noopResponseHandler) HandleErrorResponse(context.Context, http.ResponseWriter, *httpinfra.HTTPError) {
@@ -90,39 +91,89 @@ func TestDefineAction_RegisteredMethod_PreservesMethodLabel(t *testing.T) {
 	require.Equal(t, rpcRouteName+"."+registeredMethod, action)
 }
 
-// TestDefineAction_UnregisteredMethod_FallsBackToRouteName confirms an unregistered, client-supplied
-// method is not folded into the action: it falls back to the bounded route name.
-func TestDefineAction_UnregisteredMethod_FallsBackToRouteName(t *testing.T) {
-	middleware := newMiddleware(t)
+// TestDefineAction_UnregisteredMethod_AnswersMethodNotFound confirms an unregistered method is answered
+// with -32601 carrying the caller's request ID, and never reaches authorization, which would refuse it
+// as Unauthorized.
+func TestDefineAction_UnregisteredMethod_AnswersMethodNotFound(t *testing.T) {
+	middleware := newMiddlewareWithRPCHandler(t)
 
-	action := actionOf(t, runDefineAction(t, middleware, "attacker_supplied_method"))
-	require.Equal(t, rpcRouteName, action)
+	rr := runUnregistered(t, middleware, "eth_importAccount", 7)
+
+	require.Equal(t, http.StatusOK, rr.Code)
+	var response struct {
+		ID    any `json:"id"`
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &response))
+	require.Equal(t, int(rpcerrors.MethodNotFoundErrorCode), response.Error.Code)
+	require.Equal(t, string(rpcerrors.MethodNotFoundErrorMsg), response.Error.Message)
+	require.Equal(t, float64(7), response.ID)
 }
 
-// TestForbiddenAccessCounter_BoundedSeriesForDistinctMethods is a regression guard. It drives
-// many distinct, arbitrary client methods through DefineAction and the 403 metric, then asserts the
-// real forbidden_access_count vector holds a single bounded series rather than one series per method.
-func TestForbiddenAccessCounter_BoundedSeriesForDistinctMethods(t *testing.T) {
+// TestForbiddenAccessCounter_NoSeriesForUnregisteredMethods is a regression guard on metric
+// cardinality. Many distinct client-chosen methods must not create a forbidden_access_count series
+// each: they are answered before an action exists, so none is labelled with the method.
+func TestForbiddenAccessCounter_NoSeriesForUnregisteredMethods(t *testing.T) {
+	middleware := newMiddlewareWithRPCHandler(t)
+	for i := 0; i < 1000; i++ {
+		runUnregistered(t, middleware, fmt.Sprintf("evil_method_%d", i), i)
+	}
+
+	require.Zero(t, forbiddenAccessSeriesMatching(t, "evil_method_"),
+		"no client-chosen method may become a forbidden_access_count label")
+}
+
+// newMiddlewareWithRPCHandler builds an RPCContextDefinition backed by the real JSON-RPC response
+// handler and real metrics, so the response and the metric series an unregistered method produces
+// are the ones the server produces.
+func newMiddlewareWithRPCHandler(t *testing.T) *rpccontextdefinition.RPCContextDefinition {
+	t.Helper()
+
 	adapter, err := metricsout.NewTestMetricsRecorderAdapter()
 	require.NoError(t, err)
 	recorder, err := metricrecorder.ProvideDefaultMetricRecorder(metricrecorder.DefaultMetricRecorderOptions{MetricsRecorderAdapter: adapter})
 	require.NoError(t, err)
 	metrics, err := httpinfra.ProvideDefaultHTTPMetrics(httpinfra.DefaultHTTPMetricsOptions{MetricRecorder: recorder})
 	require.NoError(t, err)
+	responseHandler, err := rpcinfra.ProvideDefaultRPCInfraResponseHandler(rpcinfra.DefaultRPCInfraResponseHandlerOptions{HTTPMetrics: metrics})
+	require.NoError(t, err)
 
-	middleware := newMiddleware(t)
-	for i := 0; i < 1000; i++ {
-		ctx := runDefineAction(t, middleware, fmt.Sprintf("evil_method_%d", i))
-		metrics.IncrementForbiddenAccessCounter(ctx)
-	}
+	router := rpcinfra.ProvideDefaultRPCRouter(rpcinfra.DefaultRPCRouterOptions{})
+	require.NoError(t, router.RegisterRPCHandlerFunc(registeredMethod, nil))
+	router.Router().HandleFunc("/", router.HandleRPCRequest).Methods(http.MethodPost).Name(rpcRouteName)
 
-	require.Equal(t, 1, forbiddenAccessSeriesCount(t),
-		"distinct client methods must collapse onto a single bounded forbidden_access_count series")
+	middleware, err := rpccontextdefinition.ProvideRPCContextDefinitionFromHeaders(rpccontextdefinition.RPCContextDefinitionOptions{
+		ResponseHandler: responseHandler,
+		RPCRouter:       router,
+	})
+	require.NoError(t, err)
+	return middleware
 }
 
-// forbiddenAccessSeriesCount scrapes the Prometheus default registry and counts the distinct
-// forbidden_access_count series (one line per unique label set).
-func forbiddenAccessSeriesCount(t *testing.T) int {
+// runUnregistered sends an unregistered method through DefineAction, with the request ID in the
+// context as the batch entrypoint puts it there, and fails if the next handler runs.
+func runUnregistered(t *testing.T, middleware *rpccontextdefinition.RPCContextDefinition, method string, id int) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "method": method, "id": id})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req = req.WithContext(context.WithValue(req.Context(), requestcontext.RPCRequestIDKey, any(float64(id))))
+
+	rr := httptest.NewRecorder()
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatalf("an unregistered method %q must not reach the next handler", method)
+	})
+	middleware.DefineAction(next).ServeHTTP(rr, req)
+	return rr
+}
+
+// forbiddenAccessSeriesMatching scrapes the Prometheus default registry and counts the
+// forbidden_access_count series whose labels contain fragment.
+func forbiddenAccessSeriesMatching(t *testing.T, fragment string) int {
 	t.Helper()
 
 	rr := httptest.NewRecorder()
@@ -131,7 +182,7 @@ func forbiddenAccessSeriesCount(t *testing.T) int {
 	prefix := metricsout.DefaultTestMetricsNamespace + "_forbidden_access_count{"
 	count := 0
 	for _, line := range strings.Split(rr.Body.String(), "\n") {
-		if strings.HasPrefix(line, prefix) {
+		if strings.HasPrefix(line, prefix) && strings.Contains(line, fragment) {
 			count++
 		}
 	}

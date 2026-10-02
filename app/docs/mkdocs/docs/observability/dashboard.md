@@ -22,7 +22,10 @@ This panel shows the rate of forbidden actions for a user's role within 5-minute
 Monitoring the amount of unauthorized requests to an API it's important since these request might be an indication
 of a potential security breach or attack.
 
-The related metric is: `forbiden_access_count`.
+The related metric is: `forbidden_access_count`.
+
+A call to a JSON-RPC method signare does not publish is answered with `-32601 Method not found` before authorization,
+so it is not counted here.
 
 
 ## How should I monitor these metrics?
