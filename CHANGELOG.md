@@ -26,16 +26,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SlotDetail.spec` gains `pinSource`, so `describe`, `list` and the slot mutations report which secret a slot names. The PIN itself is never returned (#42).
 - Log records for an HSM slot now carry `pinSource`. It names a secret rather than holding one, and it is what an operator needs to act on a slot that cannot open its token (#43).
 - Run `rbac-validator` from a `make tools.validate_rbac` target that `make lint` depends on, and read its operation ID exemption list from `actions-manual.yaml` instead of a copy of that list in the tool's Makefile, with the RBAC coverage tests pinning that file to the published JSON-RPC method set in both directions, and that set to what the JSON-RPC router registers (#28).
+- A JSON-RPC method signare does not publish now returns `-32601 Method not found`, where authorization refused it as `-32099 Unauthorized` (#38).
 
 ### Removed
 - **Breaking.** `admin.slots.updatePin` and `POST /admin/modules/{moduleId}/slots/{slotId}:update-pin`, replaced by the value-free `admin.slots.updatePinSource` on `:update-pin-source` and the new `admin.slots.verifyPinSource` on `:verify-pin-source` (#42).
 - **Breaking.** The `pin` column of `cfg_hardware_security_module_slot`, and with it the fallback that let a slot stored before pin sources existed keep signing. The upgrade refuses to run while any slot still depends on the column; see the [database reference](app/docs/mkdocs/docs/reference/database.md) for the precondition and recovery (#43).
+- **Breaking.** The `eth_importAccount` JSON-RPC method, so a raw private key never crosses the API. `eth_generateAccount` now generates Local Key Vault keys, and an existing key is loaded with the module's own tooling (#38).
 
 ### Fixed
 - Fixed `eth_signTransaction` signing a request as a legacy transaction, silently discarding `maxFeePerBlobGas`, `blobVersionedHashes` or `authorizationList`, when the request carried one of those fields and neither a `gasPrice` nor any EIP-1559 fee field. Such a request is now rejected as an unsupported transaction type (#5).
 - Correct two documented defaults that matched nothing in the code: the Prometheus metrics port, given as 9780 in the configuration reference and in two Go doc comments where `defaultPrometheusPort` is 9785, and the OpenAPI spec's `servers` URL, given as `http://localhost:34343` where the REST listener defaults to 32325 (#47).
 - Fix `make tools.run_default` in the `rbac-validator` tool, which failed because `eth_importAccount` and `eth_signTypedData` were missing from its list of operation ID inclusions. Both are RBAC-checked JSON-RPC methods that are declared in `actions-manual.yaml` and granted in `permissions.yaml`, but no JSON-RPC method appears in the OpenAPI spec, so every one of them has to be an inclusion for the one-to-one action check to hold. All seven validation steps now pass (#28).
 - Pass every `rbac-validator` flag explicitly from its Makefile, the two list flags as empty, so a stray `OPERATIONIDINCLUSIONS` or `OPERATIONIDEXCLUSIONS` environment variable can no longer turn a failing validation into a pass through viper's automatic environment lookup (#28).
+- Fix `eth_accounts` on a Local Key Vault reporting every failure as `-32603 Internal error` and dropping its cause from the log (#38).
 
 ### Security
 - **Breaking:** `--listen-address` now defaults to `127.0.0.1` and also governs the Prometheus metrics listener, which previously bound every interface regardless; a non-loopback bind logs a startup warning stating the proxy contract the identity headers depend on, and an IPv6 bind address is now bracketed so it reaches the listener at all, in either the bare or the bracketed spelling. Published-port containers and off-host scrapers need `--listen-address 0.0.0.0` set explicitly (#47).

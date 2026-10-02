@@ -9,7 +9,6 @@ import (
 // re-declaring the method strings, which would drift out of sync on a rename.
 const (
 	GenerateAccountMethod = "eth_generateAccount"
-	ImportAccountMethod   = "eth_importAccount"
 	RemoveAccountMethod   = "eth_removeAccount"
 	ListAccountsMethod    = "eth_accounts"
 	SignTransactionMethod = "eth_signTransaction"
@@ -22,7 +21,6 @@ const (
 // method is a registered, grantable action.
 var SupportedMethods = []string{
 	GenerateAccountMethod,
-	ImportAccountMethod,
 	RemoveAccountMethod,
 	ListAccountsMethod,
 	SignTransactionMethod,
@@ -51,10 +49,6 @@ func ProvideJSONRPCMethods(options JSONRPCAPIPublisherOptions) (JSONRPCAPIRoutes
 	// Register RPC handlers
 	var err error
 	err = options.RPCRouter.RegisterRPCHandlerFunc(GenerateAccountMethod, options.Handler.HandleGenerateAccount)
-	if err != nil {
-		return 0, err
-	}
-	err = options.RPCRouter.RegisterRPCHandlerFunc(ImportAccountMethod, options.Handler.HandleImportAccount)
 	if err != nil {
 		return 0, err
 	}

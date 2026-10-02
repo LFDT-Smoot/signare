@@ -2,9 +2,9 @@ package localkeyvault
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 
@@ -29,32 +29,10 @@ func ProvideLKVSignatureManager(_ LKVSignatureManagerOptions) *LKVSignatureManag
 	return &LKVSignatureManager{}
 }
 
+// GenerateKey is not implemented: the key store lives in the slot configuration, which this manager
+// cannot write. The slot use case generates Local Key Vault keys with NewKey instead.
 func (sm *LKVSignatureManager) GenerateKey(_ context.Context, _ signaturemanager.GenerateKeyInput) (*signaturemanager.GenerateKeyOutput, error) {
 	return nil, signaturemanager.NewNotImplementedError()
-}
-
-func (sm *LKVSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, input signaturemanager.DeriveAddressFromPrivateKeyInput) (*signaturemanager.DeriveAddressFromPrivateKeyOutput, error) {
-	if len(input.PrivateKey) != privateKeyLengthBytes {
-		return nil, signaturemanager.NewInvalidArgumentError().WithMessage(fmt.Sprintf("invalid private key length '%v'", len(input.PrivateKey)))
-	}
-
-	privateKey, err := parsePrivateKeyScalar(input.PrivateKey)
-	if err != nil {
-		return nil, err
-	}
-	defer privateKey.Zero()
-
-	// Derive the address from the fixed-width uncompressed public key via the shared
-	// helper, the same path PKCS#11 uses. Hand-rolling X||Y with big.Int.Bytes() drops
-	// leading zero bytes and misaligns the coordinates (CRY-1).
-	derivedAddress, err := signaturemanager.DeriveAddressFromPublicKey(privateKey.PubKey().SerializeUncompressed())
-	if err != nil {
-		return nil, errors.Internal().WithMessage("failed deriving address from public key: %v", err)
-	}
-
-	return &signaturemanager.DeriveAddressFromPrivateKeyOutput{
-		Address: *derivedAddress,
-	}, nil
 }
 
 func (sm *LKVSignatureManager) RemoveKey(_ context.Context, _ signaturemanager.RemoveKeyInput) (*signaturemanager.RemoveKeyOutput, error) {
@@ -78,10 +56,6 @@ func (sm *LKVSignatureManager) Sign(_ context.Context, input signaturemanager.Si
 	privateKeyBytes, err := entities.NewHexBytesFromString(privateKeyStr)
 	if err != nil {
 		return nil, errors.InternalFromErr(err)
-	}
-
-	if len(privateKeyBytes) != privateKeyLengthBytes {
-		return nil, errors.Internal().WithMessage("invalid private key length '%v'", len(privateKeyBytes))
 	}
 
 	privateKey, err := parsePrivateKeyScalar(privateKeyBytes)
@@ -120,13 +94,49 @@ func (sm *LKVSignatureManager) IsAlive(_ context.Context, _ signaturemanager.IsA
 	}, nil
 }
 
-// parsePrivateKeyScalar parses a fixed-width big-endian private key into a secp256k1
-// scalar, rejecting the two out-of-range cases. SetByteSlice reports overflow, meaning
-// D >= N, in constant time; PrivKeyFromBytes would silently reduce such a scalar mod N
-// and sign with a key other than the one supplied. Callers own the length check, because
-// the classification differs: an operator's slot configuration is an internal error, a
-// caller-supplied key on the import path is an invalid argument.
+// NewKey generates a secp256k1 private key from crypto/rand and returns it with its address. It is the
+// only way a key enters a Local Key Vault: no API accepts a raw private key.
+func NewKey() (entities.HexBytes, *address.Address, error) {
+	privateKey, err := curves.NewPrivateKey()
+	if err != nil {
+		return nil, nil, errors.InternalFromErr(err)
+	}
+	defer privateKey.Zero()
+
+	serialized := entities.HexBytes(privateKey.Serialize())
+	derivedAddress, err := deriveAddress(serialized)
+	if err != nil {
+		return nil, nil, err
+	}
+	return serialized, derivedAddress, nil
+}
+
+// deriveAddress returns the address of a fixed-width private key. It goes through the shared
+// DeriveAddressFromPublicKey on the fixed-width uncompressed public key, the same path PKCS#11 uses:
+// hand-rolling X||Y with big.Int.Bytes() drops leading zero bytes and misaligns the coordinates.
+func deriveAddress(privateKeyBytes entities.HexBytes) (*address.Address, error) {
+	privateKey, err := parsePrivateKeyScalar(privateKeyBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer privateKey.Zero()
+
+	derivedAddress, err := signaturemanager.DeriveAddressFromPublicKey(privateKey.PubKey().SerializeUncompressed())
+	if err != nil {
+		return nil, errors.Internal().WithMessage("failed deriving address from public key: %v", err)
+	}
+	return derivedAddress, nil
+}
+
+// parsePrivateKeyScalar parses a fixed-width big-endian private key into a secp256k1 scalar, rejecting
+// a wrong length and the two out-of-range cases. SetByteSlice reports overflow, meaning D >= N, in
+// constant time; PrivKeyFromBytes would silently reduce such a scalar mod N and sign with a key other
+// than the one stored. Every key reaching here comes from the key store or NewKey, so a bad one is an
+// internal error.
 func parsePrivateKeyScalar(privateKey entities.HexBytes) (*curves.PrivateKey, error) {
+	if len(privateKey) != privateKeyLengthBytes {
+		return nil, errors.Internal().WithMessage("invalid private key length '%v'", len(privateKey))
+	}
 	var scalar curves.ModNScalar
 	if overflow := scalar.SetByteSlice(privateKey); overflow || scalar.IsZero() {
 		return nil, errors.Internal().WithMessage("invalid private key: D is zero or not less than N")

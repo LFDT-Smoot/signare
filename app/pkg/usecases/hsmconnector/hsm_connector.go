@@ -23,8 +23,6 @@ import (
 type HSMConnector interface {
 	// GenerateAddress generates a key pair in the underlying signature manager and returns the Ethereum address or an error if it fails.
 	GenerateAddress(ctx context.Context, input GenerateAddressInput) (*GenerateAddressOutput, error)
-	// DeriveAddressFromPrivateKey generates an address from an ethereum private key and returns an Ethereum address or an error if it fails.
-	DeriveAddressFromPrivateKey(ctx context.Context, input DeriveAddressFromPrivateKeyInput) (*DeriveAddressFromPrivateKeyOutput, error)
 	// RemoveAddress removes the key pair associated with the given Ethereum address.
 	RemoveAddress(ctx context.Context, input RemoveAddressInput) (*RemoveAddressOutput, error)
 	// ListAddresses lists the addresses associated with their corresponding key pairs that exist in all the slots of an application.
@@ -99,43 +97,6 @@ func (d *DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddr
 
 	return &GenerateAddressOutput{
 		Address: generateKeyOutput.Address,
-	}, nil
-}
-
-func (d *DefaultUseCase) DeriveAddressFromPrivateKey(ctx context.Context, input DeriveAddressFromPrivateKeyInput) (*DeriveAddressFromPrivateKeyOutput, error) {
-	_, err := govalidator.ValidateStruct(input)
-	if err != nil {
-		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
-	}
-
-	tracer := logger.NewTracer(ctx)
-	tracer.AddProperty("moduleKind", input.ModuleKind)
-	tracer.AddProperty("operation", "DeriveAddressFromPrivateKey")
-
-	createInput := CreateInput{
-		ModuleKind: input.ModuleKind,
-	}
-	digitalSignatureManager, err := d.digitalSignatureManagerFactory.Create(ctx, createInput)
-	if err != nil {
-		return nil, errors.InternalFromErr(err).WithMessage("error creating digital signature manager")
-	}
-
-	deriveAddressInput := signaturemanager.DeriveAddressFromPrivateKeyInput{
-		PrivateKey: input.PrivateKey,
-		Tracer:     tracer,
-	}
-	deriveAddressOutput, err := digitalSignatureManager.DeriveAddressFromPrivateKey(ctx, deriveAddressInput)
-	if err != nil {
-		if signaturemanager.IsInvalidArgumentError(err) {
-			return nil, errors.InvalidArgumentFromErr(err).WithMessage("error generating address from private key")
-		}
-		return nil, errors.InternalFromErr(err).WithMessage("error generating address from private key")
-	}
-
-	tracer.Trace(fmt.Sprintf("generated address from private key: '%s'", deriveAddressOutput.Address.String()))
-
-	return &DeriveAddressFromPrivateKeyOutput{
-		Address: deriveAddressOutput.Address,
 	}, nil
 }
 

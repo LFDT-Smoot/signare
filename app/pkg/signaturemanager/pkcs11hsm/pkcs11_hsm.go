@@ -137,10 +137,6 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 	}, nil
 }
 
-func (s *PKCS11HSMSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, _ signaturemanager.DeriveAddressFromPrivateKeyInput) (*signaturemanager.DeriveAddressFromPrivateKeyOutput, error) {
-	return nil, signaturemanager.NewNotImplementedError()
-}
-
 func (s *PKCS11HSMSignatureManager) RemoveKey(_ context.Context, input signaturemanager.RemoveKeyInput) (*signaturemanager.RemoveKeyOutput, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()

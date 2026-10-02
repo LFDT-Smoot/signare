@@ -10,6 +10,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/localkeyvault"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
@@ -44,8 +45,8 @@ type HSMSlotUseCase interface {
 	ListHSMSlotsByApplication(ctx context.Context, input ListHSMSlotsByApplicationInput) (*ListHSMSlotsByApplicationOutput, error)
 	// ListHSMSlotsByHSMModule lists HSMSlot for a specific HSM in storage and returns an error if it fails.
 	ListHSMSlotsByHSMModule(ctx context.Context, input ListHSMSlotsByHSMModuleInput) (*ListHSMSlotsByHSMModuleOutput, error)
-	// AddLocalKey adds a local key to the slot's configuration (only compatible with modules of kind LKV)
-	AddLocalKey(ctx context.Context, input AddLocalKeyInput) error
+	// GenerateLocalKey generates a key in the slot's configuration and returns its address (only compatible with modules of kind LKV)
+	GenerateLocalKey(ctx context.Context, input GenerateLocalKeyInput) (*GenerateLocalKeyOutput, error)
 	// RemoveLocalKey removes a local key from the slot's configuration (only compatible with modules of kind LKV)
 	RemoveLocalKey(ctx context.Context, input RemoveLocalKeyInput) error
 	// ListLocalKeys list all local keys from the slot's configuration (only compatible with modules of kind LKV)
@@ -439,17 +440,14 @@ func (u *DefaultUseCase) ListHSMSlotsByHSMModule(ctx context.Context, input List
 	}, nil
 }
 
-func (u *DefaultUseCase) AddLocalKey(ctx context.Context, input AddLocalKeyInput) error {
+func (u *DefaultUseCase) GenerateLocalKey(ctx context.Context, input GenerateLocalKeyInput) (*GenerateLocalKeyOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
-		return errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
-	getHSMSlotInput := GetHSMSlotInput{
-		StandardID: input.StandardID,
-	}
-	storedSlot, getHSMSlotErr := u.GetHSMSlot(ctx, getHSMSlotInput)
+	storedSlot, getHSMSlotErr := u.GetHSMSlot(ctx, GetHSMSlotInput(input))
 	if getHSMSlotErr != nil {
-		return getHSMSlotErr
+		return nil, getHSMSlotErr
 	}
 
 	getHSMModuleInput := hsmmodule.GetHSMModuleInput{
@@ -459,14 +457,19 @@ func (u *DefaultUseCase) AddLocalKey(ctx context.Context, input AddLocalKeyInput
 	if getHSMErr != nil {
 		if errors.IsNotFound(getHSMErr) {
 			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", storedSlot.HSMModuleID)
-			return errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+			return nil, errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
-		return errors.InternalFromErr(getHSMErr)
+		return nil, errors.InternalFromErr(getHSMErr)
 	}
 
 	if storedHSM.Kind != hsmmodule.LKVModuleKind {
-		msg := fmt.Sprintf("cannot add local key: configured HSM '%s' is not of kind %s", storedHSM.ID, hsmmodule.LKVModuleKind)
-		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		msg := fmt.Sprintf("cannot generate local key: configured HSM '%s' is not of kind %s", storedHSM.ID, hsmmodule.LKVModuleKind)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+
+	privateKey, generatedAddress, err := localkeyvault.NewKey()
+	if err != nil {
+		return nil, err
 	}
 
 	if storedSlot.Config.LocalKeyVault == nil {
@@ -475,21 +478,23 @@ func (u *DefaultUseCase) AddLocalKey(ctx context.Context, input AddLocalKeyInput
 		}
 	}
 
-	if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[input.Address]; exists {
-		return errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", input.Address.String(), storedSlot.ID)
+	if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress]; exists {
+		return nil, errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", generatedAddress.String(), storedSlot.ID)
 	}
 
-	storedSlot.Config.LocalKeyVault.KeyStore[input.Address] = strings.TrimPrefix(input.PrivateKey.String(), "0x")
+	storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress] = strings.TrimPrefix(privateKey.String(), "0x")
 	storedSlot.LastUpdate = time.Now()
 
 	_, err = u.hsmSlotStorage.EditConfig(ctx, storedSlot.HSMSlot)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return errors.NotFoundFromErr(err).WithMessage("hsm slot [%s] not found", input.ID)
+			return nil, errors.NotFoundFromErr(err).WithMessage("hsm slot [%s] not found", input.ID)
 		}
-		return errors.InternalFromErr(err)
+		return nil, errors.InternalFromErr(err)
 	}
-	return nil
+	return &GenerateLocalKeyOutput{
+		Address: *generatedAddress,
+	}, nil
 }
 
 func (u *DefaultUseCase) RemoveLocalKey(ctx context.Context, input RemoveLocalKeyInput) error {

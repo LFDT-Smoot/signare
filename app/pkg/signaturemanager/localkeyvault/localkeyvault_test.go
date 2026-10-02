@@ -26,14 +26,11 @@ func privateKeyFromInt(d *big.Int) entities.HexBytes {
 
 func deriveAddress(t *testing.T, priv entities.HexBytes) (string, error) {
 	t.Helper()
-	sm := localkeyvault.ProvideLKVSignatureManager(localkeyvault.LKVSignatureManagerOptions{})
-	out, err := sm.DeriveAddressFromPrivateKey(context.Background(), signaturemanager.DeriveAddressFromPrivateKeyInput{
-		PrivateKey: priv,
-	})
+	addr, err := localkeyvault.DeriveAddress(priv)
 	if err != nil {
 		return "", err
 	}
-	return out.Address.String(), nil
+	return addr.String(), nil
 }
 
 // addressFromCoordinates hashes the given X||Y bytes the same way the manager does and
@@ -47,9 +44,9 @@ func addressFromCoordinates(t *testing.T, xy []byte) string {
 	return addr.String()
 }
 
-// TestDeriveAddressFromPrivateKey_KnownAnswerVectors checks LKV against published
+// TestDeriveAddress_KnownAnswerVectors checks LKV against published
 // secp256k1 -> Ethereum address vectors, with no go-ethereum dependency.
-func TestDeriveAddressFromPrivateKey_KnownAnswerVectors(t *testing.T) {
+func TestDeriveAddress_KnownAnswerVectors(t *testing.T) {
 	vectors := []struct {
 		d        int64
 		expected string
@@ -67,10 +64,10 @@ func TestDeriveAddressFromPrivateKey_KnownAnswerVectors(t *testing.T) {
 	}
 }
 
-// TestDeriveAddressFromPrivateKey_LeadingZeroCoordinate is the CRY-1 regression guard: a
+// TestDeriveAddress_LeadingZeroCoordinate is the CRY-1 regression guard: a
 // key whose public-key X or Y coordinate has a zero top byte must still derive the correct
 // fixed-width address, not the pre-fix big.Int.Bytes() concatenation.
-func TestDeriveAddressFromPrivateKey_LeadingZeroCoordinate(t *testing.T) {
+func TestDeriveAddress_LeadingZeroCoordinate(t *testing.T) {
 	priv, x, y := findLeadingZeroCoordinateKey(t)
 
 	// Correct: each coordinate left-padded to 32 bytes.
@@ -85,11 +82,11 @@ func TestDeriveAddressFromPrivateKey_LeadingZeroCoordinate(t *testing.T) {
 	require.NotEqual(t, buggy, got, "LKV must not reproduce the pre-fix address")
 }
 
-// TestDeriveAddressFromPrivateKey_MatchesSharedHelperPath asserts LKV derives the same
+// TestDeriveAddress_MatchesSharedHelperPath asserts LKV derives the same
 // address as DeriveAddressFromPublicKey(pub.SerializeUncompressed()), the exact call the
 // PKCS#11 backend makes. A live HSM session cannot run in a unit test, so this mirrors the
 // PKCS#11 derivation path rather than standing up PKCS#11.
-func TestDeriveAddressFromPrivateKey_MatchesSharedHelperPath(t *testing.T) {
+func TestDeriveAddress_MatchesSharedHelperPath(t *testing.T) {
 	for _, d := range []int64{1, 7, 12345, 999983} {
 		t.Run(fmt.Sprintf("d=%d", d), func(t *testing.T) {
 			priv := privateKeyFromInt(big.NewInt(d))
@@ -104,9 +101,9 @@ func TestDeriveAddressFromPrivateKey_MatchesSharedHelperPath(t *testing.T) {
 	}
 }
 
-// TestDeriveAddressFromPrivateKey_Rejections checks scalar-range and length validation. In
+// TestDeriveAddress_Rejections checks scalar-range and length validation. In
 // particular D >= N must be rejected, not silently reduced mod N by btcec.
-func TestDeriveAddressFromPrivateKey_Rejections(t *testing.T) {
+func TestDeriveAddress_Rejections(t *testing.T) {
 	n := curves.S256().Params().N
 
 	t.Run("D equal to N is rejected", func(t *testing.T) {
@@ -124,11 +121,63 @@ func TestDeriveAddressFromPrivateKey_Rejections(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, signererrors.IsInternal(err))
 	})
-	t.Run("wrong length is rejected", func(t *testing.T) {
-		_, err := deriveAddress(t, entities.HexBytes(make([]byte, 31)))
-		require.Error(t, err)
-		require.True(t, signaturemanager.IsInvalidArgumentError(err))
-	})
+	// The keys are non-zero, so only the length check can refuse them.
+	for _, length := range []int{31, 33} {
+		t.Run(fmt.Sprintf("length %d is rejected", length), func(t *testing.T) {
+			_, err := deriveAddress(t, nonZeroKeyOfLength(length))
+			require.Error(t, err)
+			require.True(t, signererrors.IsInternal(err))
+		})
+	}
+}
+
+// nonZeroKeyOfLength returns a key of the given length whose every byte is 0x01, a valid scalar at any
+// length up to 32 bytes.
+func nonZeroKeyOfLength(length int) entities.HexBytes {
+	key := make([]byte, length)
+	for i := range key {
+		key[i] = 0x01
+	}
+	return entities.HexBytes(key)
+}
+
+// TestNewKey_AddressMatchesIndependentDerivation checks a generated key against an address computed
+// without btcec's public key serialisation: raw curve multiplication, fixed-width X||Y, Keccak-256.
+func TestNewKey_AddressMatchesIndependentDerivation(t *testing.T) {
+	for i := 0; i < 64; i++ {
+		priv, addr, err := localkeyvault.NewKey()
+		require.NoError(t, err)
+		require.Len(t, priv, 32)
+
+		x, y := curves.S256().ScalarBaseMult(priv)
+		expected := addressFromCoordinates(t, append(x.FillBytes(make([]byte, 32)), y.FillBytes(make([]byte, 32))...))
+		require.Equal(t, expected, addr.String())
+	}
+}
+
+// TestNewKey_SignsAsItsAddress is the round trip a generated account takes: stored in a key store
+// under its address, it signs, and the signature recovers to that address.
+func TestNewKey_SignsAsItsAddress(t *testing.T) {
+	priv, addr, err := localkeyvault.NewKey()
+	require.NoError(t, err)
+
+	digest := digestOf(t, "generated account")
+	sig, from, err := signWith(t, priv, digest)
+	require.NoError(t, err)
+	require.Equal(t, addr.String(), from.String())
+	require.True(t, recoversTo(t, sig, digest, *addr), "no recovery byte recovered the generated address")
+}
+
+// TestNewKey_KeysAreDistinct catches a generator that ignores its entropy source.
+func TestNewKey_KeysAreDistinct(t *testing.T) {
+	seen := make(map[string]struct{})
+	for i := 0; i < 256; i++ {
+		priv, _, err := localkeyvault.NewKey()
+		require.NoError(t, err)
+		_, duplicate := seen[priv.String()]
+		require.False(t, duplicate, "NewKey returned the same key twice")
+		seen[priv.String()] = struct{}{}
+	}
 }
 
 // signWith signs data with the given key, wired through a slot configuration whose key
@@ -182,8 +231,13 @@ func TestSign_RecoversToSigningAddress(t *testing.T) {
 
 	sig, from, err := signWith(t, priv, digest)
 	require.NoError(t, err)
+	require.True(t, recoversTo(t, sig, digest, from), "no recovery byte recovered the signing address")
+}
 
-	var recovered string
+// recoversTo reports whether recovery byte 27 or 28 recovers want from r||s, the search the connector
+// makes when it assembles a recoverable signature.
+func recoversTo(t *testing.T, sig []byte, digest entities.HexBytes, want address.Address) bool {
+	t.Helper()
 	for v := byte(27); v <= 28; v++ {
 		compact := append([]byte{v}, sig...)
 		pub, _, recoverErr := btcececdsa.RecoverCompact(compact, digest)
@@ -192,12 +246,11 @@ func TestSign_RecoversToSigningAddress(t *testing.T) {
 		}
 		addr, deriveErr := signaturemanager.DeriveAddressFromPublicKey(pub.SerializeUncompressed())
 		require.NoError(t, deriveErr)
-		if addr.String() == from.String() {
-			recovered = addr.String()
-			break
+		if addr.String() == want.String() {
+			return true
 		}
 	}
-	require.Equal(t, from.String(), recovered, "no recovery byte recovered the signing address")
+	return false
 }
 
 // TestSign_MatchesPublishedRFC6979Vector pins the emitted bytes against a published
@@ -309,11 +362,13 @@ func TestSign_Rejections(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, signererrors.IsInternal(err))
 	})
-	t.Run("wrong length is rejected", func(t *testing.T) {
-		err := signWithStore(map[address.Address]string{from: entities.HexBytes(make([]byte, 31)).String()})
-		require.Error(t, err)
-		require.True(t, signererrors.IsInternal(err))
-	})
+	for _, length := range []int{31, 33} {
+		t.Run(fmt.Sprintf("length %d is rejected", length), func(t *testing.T) {
+			err := signWithStore(map[address.Address]string{from: nonZeroKeyOfLength(length).String()})
+			require.Error(t, err)
+			require.True(t, signererrors.IsInternal(err))
+		})
+	}
 	t.Run("malformed hex is rejected", func(t *testing.T) {
 		err := signWithStore(map[address.Address]string{from: "0xnothexatall"})
 		require.Error(t, err)
