@@ -247,7 +247,11 @@ func (s *PKCS11HSMSignatureManager) ListKeys(_ context.Context, input signaturem
 		if getLabelErr != nil {
 			continue
 		}
-		addr, _ := s.getAddress(session, o)
+		// An object signare cannot derive an address from, such as a key on another curve, is not one of its keys.
+		addr, getAddressErr := s.getAddress(session, o)
+		if getAddressErr != nil {
+			continue
+		}
 		toCompare := calculatePublicKeyLabel(*addr)
 		if toCompare != *label {
 			continue

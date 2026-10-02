@@ -1,11 +1,13 @@
 package hsmslot_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/localkeyvault"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmslot"
@@ -122,4 +124,148 @@ func TestDefaultUseCase_GenerateLocalKey(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []address.Address{second.Address}, listed.Addresses)
 	})
+}
+
+// versionedSlotStorage holds one slot and enforces the resource version guard the SQL `updateConfig`
+// statement applies. conflicts makes that many writes lose to a concurrent writer, which adds a key of
+// its own and bumps the version; deleteOnWrite makes the slot disappear at the first write.
+type versionedSlotStorage struct {
+	hsmslot.HSMSlotStorage
+	slot          hsmslot.HSMSlot
+	conflicts     int
+	deleteOnWrite bool
+	failWrite     bool
+	deleted       bool
+	writes        int
+	otherKeys     []address.Address
+}
+
+func cloneSlot(slot hsmslot.HSMSlot) hsmslot.HSMSlot {
+	if slot.Config.LocalKeyVault != nil {
+		store := make(map[address.Address]string, len(slot.Config.LocalKeyVault.KeyStore))
+		for addr, key := range slot.Config.LocalKeyVault.KeyStore {
+			store[addr] = key
+		}
+		slot.Config.LocalKeyVault = &hsmslot.LocalKeyVaultConfig{KeyStore: store}
+	}
+	return slot
+}
+
+func (s *versionedSlotStorage) Get(_ context.Context, _ entities.StandardID) (*hsmslot.HSMSlot, error) {
+	if s.deleted {
+		return nil, errors.NotFound().WithMessage("slot deleted")
+	}
+	slot := cloneSlot(s.slot)
+	return &slot, nil
+}
+
+func (s *versionedSlotStorage) EditConfig(_ context.Context, data hsmslot.HSMSlot) (*hsmslot.HSMSlot, error) {
+	s.writes++
+	if s.failWrite {
+		return nil, errors.Internal().WithMessage("database unavailable")
+	}
+	if s.deleteOnWrite {
+		s.deleted = true
+		return nil, errors.NotFound().WithMessage("resource 'hsm_slot' does not match the one stored")
+	}
+	if s.conflicts > 0 {
+		s.conflicts--
+		_, other, err := localkeyvault.NewKey()
+		if err != nil {
+			return nil, err
+		}
+		if s.slot.Config.LocalKeyVault == nil {
+			s.slot.Config.LocalKeyVault = &hsmslot.LocalKeyVaultConfig{KeyStore: map[address.Address]string{}}
+		}
+		s.slot.Config.LocalKeyVault.KeyStore[*other] = "written-by-another-request"
+		s.slot.ResourceVersion = uuid.NewString()
+		s.otherKeys = append(s.otherKeys, *other)
+	}
+	if data.ResourceVersion != s.slot.ResourceVersion {
+		return nil, errors.NotFound().WithMessage("resource 'hsm_slot' does not match the one stored")
+	}
+	s.slot = cloneSlot(data)
+	s.slot.ResourceVersion = uuid.NewString()
+	slot := cloneSlot(s.slot)
+	return &slot, nil
+}
+
+// useCaseOver builds a slot use case over storage, with the real module use case, and a slot on a
+// fresh Local Key Vault module.
+func useCaseOver(t *testing.T, storage *versionedSlotStorage) *hsmslot.DefaultUseCase {
+	t.Helper()
+	moduleID := uuid.NewString()
+	_, err := app.HSMModuleUseCase.CreateHSMModule(ctx, hsmmodule.CreateHSMModuleInput{
+		ID:            &moduleID,
+		Description:   &resourceDescription,
+		Configuration: hsmmodule.HSMModuleConfiguration{LKVConfiguration: &hsmmodule.LKVConfiguration{}},
+		ModuleKind:    hsmmodule.LKVModuleKind,
+	})
+	require.NoError(t, err)
+
+	storage.slot.ID = "lkv-slot"
+	storage.slot.HSMModuleID = moduleID
+	storage.slot.ResourceVersion = uuid.NewString()
+
+	useCase, err := hsmslot.ProvideDefaultUseCase(hsmslot.DefaultUseCaseOptions{
+		HSMSlotStorage:              storage,
+		ApplicationUseCase:          app.ApplicationUseCase,
+		HSMModuleUseCase:            app.HSMModuleUseCase,
+		HSMConnector:                app.HSMConnector,
+		ReferentialIntegrityUseCase: app.ReferentialIntegrityUseCase,
+	})
+	require.NoError(t, err)
+	return useCase
+}
+
+func TestDefaultUseCase_GenerateLocalKey_ConcurrentWriter(t *testing.T) {
+	input := hsmslot.GenerateLocalKeyInput{StandardID: entities.StandardID{ID: "lkv-slot"}}
+
+	t.Run("a lost write is retried on top of the other writer's key", func(t *testing.T) {
+		storage := &versionedSlotStorage{conflicts: 1}
+		out, err := useCaseOver(t, storage).GenerateLocalKey(ctx, input)
+		require.NoError(t, err)
+		require.Equal(t, 2, storage.writes)
+
+		store := storage.slot.Config.LocalKeyVault.KeyStore
+		require.Len(t, store, 2)
+		require.Contains(t, store, out.Address)
+		require.Contains(t, store, storage.otherKeys[0], "the retry must not overwrite the other writer's key")
+	})
+
+	t.Run("a write that keeps losing is reported as a precondition failure", func(t *testing.T) {
+		storage := &versionedSlotStorage{conflicts: hsmslot.LocalKeyWriteAttempts}
+		out, err := useCaseOver(t, storage).GenerateLocalKey(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsPreconditionFailed(err), "a slot that exists must not be reported as not found")
+		require.Nil(t, out)
+		require.Equal(t, hsmslot.LocalKeyWriteAttempts, storage.writes)
+		require.ElementsMatch(t, storage.otherKeys, keysOf(storage.slot.Config.LocalKeyVault.KeyStore), "no generated key may be stored")
+	})
+
+	t.Run("a storage failure is reported as internal, without a retry", func(t *testing.T) {
+		storage := &versionedSlotStorage{failWrite: true}
+		out, err := useCaseOver(t, storage).GenerateLocalKey(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsInternal(err))
+		require.Nil(t, out)
+		require.Equal(t, 1, storage.writes)
+	})
+
+	t.Run("a slot deleted before the write is reported as not found", func(t *testing.T) {
+		storage := &versionedSlotStorage{deleteOnWrite: true}
+		out, err := useCaseOver(t, storage).GenerateLocalKey(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsNotFound(err))
+		require.Nil(t, out)
+		require.Equal(t, 1, storage.writes)
+	})
+}
+
+func keysOf(store map[address.Address]string) []address.Address {
+	keys := make([]address.Address, 0, len(store))
+	for addr := range store {
+		keys = append(keys, addr)
+	}
+	return keys
 }

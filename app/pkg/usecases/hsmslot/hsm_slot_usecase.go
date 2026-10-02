@@ -23,6 +23,9 @@ import (
 
 const (
 	defaultOrderDirection = entities.OrderDesc
+	// localKeyWriteAttempts bounds how often a Local Key Vault key store write is retried after losing
+	// to a concurrent writer.
+	localKeyWriteAttempts = 3
 )
 
 // HSMSlotUseCase defines the management of HSMSlot in storage.
@@ -471,30 +474,42 @@ func (u *DefaultUseCase) GenerateLocalKey(ctx context.Context, input GenerateLoc
 	if err != nil {
 		return nil, err
 	}
+	storedKey := strings.TrimPrefix(privateKey.String(), "0x")
 
-	if storedSlot.Config.LocalKeyVault == nil {
-		storedSlot.Config.LocalKeyVault = &LocalKeyVaultConfig{
-			KeyStore: make(map[address.Address]string),
+	// The key store is rewritten whole, and the write only lands if the slot is unchanged since it was
+	// read. A miss means a concurrent writer won, or the slot was deleted: re-read to tell which, and
+	// retry on top of the other writer's keys.
+	for attempt := 1; ; attempt++ {
+		if storedSlot.Config.LocalKeyVault == nil {
+			storedSlot.Config.LocalKeyVault = &LocalKeyVaultConfig{
+				KeyStore: make(map[address.Address]string),
+			}
+		}
+		if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress]; exists {
+			return nil, errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", generatedAddress.String(), storedSlot.ID)
+		}
+		storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress] = storedKey
+		storedSlot.LastUpdate = time.Now()
+
+		_, err = u.hsmSlotStorage.EditConfig(ctx, storedSlot.HSMSlot)
+		if err == nil {
+			return &GenerateLocalKeyOutput{
+				Address: *generatedAddress,
+			}, nil
+		}
+		if !errors.IsNotFound(err) {
+			return nil, errors.InternalFromErr(err)
+		}
+
+		storedSlot, getHSMSlotErr = u.GetHSMSlot(ctx, GetHSMSlotInput(input))
+		if getHSMSlotErr != nil {
+			return nil, getHSMSlotErr
+		}
+		if attempt == localKeyWriteAttempts {
+			msg := fmt.Sprintf("hsm slot [%s] was modified concurrently, retry", input.ID)
+			return nil, errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 	}
-
-	if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress]; exists {
-		return nil, errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", generatedAddress.String(), storedSlot.ID)
-	}
-
-	storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress] = strings.TrimPrefix(privateKey.String(), "0x")
-	storedSlot.LastUpdate = time.Now()
-
-	_, err = u.hsmSlotStorage.EditConfig(ctx, storedSlot.HSMSlot)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, errors.NotFoundFromErr(err).WithMessage("hsm slot [%s] not found", input.ID)
-		}
-		return nil, errors.InternalFromErr(err)
-	}
-	return &GenerateLocalKeyOutput{
-		Address: *generatedAddress,
-	}, nil
 }
 
 func (u *DefaultUseCase) RemoveLocalKey(ctx context.Context, input RemoveLocalKeyInput) error {
