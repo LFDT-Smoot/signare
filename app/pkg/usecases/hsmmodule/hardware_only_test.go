@@ -24,13 +24,13 @@ func (s *recordingStorage) Add(_ context.Context, data hsmmodule.HSMModule) (*hs
 	return &data, nil
 }
 
-func TestHardwareKeysOnlyRefusesLocalKeyVaultModules(t *testing.T) {
+func TestHardwareOnlyRefusesLocalKeyVaultModules(t *testing.T) {
 	ctx := context.Background()
 	storage := &recordingStorage{}
 	useCase, err := hsmmodule.ProvideDefaultHSMModuleUseCase(hsmmodule.DefaultUseCaseOptions{
 		HSMModuleStorage:            storage,
 		ReferentialIntegrityUseCase: &referentialintegrity.DefaultUseCase{},
-		HardwareKeysOnly:            true,
+		HardwareOnly:                true,
 	})
 	require.NoError(t, err)
 

@@ -28,16 +28,16 @@ func (lkvModules) GetHSMModule(_ context.Context, input hsmmodule.GetHSMModuleIn
 	return &hsmmodule.GetHSMModuleOutput{HSMModule: module}, nil
 }
 
-// TestHardwareKeysOnlyRefusesLocalKeyVaultSlots: the refusal comes right after the module lookup, before
+// TestHardwareOnlyRefusesLocalKeyVaultSlots: the refusal comes right after the module lookup, before
 // the slot is stored.
-func TestHardwareKeysOnlyRefusesLocalKeyVaultSlots(t *testing.T) {
+func TestHardwareOnlyRefusesLocalKeyVaultSlots(t *testing.T) {
 	useCase, err := hsmslot.ProvideDefaultUseCase(hsmslot.DefaultUseCaseOptions{
 		HSMSlotStorage:              &hsmslotdbout.Repository{},
 		ApplicationUseCase:          &application.DefaultUseCase{},
 		HSMModuleUseCase:            lkvModules{},
 		HSMConnector:                &hsmconnector.DefaultUseCase{},
 		ReferentialIntegrityUseCase: &referentialintegrity.DefaultUseCase{},
-		HardwareKeysOnly:            true,
+		HardwareOnly:                true,
 	})
 	require.NoError(t, err)
 
@@ -51,16 +51,16 @@ func TestHardwareKeysOnlyRefusesLocalKeyVaultSlots(t *testing.T) {
 	require.Contains(t, createErr.Error(), "HSM-held keys only")
 }
 
-// TestHardwareKeysOnlyRefusesLocalKeys: the refusal comes before any lookup, so the zero-value
+// TestHardwareOnlyRefusesLocalKeys: the refusal comes before any lookup, so the zero-value
 // dependencies are never touched.
-func TestHardwareKeysOnlyRefusesLocalKeys(t *testing.T) {
+func TestHardwareOnlyRefusesLocalKeys(t *testing.T) {
 	useCase, err := hsmslot.ProvideDefaultUseCase(hsmslot.DefaultUseCaseOptions{
 		HSMSlotStorage:              &hsmslotdbout.Repository{},
 		ApplicationUseCase:          &application.DefaultUseCase{},
 		HSMModuleUseCase:            &hsmmodule.DefaultUseCase{},
 		HSMConnector:                &hsmconnector.DefaultUseCase{},
 		ReferentialIntegrityUseCase: &referentialintegrity.DefaultUseCase{},
-		HardwareKeysOnly:            true,
+		HardwareOnly:                true,
 	})
 	require.NoError(t, err)
 

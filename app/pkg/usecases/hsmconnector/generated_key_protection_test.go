@@ -13,7 +13,7 @@ import (
 )
 
 // TestGeneratedKeyIsSensitiveAndNotExtractable reads the generated private key back over PKCS#11 and
-// checks the two attributes signare now sets rather than leaving to the token: the value cannot be
+// checks the two attributes Signare now sets rather than leaving to the token: the value cannot be
 // read out and the key cannot be wrapped out.
 func TestGeneratedKeyIsSensitiveAndNotExtractable(t *testing.T) {
 	generated, err := app.HSMConnector.GenerateAddress(ctx, hsmconnector.GenerateAddressInput{

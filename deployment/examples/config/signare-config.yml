@@ -25,9 +25,9 @@ metrics:
     timeoutInMillis: 30000
     namespace: 'signer'
 hsmmodules:
-  # Refuse the keys signare could hold or accept in software: no Local Key Vault, and Azure keys must
+  # Refuse the keys Signare could hold or accept in software: no Local Key Vault, and Azure keys must
   # be EC-HSM on P-256K. A PKCS#11 library is trusted as configured. See the FIPS 140-3 reference.
-  hardwareKeysOnly: false
+  hardwareOnly: false
   softhsm:
     lib: '/usr/local/lib/softhsm/libsofthsm2.so'
     # Directory holding one file per slot PIN. A slot records the file name, never the PIN itself.

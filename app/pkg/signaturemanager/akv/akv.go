@@ -24,8 +24,8 @@ type AKVSignatureManager struct {
 // AVSignatureManagerOptions defines options to create a new instance of AKVSignatureManager.
 type AVSignatureManagerOptions struct {
 	AKVVaultURL string
-	// HardwareKeysOnly refuses to sign with a key the vault does not hold in an HSM.
-	HardwareKeysOnly signaturemanager.HardwareKeysOnly
+	// HardwareOnly refuses to sign with a key the vault does not hold in an HSM.
+	HardwareOnly signaturemanager.HardwareOnly
 }
 
 var _ signaturemanager.DigitalSignatureManager = (*AKVSignatureManager)(nil)
@@ -40,13 +40,13 @@ func ProvideAKVSignatureManager(options AVSignatureManagerOptions) (*AKVSignatur
 	if err != nil {
 		return nil, err
 	}
-	return newAKVSignatureManager(azKeysClient, bool(options.HardwareKeysOnly)), nil
+	return newAKVSignatureManager(azKeysClient, bool(options.HardwareOnly)), nil
 }
 
-func newAKVSignatureManager(client vaultClient, hardwareKeysOnly bool) *AKVSignatureManager {
+func newAKVSignatureManager(client vaultClient, hardwareOnly bool) *AKVSignatureManager {
 	return &AKVSignatureManager{
 		akvClient: client,
-		keys:      newKeyProtection(azkeysReader{client: client}, hardwareKeysOnly),
+		keys:      newKeyProtection(azkeysReader{client: client}, hardwareOnly),
 	}
 }
 

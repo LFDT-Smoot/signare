@@ -83,7 +83,6 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 
 	timestamp := generateTimestampId()
 	lb := base64.StdEncoding.EncodeToString(timestamp)
-	publicKeyLabelAtGeneration := lb
 	publicKeyTemplate := []*pkcs11.Attribute{
 		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_EC),
 		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PUBLIC_KEY),
@@ -120,7 +119,7 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 		return nil, signaturemanager.NewKeyGenerationError().WithMessage(fmt.Sprintf("error generating key: %v", err))
 	}
 	if protectionErr := s.assertPrivateKeyProtected(session, privateKeyHandle); protectionErr != nil {
-		tracer.Warn(fmt.Sprintf("rejecting the generated key pair labelled '%s' (private) and '%s' (public): %v", lb, publicKeyLabelAtGeneration, protectionErr))
+		tracer.Warn(fmt.Sprintf("rejecting the generated key pair labelled '%s': %v", lb, protectionErr))
 		s.destroyObjects(tracer, session, privateKeyHandle, publicKeyHandle)
 		return nil, protectionErr
 	}
@@ -443,12 +442,12 @@ func checkPrivateKeyProtection(attributes []*pkcs11.Attribute) string {
 	return ""
 }
 
-// destroyObjects removes key objects signare will not use, logging rather than failing on error: the
+// destroyObjects removes key objects Signare will not use, logging rather than failing on error: the
 // caller is already returning the reason the objects were rejected.
 func (s *PKCS11HSMSignatureManager) destroyObjects(tracer logger.Tracer, session pkcs11.SessionHandle, handles ...pkcs11.ObjectHandle) {
 	for _, handle := range handles {
 		if err := s.pkcsContext.DestroyObject(session, handle); err != nil {
-			tracer.Warn(fmt.Sprintf("failed to destroy rejected key object '%d'; remove it with the vendor tooling by the label above. Error: %v", handle, err))
+			tracer.Warn(fmt.Sprintf("failed to destroy rejected key object '%d'; remove it with the vendor tooling by the label logged above. Error: %v", handle, err))
 		}
 	}
 }

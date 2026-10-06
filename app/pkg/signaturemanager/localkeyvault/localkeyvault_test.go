@@ -373,9 +373,9 @@ func findLeadingZeroCoordinateKey(t *testing.T) (entities.HexBytes, *big.Int, *b
 	return nil, nil, nil
 }
 
-// TestSign_RefusedUnderHardwareKeysOnly: the policy refuses before the key store is even consulted.
-func TestSign_RefusedUnderHardwareKeysOnly(t *testing.T) {
-	sm := localkeyvault.ProvideLKVSignatureManager(localkeyvault.LKVSignatureManagerOptions{HardwareKeysOnly: true})
+// TestSign_RefusedUnderHardwareOnly: the policy refuses before the key store is even consulted.
+func TestSign_RefusedUnderHardwareOnly(t *testing.T) {
+	sm := localkeyvault.ProvideLKVSignatureManager(localkeyvault.LKVSignatureManagerOptions{HardwareOnly: true})
 	priv := privateKeyFromInt(big.NewInt(4242))
 	_, pub := curves.PrivKeyFromBytes(priv)
 	from, err := signaturemanager.DeriveAddressFromPublicKey(pub.SerializeUncompressed())

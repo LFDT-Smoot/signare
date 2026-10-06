@@ -33,7 +33,7 @@ metrics:
     timeoutInMillis: 30000
     namespace: 'signer'
 hsmmodules:
-  hardwareKeysOnly: false
+  hardwareOnly: false
   softhsm:
     lib: '/usr/local/lib/softhsm/libsofthsm2.so'
     pinSourceDirectory: '/etc/signare/slot-pins'
@@ -160,21 +160,21 @@ Signare provides support for different HSM types. Not all the supported HSMs req
 |-------------|-------------------------------------------------|:--------:|----------------------------------|
 | **softhsm** | [SoftHSM configuration](#softhsm-configuration) |    ✗     | Configuration of the softhsm HSM | 
 | **akv**     | [AKV configuration](#akv-configuration)         |    ✗     | Configuration of the akv hsm     |
-| **hardwareKeysOnly** | bool                                   |    ✗     | Refuse the keys signare could hold or accept in software (default `false`) |
+| **hardwareOnly** | bool                                   |    ✗     | Refuse the keys Signare could hold or accept in software (default `false`) |
 
-`hardwareKeysOnly` is the deployment-wide key policy for an installation that must keep every signing
-key inside an HSM. It refuses what signare could otherwise hold or accept in software; a PKCS#11 library
+`hardwareOnly` is the deployment-wide key policy for an installation that must keep every signing
+key inside an HSM. It refuses what Signare could otherwise hold or accept in software; a PKCS#11 library
 is trusted as configured. When set:
 
 * A module of kind `LocalKeyVault` cannot be created, no slot can be created in one, no key can be added
   to one, and an existing one refuses to sign. Each returns `412 Precondition failed` on the REST API or
   `-32097 Precondition failed` on JSON-RPC.
 * An Azure Key Vault key is refused unless the vault reports it as an `EC-HSM` key on curve `P-256K`
-  and, when the vault reports an `hsmPlatform`, on platform `2`. A key signare cannot read is refused
+  and, when the vault reports an `hsmPlatform`, on platform `2`. A key Signare cannot read is refused
   too, so the identity needs the `keys/get` permission as well as `keys/sign`. Every refusal is logged
   at warning level.
 
-Without it, signare still reads each Azure key version once before its first signature and logs a
+Without it, Signare still reads each Azure key version once before its first signature and logs a
 warning if it is not such a key, or if it could not be read; signing proceeds. The policy is logged at
 startup next to the Go cryptographic module's FIPS 140-3 mode. See the
 [FIPS 140-3 reference](fips-140-3.md#hardening-settings).

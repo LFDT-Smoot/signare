@@ -102,7 +102,7 @@ var useCasesSet = wire.NewSet(
 	providePinResolver,
 	provideSoftHSMConfiguration,
 	provideAKVConfiguration,
-	provideHardwareKeysOnly,
+	provideHardwareOnly,
 	hsmconnector.ProvideDefaultDigitalSignatureManagerFactory,
 	wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)),
 	wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"),
@@ -152,10 +152,10 @@ func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {
 	return nil
 }
 
-// provideHardwareKeysOnly reads the deployment-wide key policy; absent configuration means off.
-func provideHardwareKeysOnly(config Config) signaturemanager.HardwareKeysOnly {
+// provideHardwareOnly reads the deployment-wide key policy; absent configuration means off.
+func provideHardwareOnly(config Config) signaturemanager.HardwareOnly {
 	if config.Libraries.HSMModules != nil {
-		return signaturemanager.HardwareKeysOnly(config.Libraries.HSMModules.HardwareKeysOnly)
+		return signaturemanager.HardwareOnly(config.Libraries.HSMModules.HardwareOnly)
 	}
 	return false
 }

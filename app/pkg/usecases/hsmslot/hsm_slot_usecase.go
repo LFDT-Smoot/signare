@@ -71,7 +71,7 @@ func (u *DefaultUseCase) CreateHSMSlot(ctx context.Context, input CreateHSMSlotI
 		return nil, errors.InternalFromErr(getHSMErr)
 	}
 
-	if u.hardwareKeysOnly && getHSMOutput.Kind == hsmmodule.LKVModuleKind {
+	if u.hardwareOnly && getHSMOutput.Kind == hsmmodule.LKVModuleKind {
 		msg := fmt.Sprintf("cannot create a slot in the HSM module '%s', which is of kind %s: this deployment accepts HSM-held keys only", input.HSMModuleID, hsmmodule.LKVModuleKind)
 		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
@@ -450,7 +450,7 @@ func (u *DefaultUseCase) AddLocalKey(ctx context.Context, input AddLocalKeyInput
 	if err != nil {
 		return errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
-	if u.hardwareKeysOnly {
+	if u.hardwareOnly {
 		msg := "cannot add a local key: this deployment accepts HSM-held keys only"
 		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
@@ -654,8 +654,8 @@ type DefaultUseCaseOptions struct {
 	HSMConnector hsmconnector.HSMConnector
 	// ReferentialIntegrityUseCase to manage dependencies between resources.
 	ReferentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
-	// HardwareKeysOnly refuses keys that would be held in software.
-	HardwareKeysOnly signaturemanager.HardwareKeysOnly
+	// HardwareOnly refuses keys that would be held in software.
+	HardwareOnly signaturemanager.HardwareOnly
 }
 
 // DefaultUseCase default management of User in configuration implementation.
@@ -671,8 +671,8 @@ type DefaultUseCase struct {
 	hsmConnector hsmconnector.HSMConnector
 	// referentialIntegrityUseCase to manage dependencies between resources.
 	referentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
-	// hardwareKeysOnly refuses keys that would be held in software.
-	hardwareKeysOnly bool
+	// hardwareOnly refuses keys that would be held in software.
+	hardwareOnly bool
 }
 
 // ProvideDefaultUseCase creates a DefaultUseCase with the given options.
@@ -699,6 +699,6 @@ func ProvideDefaultUseCase(options DefaultUseCaseOptions) (*DefaultUseCase, erro
 		hsmSlotStorage:              options.HSMSlotStorage,
 		applicationUseCase:          options.ApplicationUseCase,
 		referentialIntegrityUseCase: options.ReferentialIntegrityUseCase,
-		hardwareKeysOnly:            bool(options.HardwareKeysOnly),
+		hardwareOnly:                bool(options.HardwareOnly),
 	}, nil
 }

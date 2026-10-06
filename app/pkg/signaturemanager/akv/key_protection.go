@@ -33,7 +33,7 @@ type keyReader interface {
 	describeKey(ctx context.Context, name string, version string) (keyDescription, error)
 }
 
-// vaultClient is the part of azkeys.Client signare uses. A fake stands in for it in tests.
+// vaultClient is the part of azkeys.Client Signare uses. A fake stands in for it in tests.
 type vaultClient interface {
 	Sign(ctx context.Context, name string, version string, parameters azkeys.SignParameters, options *azkeys.SignOptions) (azkeys.SignResponse, error)
 	GetKey(ctx context.Context, name string, version string, options *azkeys.GetKeyOptions) (azkeys.GetKeyResponse, error)
@@ -64,7 +64,8 @@ func (r azkeysReader) describeKey(ctx context.Context, name string, version stri
 }
 
 // keyProtectionProblems lists what keeps a key from being an HSM-held secp256k1 key on the current
-// platform. An unreported hsmPlatform is not a problem: older API versions do not return it.
+// platform. An unreported hsmPlatform is not counted as a problem. Which keys the service returns without
+// it is not established; the pinned client always requests api-version 7.5, whose model carries the field.
 func keyProtectionProblems(d keyDescription) []string {
 	var problems []string
 	switch d.keyType {
