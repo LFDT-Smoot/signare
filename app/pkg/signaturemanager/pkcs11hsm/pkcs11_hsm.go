@@ -247,9 +247,11 @@ func (s *PKCS11HSMSignatureManager) ListKeys(_ context.Context, input signaturem
 		if getLabelErr != nil {
 			continue
 		}
-		// An object signare cannot derive an address from, such as a key on another curve, is not one of its keys.
+		// An object signare cannot derive an address from, such as a key on another curve, is not one of its
+		// keys. A transient attribute read fails the same way, so the skip is logged to stay findable.
 		addr, getAddressErr := s.getAddress(session, o)
 		if getAddressErr != nil {
+			tracer.Debugf("skipping public key object %d with label '%s': %v", o, *label, getAddressErr)
 			continue
 		}
 		toCompare := calculatePublicKeyLabel(*addr)

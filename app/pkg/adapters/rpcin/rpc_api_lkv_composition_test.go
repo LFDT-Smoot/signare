@@ -3,11 +3,13 @@ package rpcin_test
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/rpcin"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/validators"
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
+	"github.com/lfdt-smoot/signare/app/pkg/graph"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/requestcontext"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/rpcinfra"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
@@ -19,17 +21,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var app graph.GraphShared
+
+// TestMain builds the application graph once: PKCS#11 can be initialised only once per process.
+func TestMain(m *testing.M) {
+	a, err := dbtesthelper.InitializeApp()
+	if err != nil {
+		panic(err)
+	}
+	app = *a
+	validators.SetValidators()
+	os.Exit(m.Run())
+}
+
 // TestLocalKeyVault_GenerateListSign_ThroughTheRealComposition runs a Local Key Vault account through
 // the handler, the adapter and the wired use cases over SQLite: generated, listed, then used to sign.
 // The adapter and use case tests each stop at a fake, so this is what guards the wiring between them.
 func TestLocalKeyVault_GenerateListSign_ThroughTheRealComposition(t *testing.T) {
-	app, err := dbtesthelper.InitializeApp()
-	require.NoError(t, err)
-	validators.SetValidators()
 	ctx := context.Background()
 
 	applicationID := uuid.NewString()
-	_, err = app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{ID: &applicationID, ChainID: *entities.NewInt256FromInt(44844)})
+	_, err := app.ApplicationUseCase.CreateApplication(ctx, application.CreateApplicationInput{ID: &applicationID, ChainID: *entities.NewInt256FromInt(44844)})
 	require.NoError(t, err)
 	moduleID := uuid.NewString()
 	description := "local key vault"

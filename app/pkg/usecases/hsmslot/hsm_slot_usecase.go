@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
@@ -448,27 +449,14 @@ func (u *DefaultUseCase) GenerateLocalKey(ctx context.Context, input GenerateLoc
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
-	storedSlot, getHSMSlotErr := u.GetHSMSlot(ctx, GetHSMSlotInput(input))
-	if getHSMSlotErr != nil {
-		return nil, getHSMSlotErr
+	storedSlot, err := u.localKeyVaultSlot(ctx, input.StandardID, "generate")
+	if err != nil {
+		return nil, err
 	}
 
-	getHSMModuleInput := hsmmodule.GetHSMModuleInput{
-		StandardID: entities.StandardID{ID: storedSlot.HSMModuleID},
-	}
-	storedHSM, getHSMErr := u.hsmModuleUseCase.GetHSMModule(ctx, getHSMModuleInput)
-	if getHSMErr != nil {
-		if errors.IsNotFound(getHSMErr) {
-			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", storedSlot.HSMModuleID)
-			return nil, errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-		}
-		return nil, errors.InternalFromErr(getHSMErr)
-	}
-
-	if storedHSM.Kind != hsmmodule.LKVModuleKind {
-		msg := fmt.Sprintf("cannot generate local key: configured HSM '%s' is not of kind %s", storedHSM.ID, hsmmodule.LKVModuleKind)
-		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-	}
+	tracer := logger.NewTracer(ctx)
+	tracer.AddProperty("slotId", input.ID)
+	tracer.AddProperty("operation", "GenerateLocalKey")
 
 	privateKey, generatedAddress, err := localkeyvault.NewKey()
 	if err != nil {
@@ -476,40 +464,21 @@ func (u *DefaultUseCase) GenerateLocalKey(ctx context.Context, input GenerateLoc
 	}
 	storedKey := strings.TrimPrefix(privateKey.String(), "0x")
 
-	// The key store is rewritten whole, and the write only lands if the slot is unchanged since it was
-	// read. A miss means a concurrent writer won, or the slot was deleted: re-read to tell which, and
-	// retry on top of the other writer's keys.
-	for attempt := 1; ; attempt++ {
-		if storedSlot.Config.LocalKeyVault == nil {
-			storedSlot.Config.LocalKeyVault = &LocalKeyVaultConfig{
-				KeyStore: make(map[address.Address]string),
-			}
+	err = u.editLocalKeyStore(ctx, storedSlot, func(slotID string, keyStore map[address.Address]string) error {
+		if _, exists := keyStore[*generatedAddress]; exists {
+			return errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", generatedAddress.String(), slotID)
 		}
-		if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress]; exists {
-			return nil, errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", generatedAddress.String(), storedSlot.ID)
-		}
-		storedSlot.Config.LocalKeyVault.KeyStore[*generatedAddress] = storedKey
-		storedSlot.LastUpdate = time.Now()
-
-		_, err = u.hsmSlotStorage.EditConfig(ctx, storedSlot.HSMSlot)
-		if err == nil {
-			return &GenerateLocalKeyOutput{
-				Address: *generatedAddress,
-			}, nil
-		}
-		if !errors.IsNotFound(err) {
-			return nil, errors.InternalFromErr(err)
-		}
-
-		storedSlot, getHSMSlotErr = u.GetHSMSlot(ctx, GetHSMSlotInput(input))
-		if getHSMSlotErr != nil {
-			return nil, getHSMSlotErr
-		}
-		if attempt == localKeyWriteAttempts {
-			msg := fmt.Sprintf("hsm slot [%s] was modified concurrently, retry", input.ID)
-			return nil, errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-		}
+		keyStore[*generatedAddress] = storedKey
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
+
+	tracer.Debugf("generated address: '%s'", generatedAddress.String())
+	return &GenerateLocalKeyOutput{
+		Address: *generatedAddress,
+	}, nil
 }
 
 func (u *DefaultUseCase) RemoveLocalKey(ctx context.Context, input RemoveLocalKeyInput) error {
@@ -517,49 +486,81 @@ func (u *DefaultUseCase) RemoveLocalKey(ctx context.Context, input RemoveLocalKe
 	if err != nil {
 		return errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
-	getHSMSlotInput := GetHSMSlotInput{
-		StandardID: input.StandardID,
-	}
-	storedSlot, getHSMSlotErr := u.GetHSMSlot(ctx, getHSMSlotInput)
-	if getHSMSlotErr != nil {
-		return getHSMSlotErr
+	storedSlot, err := u.localKeyVaultSlot(ctx, input.StandardID, "remove")
+	if err != nil {
+		return err
 	}
 
-	getHSMModuleInput := hsmmodule.GetHSMModuleInput{
-		StandardID: entities.StandardID{ID: storedSlot.HSMModuleID},
-	}
-	storedHSM, getHSMErr := u.hsmModuleUseCase.GetHSMModule(ctx, getHSMModuleInput)
-	if getHSMErr != nil {
-		if errors.IsNotFound(getHSMErr) {
-			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", storedSlot.HSMModuleID)
-			return errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	return u.editLocalKeyStore(ctx, storedSlot, func(slotID string, keyStore map[address.Address]string) error {
+		if _, exists := keyStore[input.Address]; !exists {
+			return errors.NotFound().WithMessage("address [%s] not found in local key vault for slot [%s]", input.Address.String(), slotID)
 		}
-		return errors.InternalFromErr(getHSMErr)
+		delete(keyStore, input.Address)
+		return nil
+	})
+}
+
+// localKeyVaultSlot returns the slot, refusing one whose module is not a Local Key Vault.
+func (u *DefaultUseCase) localKeyVaultSlot(ctx context.Context, id entities.StandardID, action string) (*HSMSlot, error) {
+	storedSlot, err := u.GetHSMSlot(ctx, GetHSMSlotInput{StandardID: id})
+	if err != nil {
+		return nil, err
+	}
+
+	storedHSM, err := u.hsmModuleUseCase.GetHSMModule(ctx, hsmmodule.GetHSMModuleInput{
+		StandardID: entities.StandardID{ID: storedSlot.HSMModuleID},
+	})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", storedSlot.HSMModuleID)
+			return nil, errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		return nil, errors.InternalFromErr(err)
 	}
 
 	if storedHSM.Kind != hsmmodule.LKVModuleKind {
-		msg := fmt.Sprintf("cannot remove local key: configured HSM '%s' is not of kind %s", storedHSM.ID, hsmmodule.LKVModuleKind)
-		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		msg := fmt.Sprintf("cannot %s local key: configured HSM '%s' is not of kind %s", action, storedHSM.ID, hsmmodule.LKVModuleKind)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
+	return &storedSlot.HSMSlot, nil
+}
 
-	if storedSlot.Config.LocalKeyVault == nil || storedSlot.Config.LocalKeyVault.KeyStore == nil {
-		return errors.NotFound().WithMessage("address [%s] not found in local key vault for slot [%s]", input.Address.String(), storedSlot.ID)
-	}
-
-	if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[input.Address]; !exists {
-		return errors.NotFound().WithMessage("address [%s] not found in local key vault for slot [%s]", input.Address.String(), storedSlot.ID)
-	}
-
-	delete(storedSlot.Config.LocalKeyVault.KeyStore, input.Address)
-	storedSlot.LastUpdate = time.Now()
-	_, err = u.hsmSlotStorage.EditConfig(ctx, storedSlot.HSMSlot)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return errors.NotFoundFromErr(err).WithMessage("hsm slot [%s] not found", input.ID)
+// editLocalKeyStore applies edit to the slot's key store and writes the store back whole. The write only
+// lands if the slot is unchanged since it was read, so a write that loses to a concurrent writer is
+// retried on a fresh read, with edit applied again on top of the other writer's change.
+func (u *DefaultUseCase) editLocalKeyStore(ctx context.Context, storedSlot *HSMSlot, edit func(slotID string, keyStore map[address.Address]string) error) error {
+	slotID := entities.StandardID{ID: storedSlot.ID}
+	for attempt := 1; ; attempt++ {
+		if storedSlot.Config.LocalKeyVault == nil {
+			storedSlot.Config.LocalKeyVault = &LocalKeyVaultConfig{}
 		}
-		return errors.InternalFromErr(err)
+		if storedSlot.Config.LocalKeyVault.KeyStore == nil {
+			storedSlot.Config.LocalKeyVault.KeyStore = make(map[address.Address]string)
+		}
+		if err := edit(storedSlot.ID, storedSlot.Config.LocalKeyVault.KeyStore); err != nil {
+			return err
+		}
+		storedSlot.LastUpdate = time.Now()
+
+		_, err := u.hsmSlotStorage.EditConfig(ctx, *storedSlot)
+		if err == nil {
+			return nil
+		}
+		if !errors.IsNotFound(err) {
+			return errors.InternalFromErr(err)
+		}
+
+		// The write missed: a concurrent writer won, or the slot was deleted. The fresh read tells which.
+		reread, getErr := u.GetHSMSlot(ctx, GetHSMSlotInput{StandardID: slotID})
+		if getErr != nil {
+			return getErr
+		}
+		if attempt == localKeyWriteAttempts {
+			msg := fmt.Sprintf("hsm slot [%s] was modified concurrently, retry", storedSlot.ID)
+			return errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		storedSlot = &reread.HSMSlot
 	}
-	return nil
 }
 
 func (u *DefaultUseCase) ListLocalKeys(ctx context.Context, input ListLocalKeysInput) (*ListLocalKeysOutput, error) {

@@ -269,3 +269,46 @@ func keysOf(store map[address.Address]string) []address.Address {
 	}
 	return keys
 }
+
+func TestDefaultUseCase_RemoveLocalKey_ConcurrentWriter(t *testing.T) {
+	_, target, err := localkeyvault.NewKey()
+	require.NoError(t, err)
+	input := hsmslot.RemoveLocalKeyInput{StandardID: entities.StandardID{ID: "lkv-slot"}, Address: *target}
+	storageHolding := func(conflicts int) *versionedSlotStorage {
+		storage := &versionedSlotStorage{conflicts: conflicts}
+		storage.slot.Config.LocalKeyVault = &hsmslot.LocalKeyVaultConfig{KeyStore: map[address.Address]string{*target: "stored"}}
+		return storage
+	}
+
+	t.Run("a lost write is retried on top of the other writer's key", func(t *testing.T) {
+		storage := storageHolding(1)
+		require.NoError(t, useCaseOver(t, storage).RemoveLocalKey(ctx, input))
+		require.Equal(t, 2, storage.writes)
+		require.ElementsMatch(t, storage.otherKeys, keysOf(storage.slot.Config.LocalKeyVault.KeyStore),
+			"the key is removed and the other writer's key kept")
+	})
+
+	t.Run("a write that keeps losing is reported as a precondition failure", func(t *testing.T) {
+		storage := storageHolding(hsmslot.LocalKeyWriteAttempts)
+		err := useCaseOver(t, storage).RemoveLocalKey(ctx, input)
+		require.Error(t, err)
+		require.True(t, errors.IsPreconditionFailed(err), "a slot and address that exist must not be reported as not found")
+		require.Contains(t, storage.slot.Config.LocalKeyVault.KeyStore, *target, "nothing may be removed")
+	})
+
+	t.Run("a slot that does not exist is reported as not found", func(t *testing.T) {
+		err := app.HSMSlotUseCase.RemoveLocalKey(ctx, hsmslot.RemoveLocalKeyInput{StandardID: entities.StandardID{ID: uuid.NewString()}, Address: *target})
+		require.Error(t, err)
+		require.True(t, errors.IsNotFound(err))
+	})
+
+	t.Run("an address the slot does not hold is reported as not found", func(t *testing.T) {
+		storage := storageHolding(0)
+		_, other, err := localkeyvault.NewKey()
+		require.NoError(t, err)
+		err = useCaseOver(t, storage).RemoveLocalKey(ctx, hsmslot.RemoveLocalKeyInput{StandardID: input.StandardID, Address: *other})
+		require.Error(t, err)
+		require.True(t, errors.IsNotFound(err))
+		require.Zero(t, storage.writes)
+	})
+}
