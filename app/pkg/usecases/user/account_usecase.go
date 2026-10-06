@@ -175,6 +175,11 @@ func (u *DefaultUserUseCase) DeleteAllAccountsForAddress(ctx context.Context, in
 		if errors.IsNotFound(err) {
 			return nil, errors.NotFoundFromErr(err)
 		}
+		// A refused PIN, or a Local Key Vault store still changing after its retries, is state the
+		// caller can act on, not a server fault.
+		if errors.IsPreconditionFailed(err) {
+			return nil, errors.PreconditionFailedFromErr(err)
+		}
 		return nil, errors.InternalFromErr(err)
 	}
 	tracer.Trace("removed address from HSM")

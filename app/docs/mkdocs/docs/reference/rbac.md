@@ -87,7 +87,6 @@ Nevertheless, the application has a set of RPC methods in the API that are not d
 ```YAML
 actions:
   - rpc.method.eth_generateAccount
-  - rpc.method.eth_importAccount
   - rpc.method.eth_removeAccount
   - rpc.method.eth_accounts
   - rpc.method.eth_signTransaction
@@ -144,7 +143,7 @@ The default RBAC configuration consists of the following roles and allowed actio
 | Name                   | User type | REST API resources that can be interacted with        | Allowed RPC API methods                              |
 |------------------------|-----------|-------------------------------------------------------|------------------------------------------------------|
 | **signer-admin**       | Admin     | Admins, Users, Accounts, Applications, Modules, Slots | ✗                                                    |
-| **application-admin**  | User      | Users, Accounts                                       | eth_generateAccount, eth_importAccount, eth_removeAccount, eth_accounts |
+| **application-admin**  | User      | Users, Accounts                                       | eth_generateAccount, eth_removeAccount, eth_accounts |
 | **transaction-signer** | User      | ✗                                                     | eth_signTransaction, eth_signTypedData               |
 | **message-signer**     | User      | ✗                                                     | personal_sign                                        |
 

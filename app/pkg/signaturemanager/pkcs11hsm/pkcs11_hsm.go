@@ -137,10 +137,6 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 	}, nil
 }
 
-func (s *PKCS11HSMSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, _ signaturemanager.DeriveAddressFromPrivateKeyInput) (*signaturemanager.DeriveAddressFromPrivateKeyOutput, error) {
-	return nil, signaturemanager.NewNotImplementedError()
-}
-
 func (s *PKCS11HSMSignatureManager) RemoveKey(_ context.Context, input signaturemanager.RemoveKeyInput) (*signaturemanager.RemoveKeyOutput, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -251,7 +247,13 @@ func (s *PKCS11HSMSignatureManager) ListKeys(_ context.Context, input signaturem
 		if getLabelErr != nil {
 			continue
 		}
-		addr, _ := s.getAddress(session, o)
+		// An object signare cannot derive an address from, such as a key on another curve, is not one of its
+		// keys. A transient attribute read fails the same way, so the skip is logged to stay findable.
+		addr, getAddressErr := s.getAddress(session, o)
+		if getAddressErr != nil {
+			tracer.Debugf("skipping public key object %d with label '%s': %v", o, *label, getAddressErr)
+			continue
+		}
 		toCompare := calculatePublicKeyLabel(*addr)
 		if toCompare != *label {
 			continue

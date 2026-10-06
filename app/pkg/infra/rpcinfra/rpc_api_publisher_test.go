@@ -37,10 +37,6 @@ func (stubJSONRPCAPIHandler) HandleGenerateAccount(_ context.Context, _ rpcinfra
 	return nil, nil
 }
 
-func (stubJSONRPCAPIHandler) HandleImportAccount(_ context.Context, _ rpcinfra.RPCRequest) (any, *rpcerrors.RPCError) {
-	return nil, nil
-}
-
 func (stubJSONRPCAPIHandler) HandleRemoveAccount(_ context.Context, _ rpcinfra.RPCRequest) (any, *rpcerrors.RPCError) {
 	return nil, nil
 }

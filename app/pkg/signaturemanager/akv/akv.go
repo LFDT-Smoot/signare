@@ -45,10 +45,6 @@ func (s *AKVSignatureManager) GenerateKey(_ context.Context, _ signaturemanager.
 	return nil, signaturemanager.NewNotImplementedError()
 }
 
-func (s *AKVSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, _ signaturemanager.DeriveAddressFromPrivateKeyInput) (*signaturemanager.DeriveAddressFromPrivateKeyOutput, error) {
-	return nil, signaturemanager.NewNotImplementedError()
-}
-
 func (s *AKVSignatureManager) RemoveKey(_ context.Context, _ signaturemanager.RemoveKeyInput) (*signaturemanager.RemoveKeyOutput, error) {
 	return nil, signaturemanager.NewNotImplementedError()
 }

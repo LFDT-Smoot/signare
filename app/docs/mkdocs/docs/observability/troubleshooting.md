@@ -77,7 +77,8 @@ To confirm, follow these steps:
     ```
 2. Confirm that the `address` is not in the result's list 
 
-**Solution 1:** if you want to use this specific `address`, import it to your HSM manually.
+**Solution 1:** if you want to use this specific `address`, import it to your HSM manually, as described in
+[where keys come from](../reference/supported-modules.md#where-keys-come-from).
 
 **Solution 2:** if you can use any `address`, generate a new account using the signare and replace it in your original request.
 ```console

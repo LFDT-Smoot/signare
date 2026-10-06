@@ -37,25 +37,38 @@ There are a number of necessary steps prior to sign a transaction with our LKV s
         }
     }'
     ```
-2. Import a valid private key to the LKV. If the imports succeeds, the response will contain it's ethereum address
+2. Create a slot in the LKV for your application. The `slot` value is a name of your choosing; a Local Key Vault slot
+   takes no `pinSource`.
+    ```console
+    curl --location --request POST 'http://localhost:32325/admin/modules/my-id/slots' \
+    --header 'X-Auth-UserId: owner' \
+    --header 'Content-Type: application/json' \
+    --data-raw '{
+        "meta": {
+            "id": "my-lkv-slot"
+        },
+        "spec": {
+            "applicationId": "my-application-id",
+            "slot": "lkv-0"
+        }
+    }'
+    ```
+3. Generate an account in the LKV. The response contains its Ethereum address. Signare generates the key itself and
+   does not accept an existing private key; to use one, see
+   [where keys come from](../reference/supported-modules.md#where-keys-come-from).
    ```console
    curl --location 'http://localhost:4545' \
    --header 'X-Auth-UserId: my-user-id' \
    --header 'X-Auth-ApplicationId: my-application-id' \
    --header 'Content-Type: application/json' \
    --data '{
-     "id": 1
+     "id": 1,
      "jsonrpc": "2.0",
-     "method": "eth_importAccount",
-     "params": [
-       {
-         "privateKey": "5f25e648f40cf86adc5e0a450695acefc4af742da79ab4e62e8db5b65eef21ca"
-       }
-     ],
-    
+     "method": "eth_generateAccount",
+     "params": []
    }'
    ```
-3. Assign the generated address to a user
+4. Assign the generated address to a user
     ```console
     curl --location --request POST 'http://localhost:32325/applications/my-application-id/users/my-user-id/accounts' \
     --header 'X-Auth-UserId: my-user-id' \

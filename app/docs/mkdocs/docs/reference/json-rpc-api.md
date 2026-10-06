@@ -25,6 +25,9 @@ for implementation-defined server errors. Signare defines the following ones:
 | -32604 | Bad gateway         | An upstream dependency, such as the HSM, returned a fault.  |
 | -32605 | Already exists      | The specified resource already exists.                      |
 
+A method signare does not publish returns `-32601 Method not found`. This is answered before the caller's identity
+is checked.
+
 ### Parameter naming
 
 Every method that takes parameters accepts them either as a single object (`{...}`) or as that object
@@ -191,7 +194,11 @@ signature to a chain is the verifier's job, normally through the message text.
 ### eth_generateAccount
 
 Generates a new key pair in the HSM slot configured for the application sent in the header and returns the Ethereum
-address that corresponds to the public key.
+address that corresponds to the public key. On a Local Key Vault slot, signare generates the key and stores it in the
+slot's configuration.
+
+Signare never accepts a private key through its API. To use an existing key, load it with the module's own tooling, as
+described in [supported modules](supported-modules.md#where-keys-come-from).
 
 * Request:
 
@@ -216,43 +223,12 @@ address that corresponds to the public key.
   | -32602 | Invalid params      | 
   | -32603 | Internal error      | 
   | -32097 | Precondition failed |
+  | -32098 | Not found           |
   | -32099 | Unauthorized        |
 
-### eth_importAccount
-
-Imports a private key into the HSM slot configured for the application (only supported for Local Key Vault HSM kind) and
-returns the Ethereum
-address that derives from its public key.
-
-* Request:
-
-  Input parameters:
-
-  | Name       | Type   | Required |
-  |------------|--------|----------|
-  | privateKey | string | ✔        |
-
-  Example:
-    ```
-    curl -X POST -H "X-Auth-UserId: <user>" -H "X-Auth-ApplicationId: <application>" --data '{"jsonrpc":"2.0","method":"eth_importAccount","params":[{"privateKey": "6d36964f44cf2a57968238b5bead10bee82a37e21cdd3e875e4a29d572c1d205"}], "id":1}' http://localhost:4545
-    ```
-
-* Success response:
-
-  Example:
-    ```
-    {"jsonrpc":"2.0","id":1,"result":"0x56cDb4eE596BA7b055B75077794Dd1F408ee150F"}
-    ```
-
-* Error responses:
-
-  | Code   | Message             |
-  |--------|---------------------|
-  | -32605 | Already exists      | 
-  | -32602 | Invalid params      | 
-  | -32603 | Internal error      | 
-  | -32097 | Precondition failed |
-  | -32099 | Unauthorized        |
+  On a Local Key Vault slot, concurrent calls that change the slot's keys contend for its key store. Signare retries the
+  write up to three times; if the slot is still being modified, the call returns `-32097 Precondition failed` without
+  storing a key, and can be retried. `-32098 Not found` means the slot was deleted while the call ran.
 
 ### eth_removeAccount
 
@@ -289,6 +265,10 @@ key.
   | -32098 | Not found           |
   | -32099 | Unauthorized        |
 
+  On a Local Key Vault slot, a removal contends with concurrent calls that change the slot's keys in the same way as
+  `eth_generateAccount`: after three lost writes it returns `-32097 Precondition failed` without removing the key, and
+  can be retried.
+
 ### eth_accounts
 
 Lists all the key pairs stored in the HSM slot configured for the application sent in the header as an array of the
@@ -316,4 +296,5 @@ Ethereum addresses that correspond to the stored public keys.
   | -32602 | Invalid params      |
   | -32603 | Internal error      |
   | -32097 | Precondition failed |
+  | -32098 | Not found           |
   | -32099 | Unauthorized        |

@@ -28,10 +28,6 @@ func (*noopSignatureManager) GenerateKey(_ context.Context, _ signaturemanager.G
 	return &signaturemanager.GenerateKeyOutput{}, nil
 }
 
-func (*noopSignatureManager) DeriveAddressFromPrivateKey(_ context.Context, _ signaturemanager.DeriveAddressFromPrivateKeyInput) (*signaturemanager.DeriveAddressFromPrivateKeyOutput, error) {
-	return &signaturemanager.DeriveAddressFromPrivateKeyOutput{}, nil
-}
-
 func (*noopSignatureManager) RemoveKey(_ context.Context, _ signaturemanager.RemoveKeyInput) (*signaturemanager.RemoveKeyOutput, error) {
 	return &signaturemanager.RemoveKeyOutput{}, nil
 }
