@@ -5,6 +5,7 @@ package graph
 import (
 	"github.com/google/wire"
 
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
@@ -101,6 +102,7 @@ var useCasesSet = wire.NewSet(
 	providePinResolver,
 	provideSoftHSMConfiguration,
 	provideAKVConfiguration,
+	provideHardwareKeysOnly,
 	hsmconnector.ProvideDefaultDigitalSignatureManagerFactory,
 	wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)),
 	wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"),
@@ -148,6 +150,14 @@ func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {
 		return &softHSMConfig
 	}
 	return nil
+}
+
+// provideHardwareKeysOnly reads the deployment-wide key policy; absent configuration means off.
+func provideHardwareKeysOnly(config Config) signaturemanager.HardwareKeysOnly {
+	if config.Libraries.HSMModules != nil {
+		return signaturemanager.HardwareKeysOnly(config.Libraries.HSMModules.HardwareKeysOnly)
+	}
+	return false
 }
 
 func provideAKVConfiguration(config Config) *string {

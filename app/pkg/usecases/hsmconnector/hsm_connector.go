@@ -524,14 +524,7 @@ func (d *DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, 
 	signOutput, err := digitalSignatureManager.Sign(ctx, signInput)
 	d.recordLoginOutcome(pin, err)
 	if err != nil {
-		if signaturemanager.IsInvalidSlotError(err) {
-			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
-			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-		}
-		if signaturemanager.IsPinIncorrectError(err) {
-			return nil, pinIncorrectError(err, input.Slot)
-		}
-		return nil, errors.InternalFromErr(err)
+		return nil, signError(err, input.Slot)
 	}
 
 	signatureWithV, err := assembleRecoverableSignature(signOutput.Signature, input.From, *payload, tracer)
@@ -672,14 +665,7 @@ func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, 
 	signOutput, signErr := digitalSignatureManager.Sign(ctx, signInput)
 	d.recordLoginOutcome(pin, signErr)
 	if signErr != nil {
-		if signaturemanager.IsInvalidSlotError(signErr) {
-			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", slotData.Slot)
-			return nil, errors.BadGatewayFromErr(signErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-		}
-		if signaturemanager.IsPinIncorrectError(signErr) {
-			return nil, pinIncorrectError(signErr, slotData.Slot)
-		}
-		return nil, errors.InternalFromErr(signErr)
+		return nil, signError(signErr, slotData.Slot)
 	}
 
 	signatureWithV, err := assembleRecoverableSignature(signOutput.Signature, from, data, tracer)
@@ -695,6 +681,22 @@ func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, 
 		R: entities.Int256{Int: *new(big.Int).SetBytes(signatureWithV[1:33])},
 		S: entities.Int256{Int: *new(big.Int).SetBytes(signatureWithV[33:signatureLength])},
 	}, nil
+}
+
+// signError classifies a signature manager error for the caller. Every signing method shares it, so a
+// refusal by the key policy is a precondition failure on each of them and never an internal error.
+func signError(err error, slot string) error {
+	switch {
+	case signaturemanager.IsInvalidSlotError(err):
+		msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", slot)
+		return errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	case signaturemanager.IsPinIncorrectError(err):
+		return pinIncorrectError(err, slot)
+	case signaturemanager.IsPolicyRefusedError(err):
+		return errors.PreconditionFailedFromErr(err).WithMessage("%s", err.Error()).SetHumanReadableMessage("%s", err.Error())
+	default:
+		return errors.InternalFromErr(err)
+	}
 }
 
 func (d *DefaultUseCase) CloseAll(ctx context.Context, _ CloseAllInput) (*CloseAllOutput, error) {

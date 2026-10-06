@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
 	"net"
@@ -151,6 +152,7 @@ func startServer(_ *cobra.Command, _ []string) {
 	for _, warning := range config.InsecureListenAddressWarnings(listenAddress) {
 		logger.LogEntry(ctxMainWithCancellation).Warn(warning)
 	}
+	logger.LogEntry(ctxMainWithCancellation).Infof("Go cryptographic module FIPS 140-3 mode: %t, HSM-held keys only: %t", fips140.Enabled(), staticConfig.HardwareKeysOnly())
 
 	appConfig := toGraphConfiguration(staticConfig)
 	appGraph, err := graph.New(appConfig)
@@ -332,6 +334,7 @@ func toGraphConfiguration(staticConfig *config.StaticConfiguration) graph.Config
 
 	if staticConfig.HSMModules != nil {
 		graphConfig.Libraries.HSMModules = new(graph.HSMModules)
+		graphConfig.Libraries.HSMModules.HardwareKeysOnly = staticConfig.HSMModules.HardwareKeysOnly
 
 		if staticConfig.HSMModules.SoftHSM != nil {
 			graphConfig.Libraries.HSMModules.SoftHSM = &graph.SoftHSMConfig{

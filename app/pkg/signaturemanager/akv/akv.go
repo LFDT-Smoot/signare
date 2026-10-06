@@ -16,12 +16,16 @@ const (
 
 // AKVSignatureManager implements the DigitalSignatureManager interface.
 type AKVSignatureManager struct {
-	akvClient *azkeys.Client
+	akvClient vaultClient
+	// keys enforces the deployment-wide key policy on every key before it signs.
+	keys *keyProtection
 }
 
 // AVSignatureManagerOptions defines options to create a new instance of AKVSignatureManager.
 type AVSignatureManagerOptions struct {
 	AKVVaultURL string
+	// HardwareKeysOnly refuses to sign with a key the vault does not hold in an HSM.
+	HardwareKeysOnly signaturemanager.HardwareKeysOnly
 }
 
 var _ signaturemanager.DigitalSignatureManager = (*AKVSignatureManager)(nil)
@@ -36,9 +40,14 @@ func ProvideAKVSignatureManager(options AVSignatureManagerOptions) (*AKVSignatur
 	if err != nil {
 		return nil, err
 	}
+	return newAKVSignatureManager(azKeysClient, bool(options.HardwareKeysOnly)), nil
+}
+
+func newAKVSignatureManager(client vaultClient, hardwareKeysOnly bool) *AKVSignatureManager {
 	return &AKVSignatureManager{
-		akvClient: azKeysClient,
-	}, nil
+		akvClient: client,
+		keys:      newKeyProtection(azkeysReader{client: client}, hardwareKeysOnly),
+	}
 }
 
 func (s *AKVSignatureManager) GenerateKey(_ context.Context, _ signaturemanager.GenerateKeyInput) (*signaturemanager.GenerateKeyOutput, error) {
@@ -78,6 +87,10 @@ func (s *AKVSignatureManager) Sign(ctx context.Context, input signaturemanager.S
 
 	tracer.AddProperty("name", name)
 	tracer.AddProperty("version", version)
+
+	if err := s.keys.check(ctx, tracer, name, version); err != nil {
+		return nil, err
+	}
 
 	es256 := azkeys.SignatureAlgorithmES256K
 	parameters := azkeys.SignParameters{

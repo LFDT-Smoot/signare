@@ -33,6 +33,10 @@ ENV GID=1000
 
 ARG GOPROXY
 ARG GOSUMDB
+# Opt-in FIPS 140-3 build of the Go standard library cryptography, read by `go build` in this
+# stage. `off` builds the ordinary toolchain crypto; `certified` links the CMVP-validated Go
+# Cryptographic Module. See app/docs/mkdocs/docs/reference/fips-140-3.md for what it covers.
+ARG GOFIPS140=off
 
 RUN addgroup --gid $GID --system $GROUP
 
@@ -54,15 +58,15 @@ RUN make -C deployment build
 # install all required dynamic libraries used by C
 RUN ldd /signare/deployment/bin/signare_linux_amd64 | tr -s [:blank:] '\n' | grep ^/ | xargs -I % install -D % /dist/%
 
-FROM $BASE_IMAGE AS signare
+# signare-nosofthsm carries the binary and its runtime libraries only, for deployments that sign with a
+# hardware HSM or Azure Key Vault and must not ship a software token. Build it with
+# `--target signare-nosofthsm`. A PKCS#11 library mounted from the vendor is used as configured.
+FROM $BASE_IMAGE AS signare-nosofthsm
 
 COPY --from=signare-builder /etc/passwd /etc/passwd
 COPY --from=signare-builder /etc/group /etc/group
 COPY --from=signare-builder /signare/deployment/bin/signare_linux_amd64 /signare/bin/signare
 COPY --from=signare-builder /dist /
-
-COPY --from=softhsm-builder /dist /
-COPY --from=softhsm-builder /usr/local/lib/softhsm/libsofthsm2.so /usr/local/lib/softhsm/libsofthsm2.so
 
 COPY --from=signare-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
@@ -70,4 +74,8 @@ USER signare:signare
 
 ENTRYPOINT [ "/signare/bin/signare" ]
 
+# signare, the default image, adds SoftHSM for development and testing.
+FROM signare-nosofthsm AS signare
 
+COPY --from=softhsm-builder /dist /
+COPY --from=softhsm-builder /usr/local/lib/softhsm/libsofthsm2.so /usr/local/lib/softhsm/libsofthsm2.so

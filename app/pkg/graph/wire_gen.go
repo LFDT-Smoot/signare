@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/google/wire"
+
 	"github.com/lfdt-smoot/signare/app"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/httpin"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/httpmiddlewarein/pepin"
@@ -60,6 +61,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/hsmslotdb"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/referentialintegritydb"
 	"github.com/lfdt-smoot/signare/app/pkg/infra/storage/userdb"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/authorization/pdp"
@@ -691,9 +693,11 @@ func initializeUseCases(repositories *repositoriesGraph, metricRecorder metricre
 	userStorage := repositories.userStorage
 	accountStorage := repositories.accountStorage
 	hsmModuleStorage := repositories.hsmStorage
+	hardwareKeysOnly := provideHardwareKeysOnly(config)
 	hsmmoduleDefaultUseCaseOptions := hsmmodule.DefaultUseCaseOptions{
 		HSMModuleStorage:            hsmModuleStorage,
 		ReferentialIntegrityUseCase: defaultUseCase,
+		HardwareKeysOnly:            hardwareKeysOnly,
 	}
 	hsmmoduleDefaultUseCase, err := hsmmodule.ProvideDefaultHSMModuleUseCase(hsmmoduleDefaultUseCaseOptions)
 	if err != nil {
@@ -716,8 +720,9 @@ func initializeUseCases(repositories *repositoriesGraph, metricRecorder metricre
 	pkcs11Library := provideSoftHSMConfiguration(config)
 	string2 := provideAKVConfiguration(config)
 	defaultDigitalSignatureManagerFactoryOptions := hsmconnector.DefaultDigitalSignatureManagerFactoryOptions{
-		SoftHSMLibrary: pkcs11Library,
-		AKVVaultURL:    string2,
+		SoftHSMLibrary:   pkcs11Library,
+		AKVVaultURL:      string2,
+		HardwareKeysOnly: hardwareKeysOnly,
 	}
 	defaultDigitalSignatureManagerFactory, err := hsmconnector.ProvideDefaultDigitalSignatureManagerFactory(defaultDigitalSignatureManagerFactoryOptions)
 	if err != nil {
@@ -742,6 +747,7 @@ func initializeUseCases(repositories *repositoriesGraph, metricRecorder metricre
 		HSMModuleUseCase:            defaultUseCaseTransactionalDecorator,
 		HSMConnector:                hsmconnectorDefaultUseCase,
 		ReferentialIntegrityUseCase: defaultUseCase,
+		HardwareKeysOnly:            hardwareKeysOnly,
 	}
 	hsmslotDefaultUseCase, err := hsmslot.ProvideDefaultUseCase(hsmslotDefaultUseCaseOptions)
 	if err != nil {
@@ -1059,7 +1065,8 @@ type useCasesGraph struct {
 
 var useCasesSet = wire.NewSet(wire.Struct(new(useCasesGraph), "*"), transactionalmanager.ProvideTransactionalManager, wire.Bind(new(transactionalmanager.TransactionalManagerUseCase), new(*transactionalmanager.TransactionalManager)), wire.Struct(new(transactionalmanager.TransactionalManagerOptions), "*"), referentialintegrity.ProvideDefaultUseCase, wire.Bind(new(referentialintegrity.ReferentialIntegrityUseCase), new(*referentialintegrity.DefaultUseCase)), wire.Struct(new(referentialintegrity.DefaultUseCaseOptions), "*"), application.ProvideDefaultUseCase, wire.Bind(new(application.ApplicationUseCase), new(*application.DefaultUseCase)), wire.Struct(new(application.DefaultUseCaseOptions), "*"), user.ProvideDefaultUseCase, wire.Bind(new(user.UserUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUserUseCaseOptions), "*"), user.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(user.AccountUseCase), new(*user.DefaultUserUseCase)), wire.Struct(new(user.DefaultUseCaseTransactionalDecoratorOptions), "*"), admin.ProvideDefaultUseCase, wire.Bind(new(admin.AdminUseCase), new(*admin.DefaultUseCase)), wire.Struct(new(admin.DefaultUseCaseOptions), "*"), hsmmodule.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmmodule.HSMModuleUseCase), new(*hsmmodule.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmmodule.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmmodule.ProvideDefaultHSMModuleUseCase, wire.Struct(new(hsmmodule.DefaultUseCaseOptions), "*"), hsmslot.ProvideDefaultUseCaseTransactionalDecorator, wire.Bind(new(hsmslot.HSMSlotUseCase), new(*hsmslot.DefaultUseCaseTransactionalDecorator)), wire.Struct(new(hsmslot.DefaultUseCaseTransactionalDecoratorOptions), "*"), hsmslot.ProvideDefaultUseCase, wire.Struct(new(hsmslot.DefaultUseCaseOptions), "*"), hsmconnector.ProvideDefaultHSMConnector, wire.Bind(new(hsmconnector.HSMConnector), new(*hsmconnector.DefaultUseCase)), wire.Struct(new(hsmconnector.DefaultUseCaseOptions), "*"), provideDefaultRoleStorageInFile, role.ProvideDefaultRoleUseCase, wire.Bind(new(role.RoleUseCase), new(*role.DefaultRoleUseCase)), wire.Struct(new(role.DefaultRoleUseCaseOptions), "*"), providePinResolver,
 	provideSoftHSMConfiguration,
-	provideAKVConfiguration, hsmconnector.ProvideDefaultDigitalSignatureManagerFactory, wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)), wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"), hsmconnection.ProvideDefaultHSMConnectionResolver, wire.Bind(new(hsmconnection.Resolver), new(*hsmconnection.DefaultHSMConnectionResolver)), wire.Struct(new(hsmconnection.DefaultHSMConnectionResolverOptions), "*"),
+	provideAKVConfiguration,
+	provideHardwareKeysOnly, hsmconnector.ProvideDefaultDigitalSignatureManagerFactory, wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)), wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"), hsmconnection.ProvideDefaultHSMConnectionResolver, wire.Bind(new(hsmconnection.Resolver), new(*hsmconnection.DefaultHSMConnectionResolver)), wire.Struct(new(hsmconnection.DefaultHSMConnectionResolverOptions), "*"),
 )
 
 // providePinResolver builds the resolver that turns a slot's pin source into the PIN it names. The
@@ -1079,6 +1086,14 @@ func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {
 		return &softHSMConfig
 	}
 	return nil
+}
+
+// provideHardwareKeysOnly reads the deployment-wide key policy; absent configuration means off.
+func provideHardwareKeysOnly(config Config) signaturemanager.HardwareKeysOnly {
+	if config.Libraries.HSMModules != nil {
+		return signaturemanager.HardwareKeysOnly(config.Libraries.HSMModules.HardwareKeysOnly)
+	}
+	return false
 }
 
 func provideAKVConfiguration(config Config) *string {

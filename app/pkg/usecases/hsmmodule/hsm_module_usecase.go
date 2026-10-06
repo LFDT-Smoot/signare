@@ -2,11 +2,13 @@ package hsmmodule
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
 	"github.com/lfdt-smoot/signare/app/pkg/utils"
 
@@ -45,6 +47,10 @@ func (u *DefaultUseCase) CreateHSMModule(ctx context.Context, input CreateHSMMod
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
+	}
+
+	if refusal := u.refuseSoftwareModule(input.ModuleKind); refusal != nil {
+		return nil, refusal
 	}
 
 	if input.ID == nil {
@@ -183,6 +189,8 @@ type DefaultUseCaseOptions struct {
 	HSMModuleStorage HSMModuleStorage
 	// ReferentialIntegrityUseCase to manage dependencies between resources.
 	ReferentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// HardwareKeysOnly refuses modules that hold keys in software.
+	HardwareKeysOnly signaturemanager.HardwareKeysOnly
 }
 
 // DefaultUseCase implements the HSMModuleUseCase interface.
@@ -191,6 +199,18 @@ type DefaultUseCase struct {
 	hsmModuleStorage HSMModuleStorage
 	// referentialIntegrityUseCase to manage dependencies between resources.
 	referentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// hardwareKeysOnly refuses modules that hold keys in software.
+	hardwareKeysOnly bool
+}
+
+// refuseSoftwareModule rejects creating a Local Key Vault module when the deployment accepts HSM-held keys
+// only. Editing needs no guard: a module's kind is immutable, the update statement never writes it.
+func (u *DefaultUseCase) refuseSoftwareModule(kind ModuleKind) error {
+	if u.hardwareKeysOnly && kind == LKVModuleKind {
+		msg := fmt.Sprintf("a module of kind %s holds keys in software and this deployment accepts HSM-held keys only", LKVModuleKind)
+		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+	return nil
 }
 
 // ProvideDefaultHSMModuleUseCase creates a new DefaultUseCase instance.
@@ -205,5 +225,6 @@ func ProvideDefaultHSMModuleUseCase(options DefaultUseCaseOptions) (*DefaultUseC
 	return &DefaultUseCase{
 		hsmModuleStorage:            options.HSMModuleStorage,
 		referentialIntegrityUseCase: options.ReferentialIntegrityUseCase,
+		hardwareKeysOnly:            bool(options.HardwareKeysOnly),
 	}, nil
 }

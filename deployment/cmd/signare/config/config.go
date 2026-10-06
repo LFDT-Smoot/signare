@@ -90,6 +90,11 @@ func (c *StaticConfiguration) ServerLimits() (maxBodyBytes int64, maxHeaderBytes
 	return maxBodyBytes, maxHeaderBytes
 }
 
+// HardwareKeysOnly reports the deployment-wide key policy; absent hsmmodules configuration means off.
+func (c *StaticConfiguration) HardwareKeysOnly() bool {
+	return c.HSMModules != nil && c.HSMModules.HardwareKeysOnly
+}
+
 // InsecureSettingsWarnings returns human-readable warnings for configured values that are unsafe for a
 // production deployment. It performs no logging so the caller controls how the warnings are surfaced.
 // Currently it flags any sslmode that does not guarantee an encrypted connection (see secureSSLModes),
@@ -259,6 +264,10 @@ type HSMModules struct {
 	SoftHSM *SoftHSMConfig `mapstructure:"softhsm" valid:"optional"`
 	// AKV configuration for AKV.
 	AKV *AKVConfig `mapstructure:"akv" valid:"optional"`
+	// HardwareKeysOnly refuses the keys signare could otherwise hold or accept in software: Local Key
+	// Vault modules cannot be created or used, and an Azure Key Vault key must be an EC-HSM key on P-256K.
+	// A PKCS#11 library is trusted as configured.
+	HardwareKeysOnly bool `mapstructure:"hardwareKeysOnly" valid:"optional"`
 }
 
 // SoftHSMConfig configures a SoftHSM in Signare.

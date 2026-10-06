@@ -83,6 +83,8 @@ type DefaultDigitalSignatureManagerFactoryOptions struct {
 	// SoftHSMLibrary path to the library to connect to a PKCS11 compatible HSM.
 	SoftHSMLibrary *PKCS11Library
 	AKVVaultURL    *string
+	// HardwareKeysOnly is the deployment-wide key policy, passed to the adapters that enforce it.
+	HardwareKeysOnly signaturemanager.HardwareKeysOnly
 }
 
 // ProvideDefaultDigitalSignatureManagerFactory creates a new DigitalSignatureManagerFactory with the given options.
@@ -112,7 +114,8 @@ func ProvideDefaultDigitalSignatureManagerFactory(options DefaultDigitalSignatur
 	}
 	if options.AKVVaultURL != nil {
 		signatureManager, err := akv.ProvideAKVSignatureManager(akv.AVSignatureManagerOptions{
-			AKVVaultURL: *options.AKVVaultURL,
+			AKVVaultURL:      *options.AKVVaultURL,
+			HardwareKeysOnly: options.HardwareKeysOnly,
 		})
 		if err != nil {
 			return nil, signererrors.InternalFromErr(err)
@@ -120,7 +123,9 @@ func ProvideDefaultDigitalSignatureManagerFactory(options DefaultDigitalSignatur
 		digitalSignatureManagerMap[AKVModuleKind] = signatureManager
 	}
 
-	lkvSignatureManager := localkeyvault.ProvideLKVSignatureManager(localkeyvault.LKVSignatureManagerOptions{})
+	lkvSignatureManager := localkeyvault.ProvideLKVSignatureManager(localkeyvault.LKVSignatureManagerOptions{
+		HardwareKeysOnly: options.HardwareKeysOnly,
+	})
 	digitalSignatureManagerMap[LKVModuleKind] = lkvSignatureManager
 
 	if len(digitalSignatureManagerMap) == 0 {

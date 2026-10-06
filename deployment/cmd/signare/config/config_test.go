@@ -438,3 +438,38 @@ func TestGetStaticConfigurationPasswordEnvOnlyWhenAbsentFromFile(t *testing.T) {
 		t.Fatalf("password = %q, want it supplied via %s when omitted from the file", got, databasePasswordEnv)
 	}
 }
+
+func TestStaticConfigurationParsesHardwareKeysOnly(t *testing.T) {
+	parse := func(t *testing.T, cfgYAML string) StaticConfiguration {
+		t.Helper()
+		v := viper.New()
+		v.SetConfigType("yaml")
+		if err := v.ReadConfig(strings.NewReader(cfgYAML)); err != nil {
+			t.Fatalf("reading config: %v", err)
+		}
+		var cfg StaticConfiguration
+		if err := v.Unmarshal(&cfg); err != nil {
+			t.Fatalf("unmarshalling config: %v", err)
+		}
+		return cfg
+	}
+
+	t.Run("set", func(t *testing.T) {
+		cfg := parse(t, "hsmmodules:\n  hardwareKeysOnly: true\n  akv:\n    url: 'https://example.vault.azure.net/'\n")
+		if !cfg.HardwareKeysOnly() {
+			t.Fatalf("expected hardwareKeysOnly to be parsed as true")
+		}
+	})
+	t.Run("absent under hsmmodules", func(t *testing.T) {
+		cfg := parse(t, "hsmmodules:\n  akv:\n    url: 'https://example.vault.azure.net/'\n")
+		if cfg.HardwareKeysOnly() {
+			t.Fatalf("expected hardwareKeysOnly to default to false")
+		}
+	})
+	t.Run("no hsmmodules section", func(t *testing.T) {
+		cfg := parse(t, "server:\n  maxHeaderBytes: 65536\n")
+		if cfg.HardwareKeysOnly() {
+			t.Fatalf("expected hardwareKeysOnly to be false without an hsmmodules section")
+		}
+	})
+}
