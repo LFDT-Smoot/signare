@@ -171,8 +171,8 @@ is trusted as configured. When set:
   `-32097 Precondition failed` on JSON-RPC.
 * An Azure Key Vault key is refused unless the vault reports it as an `EC-HSM` key on curve `P-256K`
   and, when the vault reports an `hsmPlatform`, on platform `2`. A key Signare cannot read is refused
-  too, so the identity needs the `keys/get` permission as well as `keys/sign`. Every refusal is logged
-  at warning level.
+  too, so the identity needs the `keys/get` permission as well as `keys/sign`. The first refusal of a key
+  version, and every refusal of a key that cannot be read, is logged at warning level.
 
 Without it, Signare still reads each Azure key version once before its first signature and logs a
 warning if it is not such a key, or if it could not be read; signing proceeds. The policy is logged at

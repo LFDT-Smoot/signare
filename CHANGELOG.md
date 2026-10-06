@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `personal_sign` JSON-RPC method, signing an arbitrary message under the EIP-191 personal message prefix so an identity whose key is custodied in the HSM can produce a Sign-In With Ethereum signature. Granted by a new `message-signer` role, separate from `transaction-signer`, and subject to the same per-account authorization as the other signing methods (#14).
 - Add a Dependabot configuration for the Go modules, the OpenAPI generator Maven plugin, the Docker base images and GitHub Actions, with grouped update pull requests and a 30-day cooldown on version updates.
 - Add an opt-in `GOFIPS140` build setting, `off` by default; `certified` builds against the CMVP-validated Go Cryptographic Module, which covers TLS but not the secp256k1 or Keccak-256 code. See the FIPS 140-3 reference (#54).
-- Add `hsmmodules.hardwareOnly`, off by default, which refuses the Local Key Vault and any Azure Key Vault key not reported as an `EC-HSM` key on `P-256K`. See the FIPS 140-3 reference (#54).
+- Add `hsmmodules.hardwareOnly`, off by default, which refuses the Local Key Vault and any Azure Key Vault key not reported as an `EC-HSM` key on `P-256K` on the current HSM platform. See the FIPS 140-3 reference (#54).
 - Add a `signare-nosofthsm` Docker build target without SoftHSM; the default image is unchanged (#54).
 - Add `make -C app fips_test`, which runs the application tests built with `GOFIPS140=certified` (#54).
 
