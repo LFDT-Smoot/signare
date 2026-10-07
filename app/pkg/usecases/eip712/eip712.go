@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/sha3"
 )
@@ -198,9 +199,10 @@ func (d TypedData) Validate() error {
 	return nil
 }
 
-// checkTypeNames rejects any declared type name containing array notation, reachable or not.
-// EIP-712 requires a struct name to be an identifier, and such a name has no canonical encoding:
-// encodeField hashes it as a struct while findDependencies leaves it out of the canonical type string.
+// checkTypeNames rejects any declared type name containing array notation, reachable or not. Such a
+// name is not an EIP-712 identifier and has no canonical encoding: encodeField hashes it as a struct
+// while findDependencies leaves it out of the canonical type string. Other non-identifier characters
+// are not checked here.
 // Rejecting every one, not only those reachable from the roots, is what lets resolveFieldType skip
 // map lookups and stay linear in the field type's length. The lexically smallest offender is reported
 // so the error does not depend on map order.
@@ -212,15 +214,22 @@ func (t Types) checkTypeNames() error {
 			offender, found = name, true
 		}
 	}
-	if found {
-		return fmt.Errorf("typed data declares a type named %.*q; a type name must not contain array notation", maxReportedNameRunes, offender)
+	if !found {
+		return nil
 	}
-	return nil
+	reported := fmt.Sprintf("%.*q", maxReportedNameRunes, offender)
+	if utf8.RuneCountInString(offender) > maxReportedNameRunes {
+		reported += fmt.Sprintf(" (truncated from %d bytes)", len(offender))
+	}
+	return fmt.Errorf("typed data declares a type named %s; a type name must not contain array notation", reported)
 }
 
 // checkTypeGraph walks the struct-type graph reachable from root and rejects a type that refers back
 // to itself, directly or through a chain: it has no finite encoding, as hashStruct would descend into
 // it forever. Non-struct field types and references to undeclared types are leaves.
+//
+// It is only sound after checkTypeNames has passed: resolveFieldType maps "Foo[]" to "Foo", whereas
+// encodeField would encode a declared "Foo[]" as a struct, so the walk could miss a cycle through it.
 func (t Types) checkTypeGraph(root string) error {
 	return t.checkTypeGraphFrom(root, nil, make(map[string]bool), make(map[string]bool))
 }

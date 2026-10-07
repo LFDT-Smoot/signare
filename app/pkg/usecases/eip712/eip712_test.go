@@ -948,6 +948,7 @@ func TestTypedDataValidate_RejectsBracketedTypeName(t *testing.T) {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "must not contain array notation")
 			require.Contains(t, err.Error(), fmt.Sprintf("%q", name))
+			require.NotContains(t, err.Error(), "truncated")
 		})
 	}
 
@@ -966,6 +967,25 @@ func TestTypedDataValidate_RejectsBracketedTypeName(t *testing.T) {
 		}
 	})
 
+	t.Run("truncation starts after 64 runes", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			truncated bool
+		}{
+			{name: strings.Repeat("N", 62) + "[]"},
+			{name: strings.Repeat("N", 63) + "[]", truncated: true},
+		} {
+			types := domainOnlyTypes()
+			types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
+			types[tc.name] = []eip712.Type{{Name: "v", Type: "string"}}
+
+			_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+
+			require.Error(t, err)
+			require.Equal(t, tc.truncated, strings.Contains(err.Error(), "(truncated from"), "name of %d runes", len(tc.name))
+		}
+	})
+
 	t.Run("a long name is truncated in the error", func(t *testing.T) {
 		types := domainOnlyTypes()
 		types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
@@ -975,6 +995,7 @@ func TestTypedDataValidate_RejectsBracketedTypeName(t *testing.T) {
 
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must not contain array notation")
+		require.Contains(t, err.Error(), "(truncated from 100002 bytes)")
 		require.Less(t, len(err.Error()), 256)
 	})
 }
