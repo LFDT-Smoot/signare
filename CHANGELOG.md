@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stop the remove-account path handing the whole slot entity to the tracer, which wrote the PIN that unlocks the signing keys to the log at the default level, and redact the PIN and Local Key Vault key material from log records via `slog.LogValuer` on the slot, its configuration, the key store and every type that carries them (#17).
 - Reject a JSON-RPC params object that declares the same key twice, whether the two spellings are identical or differ only in case. Per-account authorization and the signing path decoded the positional array form differently, so params carrying both `from` and `From` were authorized against one account and signed with the other, letting a caller authorized for one account in an application sign with any other account in that application's slot. Affected `eth_signTransaction` and `personal_sign` (#40).
 - Sign with `btcec` rather than `crypto/ecdsa` in the Local Key Vault backend. The standard library routes secp256k1 to a `math/big` path documented as being for deprecated custom curves, which is not constant time and is refused outright in FIPS 140-only mode; `btcec`, already the library the connector recovers signatures with, is constant time and emits RFC 6979 deterministic, low-S signatures (#35).
+- Reject every EIP-712 type name containing `[` or `]`, not only those the digest reaches, keeping typed data validation linear in a field type's length (#56).
 
 ## [1.4.2] - 2026-07-30
 

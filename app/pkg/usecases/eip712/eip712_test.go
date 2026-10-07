@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -907,8 +909,7 @@ func TestTypedDataValidate_RejectsBracketedTypeName(t *testing.T) {
 	})
 
 	// The encoder peels one array suffix at a time and re-checks the literal name, so a bracketed name
-	// can sit part way down a multi-dimensional field type rather than at the top. Resolving straight
-	// to the base type would walk past this one.
+	// can sit part way down a multi-dimensional field type rather than at the top.
 	t.Run("reachable part way down a multi-dimensional type", func(t *testing.T) {
 		types := domainOnlyTypes()
 		types["Msg"] = []eip712.Type{{Name: "x", Type: "Item[2][]"}}
@@ -933,19 +934,116 @@ func TestTypedDataValidate_RejectsBracketedTypeName(t *testing.T) {
 		require.Contains(t, err.Error(), "must not contain array notation")
 	})
 
-	// A bracketed name nothing encodes is left alone, matching how an unreachable cyclic definition is
-	// treated: Validate rejects the graph the digest walks, not every declaration in the payload.
-	t.Run("unreachable bracketed name is allowed", func(t *testing.T) {
+	// Unlike an unreachable cycle, an unreachable bracketed name is rejected: EIP-712 requires every
+	// struct name to be an identifier, and field type resolution relies on no declared name having
+	// brackets.
+	for _, name := range []string{"Orphan[]", "Orphan]", "Orphan["} {
+		t.Run("unreachable "+name, func(t *testing.T) {
+			types := domainOnlyTypes()
+			types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
+			types[name] = []eip712.Type{{Name: "v", Type: "string"}}
+
+			_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "must not contain array notation")
+			require.Contains(t, err.Error(), fmt.Sprintf("%q", name))
+			require.NotContains(t, err.Error(), "truncated")
+		})
+	}
+
+	// Map iteration order is random, so the reported name must not follow it.
+	t.Run("reports the lexically smallest name", func(t *testing.T) {
 		types := domainOnlyTypes()
 		types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
-		types["Orphan[]"] = []eip712.Type{{Name: "v", Type: "string"}}
+		for _, name := range []string{"Zed[]", "Mid[2]", "Abc[]", "Abd]"} {
+			types[name] = []eip712.Type{{Name: "v", Type: "string"}}
+		}
 
-		data, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
-		require.NoError(t, err)
-
-		_, _, hashErr := eip712.HashTypedData(data)
-		require.NoError(t, hashErr)
+		for i := 0; i < 50; i++ {
+			_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), `"Abc[]"`)
+		}
 	})
+
+	t.Run("truncation starts after 64 runes", func(t *testing.T) {
+		for _, tc := range []struct {
+			name      string
+			truncated bool
+		}{
+			{name: strings.Repeat("N", 62) + "[]"},
+			{name: strings.Repeat("N", 63) + "[]", truncated: true},
+		} {
+			types := domainOnlyTypes()
+			types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
+			types[tc.name] = []eip712.Type{{Name: "v", Type: "string"}}
+
+			_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+
+			require.Error(t, err)
+			require.Equal(t, tc.truncated, strings.Contains(err.Error(), "(truncated from"), "name of %d runes", len(tc.name))
+		}
+	})
+
+	t.Run("a long name is truncated in the error", func(t *testing.T) {
+		types := domainOnlyTypes()
+		types["Msg"] = []eip712.Type{{Name: "text", Type: "string"}}
+		types[strings.Repeat("N", 100_000)+"[]"] = []eip712.Type{{Name: "v", Type: "string"}}
+
+		_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"text": "hi"})
+
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "must not contain array notation")
+		require.Contains(t, err.Error(), "(truncated from 100002 bytes)")
+		require.Less(t, len(err.Error()), 256)
+	})
+}
+
+// A self-reference behind more bracket pairs than maxTypeDepth is still a cycle. encodeField only
+// counts depth through non-empty arrays, so with an empty value it would sign this; Validate must
+// reject it rather than stop resolving the field type early.
+func TestTypedDataValidate_RejectsCycleBehindDeepArrayNotation(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Msg"] = []eip712.Type{{Name: "self", Type: "Msg" + strings.Repeat("[]", 40)}}
+
+	_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{"self": []interface{}{}})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cyclic definition")
+}
+
+// Resolving a field type used to look up every peeled prefix in Types, hashing the whole remaining
+// string each time, so a field type of k bracket pairs cost O(k^2) once Types had more than 8 entries
+// (smaller Go maps compare without hashing). A 1 MB field type took seconds; it must take milliseconds.
+// The long unused name covers a fix that skips only lookups longer than any declared name.
+func TestTypedDataValidate_LinearInFieldTypeLength(t *testing.T) {
+	const pairs = 500_000
+	for _, tc := range []struct {
+		name       string
+		unusedName string
+	}{
+		{name: "bracket suffixes only"},
+		{name: "with an unused type name as long as the field type", unusedName: strings.Repeat("Z", 2*pairs)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			types := domainOnlyTypes()
+			types["Msg"] = []eip712.Type{{Name: "x", Type: "uint256" + strings.Repeat("[]", pairs)}}
+			for i := 0; i < 8; i++ {
+				types[fmt.Sprintf("Pad%d", i)] = []eip712.Type{}
+			}
+			if tc.unusedName != "" {
+				types[tc.unusedName] = []eip712.Type{}
+			}
+
+			start := time.Now()
+			_, err := hashTypedDataFor(types, "Msg", eip712.EIP712Message{})
+			elapsed := time.Since(start)
+
+			require.NoError(t, err)
+			require.Less(t, elapsed, time.Second, "Validate must be linear in the field type's length")
+		})
+	}
 }
 
 // A field type ending in brackets whose base type is declared is ordinary array notation and must keep
