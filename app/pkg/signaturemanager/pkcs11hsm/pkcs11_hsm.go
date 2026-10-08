@@ -127,6 +127,9 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 	tracer.Debug("getting address from public key")
 	addr, err := s.getAddress(session, publicKeyHandle)
 	if err != nil {
+		// Without an address the pair can never be labelled, listed or used, so it is not kept.
+		tracer.Warn(fmt.Sprintf("discarding the generated key pair labelled '%s': could not derive its address: %v", lb, err))
+		s.destroyObjects(tracer, session, privateKeyHandle, publicKeyHandle)
 		return nil, err
 	}
 	publicKeyLabel := calculatePublicKeyLabel(*addr)
@@ -408,7 +411,7 @@ func (s *PKCS11HSMSignatureManager) assertPrivateKeyProtected(session pkcs11.Ses
 		return signaturemanager.NewKeyGenerationError().WithMessage(fmt.Sprintf("could not read the protection attributes of the generated private key: %v", err))
 	}
 	if problem := checkPrivateKeyProtection(attributes); problem != "" {
-		return signaturemanager.NewKeyGenerationError().WithMessage(problem)
+		return signaturemanager.NewPolicyRefusedError().WithMessage(problem)
 	}
 	return nil
 }

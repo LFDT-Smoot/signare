@@ -22,6 +22,7 @@ var (
 	errNotFound            = errors.New("not found")
 	errInvalidArgument     = errors.New("invalid argument")
 	errPolicyRefused       = errors.New("refused by the key policy")
+	errUnavailable         = errors.New("key store unavailable")
 )
 
 func (e *Error) Error() string {
@@ -104,6 +105,12 @@ func NewPolicyRefusedError() *Error {
 	}
 }
 
+func NewUnavailableError() *Error {
+	return &Error{
+		err: errUnavailable,
+	}
+}
+
 func IsNotImplementedError(err error) bool {
 	var pkcsErr *Error
 	if errors.As(err, &pkcsErr) {
@@ -172,6 +179,14 @@ func IsPolicyRefusedError(err error) bool {
 	var pkcsErr *Error
 	if errors.As(err, &pkcsErr) {
 		return errors.Is(pkcsErr.err, errPolicyRefused)
+	}
+	return false
+}
+
+func IsUnavailableError(err error) bool {
+	var pkcsErr *Error
+	if errors.As(err, &pkcsErr) {
+		return errors.Is(pkcsErr.err, errUnavailable)
 	}
 	return false
 }

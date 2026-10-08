@@ -2,8 +2,11 @@ package hsmconnector
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"strings"
 
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
 	signererrors "github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/akv"
@@ -103,6 +106,14 @@ func ProvideDefaultDigitalSignatureManagerFactory(options DefaultDigitalSignatur
 		if errInitialize != nil {
 			return nil, signererrors.Internal().WithMessage("error calling the PKCS11 interface initialize function for '%s'. Error: %v", SoftHSMModuleKind, errInitialize)
 		}
+		if options.HardwareOnly {
+			info, infoErr := pkcs11Context.GetInfo()
+			if infoErr == nil {
+				if warning := softwareTokenWarning(info, string(*options.SoftHSMLibrary)); warning != "" {
+					logger.LogEntry(context.Background()).Warn(warning)
+				}
+			}
+		}
 		pkcs11HSMSignatureManagerOptions := pkcs11hsm.PKCS11HSMSignatureManagerOptions{
 			PkcsContext: pkcs11Context,
 		}
@@ -135,4 +146,14 @@ func ProvideDefaultDigitalSignatureManagerFactory(options DefaultDigitalSignatur
 	return &DefaultDigitalSignatureManagerFactory{
 		digitalSignatureManagerMap: digitalSignatureManagerMap,
 	}, nil
+}
+
+// softwareTokenWarning names a PKCS#11 library that reports itself as SoftHSM, a software token, when the
+// deployment accepts HSM-held keys only. The policy trusts a PKCS#11 library as configured, so this is a
+// warning rather than a refusal.
+func softwareTokenWarning(info pkcs11.Info, library string) string {
+	if !strings.HasPrefix(strings.TrimSpace(info.ManufacturerID), "SoftHSM") {
+		return ""
+	}
+	return fmt.Sprintf("hsmmodules.hardwareOnly is set but the PKCS#11 library '%s' reports manufacturer '%s', a software token: keys in it are not held by an HSM", library, strings.TrimSpace(info.ManufacturerID))
 }

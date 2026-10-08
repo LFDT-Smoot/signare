@@ -11,8 +11,10 @@ TAG ?= $(shell git tag --points-at HEAD)
 # Opt-in FIPS 140-3 build; see app/docs/mkdocs/docs/reference/fips-140-3.md.
 GOFIPS140 ?= off
 export GOFIPS140
-# Image to build: `signare` (default, with SoftHSM) or `signare-nosofthsm`.
+# Image to build: `signare` (default, with SoftHSM) or `signare-nosofthsm`. A non-default target is
+# tagged with its suffix, e.g. `signare:local-nosofthsm`, so it cannot overwrite the default image's tag.
 DOCKER_TARGET ?= signare
+DOCKER_TAG_SUFFIX = $(if $(filter-out signare,$(DOCKER_TARGET)),-$(patsubst signare-%,%,$(DOCKER_TARGET)))
 
 define goBuild
         $(eval artifactName = $1)
@@ -56,7 +58,7 @@ ci.docker_build:
 		--build-arg BUILD_TIME=${BUILD_TIME} \
 		--build-arg BRANCH=${BRANCH} \
 		--build-arg TAG=${TAG} \
-		-t ${DOCKER_IMAGE_NAME}:${DOCKER_TAG} \
+		-t ${DOCKER_IMAGE_NAME}:${DOCKER_TAG}${DOCKER_TAG_SUFFIX} \
 		-f ../app/Dockerfile \
 		../
 

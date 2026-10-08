@@ -85,14 +85,7 @@ func (d *DefaultUseCase) GenerateAddress(ctx context.Context, input GenerateAddr
 	generateKeyOutput, err := digitalSignatureManager.GenerateKey(ctx, generateKeyInput)
 	d.recordLoginOutcome(pin, err)
 	if err != nil {
-		if signaturemanager.IsInvalidSlotError(err) {
-			msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", input.Slot)
-			return nil, errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-		}
-		if signaturemanager.IsPinIncorrectError(err) {
-			return nil, pinIncorrectError(err, input.Slot)
-		}
-		return nil, errors.InternalFromErr(err)
+		return nil, managerError(err, input.Slot)
 	}
 
 	tracer.Debugf("generated address: '%s'", generateKeyOutput.Address.String())
@@ -524,7 +517,7 @@ func (d *DefaultUseCase) signAndRecover(ctx context.Context, input SignTxInput, 
 	signOutput, err := digitalSignatureManager.Sign(ctx, signInput)
 	d.recordLoginOutcome(pin, err)
 	if err != nil {
-		return nil, signError(err, input.Slot)
+		return nil, managerError(err, input.Slot)
 	}
 
 	signatureWithV, err := assembleRecoverableSignature(signOutput.Signature, input.From, *payload, tracer)
@@ -665,7 +658,7 @@ func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, 
 	signOutput, signErr := digitalSignatureManager.Sign(ctx, signInput)
 	d.recordLoginOutcome(pin, signErr)
 	if signErr != nil {
-		return nil, signError(signErr, slotData.Slot)
+		return nil, managerError(signErr, slotData.Slot)
 	}
 
 	signatureWithV, err := assembleRecoverableSignature(signOutput.Signature, from, data, tracer)
@@ -683,13 +676,16 @@ func (d *DefaultUseCase) sign(ctx context.Context, slotData SlotConnectionData, 
 	}, nil
 }
 
-// signError classifies a signature manager error for the caller. Every signing method shares it, so a
-// refusal by the key policy is a precondition failure on each of them and never an internal error.
-func signError(err error, slot string) error {
+// managerError classifies a signature manager error from key generation or signing for the caller, so
+// a refusal by the key policy is a precondition failure and an unreachable backend a bad gateway on every
+// path, never an internal error.
+func managerError(err error, slot string) error {
 	switch {
 	case signaturemanager.IsInvalidSlotError(err):
 		msg := fmt.Sprintf("the slot '%s' is not reachable in the HSM module", slot)
 		return errors.BadGatewayFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	case signaturemanager.IsUnavailableError(err):
+		return errors.BadGatewayFromErr(err).WithMessage("%s", err.Error()).SetHumanReadableMessage("%s", err.Error())
 	case signaturemanager.IsPinIncorrectError(err):
 		return pinIncorrectError(err, slot)
 	case signaturemanager.IsPolicyRefusedError(err):

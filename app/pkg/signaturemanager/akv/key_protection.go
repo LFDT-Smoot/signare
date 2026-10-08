@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
@@ -18,6 +20,12 @@ const (
 	// currentHSMPlatform is the hsmPlatform value Azure reports for a key on its FIPS 140-3 Level 3
 	// validated HSM platform. 1 is the earlier FIPS 140-2 platform and 0 a software module.
 	currentHSMPlatform = "2"
+	// readErrorTTL is how long a failed key read is remembered under hardwareOnly, so an outage or a
+	// missing keys/get permission costs one vault call per key version per interval, not one per request.
+	readErrorTTL = 5 * time.Second
+	// keyReadTimeout bounds a key read, which runs detached from the request that started it. It stays
+	// below the server's 15-second write timeout, so a read cannot outlive the response it is for.
+	keyReadTimeout = 10 * time.Second
 )
 
 // keyDescription is what the policy needs to know about a vault key. A field is empty when the
@@ -64,8 +72,8 @@ func (r azkeysReader) describeKey(ctx context.Context, name string, version stri
 }
 
 // keyProtectionProblems lists what keeps a key from being an HSM-held secp256k1 key on the current
-// platform. An unreported hsmPlatform is not counted as a problem. Which keys the service returns without
-// it is not established; the pinned client always requests api-version 7.5, whose model carries the field.
+// platform. An unreported hsmPlatform is not a problem: Azure documents the attribute as optional for
+// vault keys and not at all for Managed HSM, where every key is HSM-protected.
 func keyProtectionProblems(d keyDescription) []string {
 	var problems []string
 	switch d.keyType {
@@ -89,66 +97,99 @@ func keyProtectionProblems(d keyDescription) []string {
 }
 
 // keyProtection checks each key version once per process, since its type, curve and platform cannot
-// change. With hardwareOnly set, a key that fails the check or cannot be read is refused. Otherwise
-// the finding is logged once and signing proceeds, so a deployment without the keys/get permission
-// or with a software key for development keeps working as before.
+// change. With hardwareOnly set, a key that fails the check is refused, and a key that cannot be read
+// fails as unavailable for readErrorTTL before it is read again. Otherwise the finding is logged once and
+// signing proceeds, so a deployment without the keys/get permission or with a software key for
+// development keeps working as before. Concurrent first checks of one key version share a single read.
 type keyProtection struct {
 	reader       keyReader
 	hardwareOnly bool
+	now          func() time.Time
+	flight       singleflight.Group
 
 	mu       sync.Mutex
-	verdicts map[string]error
+	verdicts map[string]verdict
+}
+
+// verdict is a cached outcome. A zero expires means it never expires.
+type verdict struct {
+	err     error
+	expires time.Time
 }
 
 func newKeyProtection(reader keyReader, hardwareOnly bool) *keyProtection {
 	return &keyProtection{
 		reader:       reader,
 		hardwareOnly: hardwareOnly,
-		verdicts:     make(map[string]error),
+		now:          time.Now,
+		verdicts:     make(map[string]verdict),
 	}
 }
 
 func (p *keyProtection) check(ctx context.Context, tracer logger.Tracer, name string, version string) error {
-	id := name + "/" + version
-	p.mu.Lock()
-	verdict, seen := p.verdicts[id]
-	p.mu.Unlock()
-	if seen {
-		return verdict
+	// NUL cannot occur in a key name or version, so two different pairs never share an id.
+	id := name + "\x00" + version
+	if found, err := p.cached(id); found {
+		return err
 	}
+	result, _, _ := p.flight.Do(id, func() (any, error) {
+		if found, err := p.cached(id); found {
+			return err, nil
+		}
+		return p.evaluate(ctx, tracer, name, version, id), nil
+	})
+	err, _ := result.(error)
+	return err
+}
 
-	d, err := p.reader.describeKey(ctx, name, version)
+func (p *keyProtection) evaluate(ctx context.Context, tracer logger.Tracer, name string, version string, id string) error {
+	// Detached from the caller's cancellation: the result is shared with every request waiting on it.
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), keyReadTimeout)
+	defer cancel()
+	d, err := p.reader.describeKey(readCtx, name, version)
 	if err != nil {
 		if p.hardwareOnly {
-			// Not recorded: a transient read error must not refuse the key for the rest of the process.
 			msg := fmt.Sprintf("cannot verify that key '%s' version '%s' is HSM-held: %v", name, version, err)
 			tracer.Warn(msg)
-			return signaturemanager.NewPolicyRefusedError().WithMessage(msg)
+			unavailable := signaturemanager.NewUnavailableError().WithMessage(msg)
+			p.record(id, verdict{err: unavailable, expires: p.now().Add(readErrorTTL)})
+			return unavailable
 		}
 		tracer.Warn(fmt.Sprintf("could not read key '%s' version '%s' to check whether it is HSM-held, which needs the keys/get permission: %v", name, version, err))
-		p.record(id, nil)
+		p.record(id, verdict{})
 		return nil
 	}
 
 	problems := keyProtectionProblems(d)
 	if len(problems) == 0 {
-		p.record(id, nil)
+		p.record(id, verdict{})
 		return nil
 	}
 	if p.hardwareOnly {
 		msg := fmt.Sprintf("key '%s' version '%s' refused, this deployment accepts HSM-held keys only: %s", name, version, strings.Join(problems, "; "))
 		tracer.Warn(msg)
 		refusal := signaturemanager.NewPolicyRefusedError().WithMessage(msg)
-		p.record(id, refusal)
+		p.record(id, verdict{err: refusal})
 		return refusal
 	}
 	tracer.Warn(fmt.Sprintf("key '%s' version '%s' is not an HSM-held secp256k1 key on the current platform: %s", name, version, strings.Join(problems, "; ")))
-	p.record(id, nil)
+	p.record(id, verdict{})
 	return nil
 }
 
-func (p *keyProtection) record(id string, verdict error) {
+// cached reports whether id has a recorded verdict that has not expired, and returns it.
+func (p *keyProtection) cached(id string) (found bool, err error) {
 	p.mu.Lock()
-	p.verdicts[id] = verdict
+	defer p.mu.Unlock()
+	v, ok := p.verdicts[id]
+	if !ok || (!v.expires.IsZero() && !p.now().Before(v.expires)) {
+		return false, nil
+	}
+	return true, v.err
+}
+
+func (p *keyProtection) record(id string, v verdict) {
+	p.mu.Lock()
+	p.verdicts[id] = v
 	p.mu.Unlock()
 }
