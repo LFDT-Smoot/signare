@@ -102,6 +102,10 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
 		pkcs11.NewAttribute(pkcs11.CKA_DERIVE, false),
 		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, true),
+		// Set explicitly rather than left to the token's defaults: a sensitive key cannot be read out
+		// and a non-extractable one cannot be wrapped out. Both are read back after generation.
+		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
+		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false),
 		pkcs11.NewAttribute(pkcs11.CKA_LABEL, lb),
 		pkcs11.NewAttribute(pkcs11.CKA_ID, timestamp),
 	}
@@ -114,10 +118,18 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 	if err != nil {
 		return nil, signaturemanager.NewKeyGenerationError().WithMessage(fmt.Sprintf("error generating key: %v", err))
 	}
+	if protectionErr := s.assertPrivateKeyProtected(session, privateKeyHandle); protectionErr != nil {
+		tracer.Warn(fmt.Sprintf("rejecting the generated key pair labelled '%s': %v", lb, protectionErr))
+		s.destroyObjects(tracer, session, privateKeyHandle, publicKeyHandle)
+		return nil, protectionErr
+	}
 
 	tracer.Debug("getting address from public key")
 	addr, err := s.getAddress(session, publicKeyHandle)
 	if err != nil {
+		// Without an address the pair can never be labelled, listed or used, so it is not kept.
+		tracer.Warn(fmt.Sprintf("discarding the generated key pair labelled '%s': could not derive its address: %v", lb, err))
+		s.destroyObjects(tracer, session, privateKeyHandle, publicKeyHandle)
 		return nil, err
 	}
 	publicKeyLabel := calculatePublicKeyLabel(*addr)
@@ -386,6 +398,61 @@ func (s *PKCS11HSMSignatureManager) sign(_ context.Context, tracer logger.Tracer
 		return nil, toSignatureManagerErr(err).WithMessage(fmt.Sprintf("error signing data: %v", err))
 	}
 	return sig, nil
+}
+
+// assertPrivateKeyProtected reads back CKA_SENSITIVE and CKA_EXTRACTABLE, so a token that ignored the
+// template cannot leave a private key readable or wrappable.
+func (s *PKCS11HSMSignatureManager) assertPrivateKeyProtected(session pkcs11.SessionHandle, privateKeyHandle pkcs11.ObjectHandle) error {
+	attributes, err := s.pkcsContext.GetAttributeValue(session, privateKeyHandle, []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, nil),
+		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, nil),
+	})
+	if err != nil {
+		return signaturemanager.NewKeyGenerationError().WithMessage(fmt.Sprintf("could not read the protection attributes of the generated private key: %v", err))
+	}
+	if problem := checkPrivateKeyProtection(attributes); problem != "" {
+		return signaturemanager.NewPolicyRefusedError().WithMessage(problem)
+	}
+	return nil
+}
+
+// checkPrivateKeyProtection returns why the attributes describe an unprotected private key, or "".
+// An attribute the token did not report counts as unprotected.
+func checkPrivateKeyProtection(attributes []*pkcs11.Attribute) string {
+	var sensitive, extractable *bool
+	for _, attribute := range attributes {
+		if attribute == nil || len(attribute.Value) == 0 {
+			continue
+		}
+		value := attribute.Value[0] != 0
+		switch attribute.Type {
+		case pkcs11.CKA_SENSITIVE:
+			sensitive = &value
+		case pkcs11.CKA_EXTRACTABLE:
+			extractable = &value
+		}
+	}
+	switch {
+	case sensitive == nil:
+		return "the token did not report CKA_SENSITIVE for the generated private key"
+	case !*sensitive:
+		return "the token generated the private key with CKA_SENSITIVE false, so its value could be read out"
+	case extractable == nil:
+		return "the token did not report CKA_EXTRACTABLE for the generated private key"
+	case *extractable:
+		return "the token generated the private key with CKA_EXTRACTABLE true, so it could be wrapped out"
+	}
+	return ""
+}
+
+// destroyObjects removes key objects Signare will not use, logging rather than failing on error: the
+// caller is already returning the reason the objects were rejected.
+func (s *PKCS11HSMSignatureManager) destroyObjects(tracer logger.Tracer, session pkcs11.SessionHandle, handles ...pkcs11.ObjectHandle) {
+	for _, handle := range handles {
+		if err := s.pkcsContext.DestroyObject(session, handle); err != nil {
+			tracer.Warn(fmt.Sprintf("failed to destroy rejected key object '%d'; remove it with the vendor tooling by the label logged above. Error: %v", handle, err))
+		}
+	}
 }
 
 // setLabel sets the label for the given object.

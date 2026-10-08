@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/fips140"
 	"errors"
 	"fmt"
 	"net"
@@ -151,8 +152,8 @@ func startServer(_ *cobra.Command, _ []string) {
 	for _, warning := range config.InsecureListenAddressWarnings(listenAddress) {
 		logger.LogEntry(ctxMainWithCancellation).Warn(warning)
 	}
-
 	appConfig := toGraphConfiguration(staticConfig)
+	logger.LogEntry(ctxMainWithCancellation).Infof("Go cryptographic module FIPS 140-3 mode: %t, HSM-held keys only: %t", fips140.Enabled(), graphHardwareOnly(appConfig))
 	appGraph, err := graph.New(appConfig)
 	if err != nil {
 		panic(fmt.Sprintf("error initializing appGraph: [%v]", err))
@@ -307,6 +308,11 @@ func envVarIsSet(name string) bool {
 	return os.Getenv(strings.ToUpper(name)) != ""
 }
 
+// graphHardwareOnly reports the key policy as the application graph received it.
+func graphHardwareOnly(c graph.Config) bool {
+	return c.Libraries.HSMModules != nil && c.Libraries.HSMModules.HardwareOnly
+}
+
 func toGraphConfiguration(staticConfig *config.StaticConfiguration) graph.Config {
 	graphConfig := graph.Config{
 		BuildConfig: &graph.BuildConfig{
@@ -332,6 +338,7 @@ func toGraphConfiguration(staticConfig *config.StaticConfiguration) graph.Config
 
 	if staticConfig.HSMModules != nil {
 		graphConfig.Libraries.HSMModules = new(graph.HSMModules)
+		graphConfig.Libraries.HSMModules.HardwareOnly = staticConfig.HSMModules.HardwareOnly
 
 		if staticConfig.HSMModules.SoftHSM != nil {
 			graphConfig.Libraries.HSMModules.SoftHSM = &graph.SoftHSMConfig{

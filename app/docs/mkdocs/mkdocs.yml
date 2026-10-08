@@ -25,6 +25,7 @@ nav:
      - JSON RPC API Specification: reference/json-rpc-api.md
      - Role base access control: reference/rbac.md
      - Security: reference/security.md
+     - FIPS 140-3: reference/fips-140-3.md
      - Trace Context: reference/trace-context.md
      - Database reference: reference/database.md
   - User guides:

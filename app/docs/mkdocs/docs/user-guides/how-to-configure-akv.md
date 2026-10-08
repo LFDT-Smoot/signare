@@ -1,3 +1,5 @@
+Signare signs with the `ES256K` algorithm, so the Azure key must be created on curve `P-256K`. For the key to be held in an HSM it must be an `EC-HSM` key in Key Vault Premium or in Managed HSM; a software-protected `EC` key is not. Which platform holds a key is recorded in its `hsmPlatform` attribute; see the [FIPS 140-3 reference](../reference/fips-140-3.md#azure-key-vault).
+
 1. Create an application:
     ```console
     curl --location --request POST 'http://localhost:32325/applications' \

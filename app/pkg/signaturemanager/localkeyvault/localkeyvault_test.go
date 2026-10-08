@@ -372,3 +372,22 @@ func findLeadingZeroCoordinateKey(t *testing.T) (entities.HexBytes, *big.Int, *b
 	t.Fatal("no leading-zero coordinate key found in scan range")
 	return nil, nil, nil
 }
+
+// TestSign_RefusedUnderHardwareOnly: the policy refuses before the key store is even consulted.
+func TestSign_RefusedUnderHardwareOnly(t *testing.T) {
+	sm := localkeyvault.ProvideLKVSignatureManager(localkeyvault.LKVSignatureManagerOptions{HardwareOnly: true})
+	priv := privateKeyFromInt(big.NewInt(4242))
+	_, pub := curves.PrivKeyFromBytes(priv)
+	from, err := signaturemanager.DeriveAddressFromPublicKey(pub.SerializeUncompressed())
+	require.NoError(t, err)
+
+	_, signErr := sm.Sign(context.Background(), signaturemanager.SignInput{
+		Config: signaturemanager.SlotConfig{
+			LocalKeyVault: &signaturemanager.LocalKeyVaultConfig{KeyStore: map[address.Address]string{*from: priv.String()}},
+		},
+		From: *from,
+		Data: digestOf(t, "anything"),
+	})
+	require.Error(t, signErr)
+	require.True(t, signaturemanager.IsPolicyRefusedError(signErr))
+}

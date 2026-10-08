@@ -35,6 +35,13 @@ unit_test:
 	$(call postProcess, signare, github.com/lfdt-smoot/signare/app, app)
 	@$(MAKE) -C tools/rbac-validator unit_test
 
+# The application suite built against the validated Go Cryptographic Module in FIPS 140-3 mode; see
+# docs/mkdocs/docs/reference/fips-140-3.md.
+.PHONY: fips_test
+fips_test:
+	@echo "Executing tests with GOFIPS140=certified"
+	GOFIPS140=certified go test -count=1 -p 1 -tags=unit -timeout=10m github.com/lfdt-smoot/signare/app/pkg/...
+
 .PHONY: race_test
 race_test:
 	@echo "Executing tests with the race detector"
