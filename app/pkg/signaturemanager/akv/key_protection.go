@@ -106,7 +106,7 @@ func keyProtectionProblems(d keyDescription) []string {
 }
 
 // keyProtection checks each key version once per process, since its type, curve and platform cannot
-// change, and exportability is set when the key is created. With hardwareOnly set, a key that fails the check is refused, and a key that cannot be read
+// change. Exportability is set when a key is created, and Azure documents no way to change it after. With hardwareOnly set, a key that fails the check is refused, and a key that cannot be read
 // fails as unavailable for readErrorTTL before it is read again. Otherwise the finding is logged once and
 // signing proceeds, so a deployment without the keys/get permission or with a software key for
 // development keeps working as before. Concurrent first checks of one key version share a single read.

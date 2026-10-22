@@ -26,19 +26,24 @@ func InitializeApp() (*graph.GraphShared, error) {
 	if err != nil {
 		return nil, err
 	}
+	return InitializeAppWithHSMModules(&graph.HSMModules{
+		SoftHSM: &graph.SoftHSMConfig{
+			Library:            signaturemanagertesthelper.SoftHSMLib,
+			PinSourceDirectory: pinSourceDirectory,
+		},
+	})
+}
 
+// InitializeAppWithHSMModules builds the application graph on SQLite with the given hsmmodules
+// configuration, so a test can exercise the generated wiring with settings InitializeApp does not use.
+func InitializeAppWithHSMModules(hsmModules *graph.HSMModules) (*graph.GraphShared, error) {
 	graphConfig := graph.Config{
 		BuildConfig: nil,
 		Libraries: graph.LibrariesConfig{
 			PersistenceFw: graph.PersistenceFwConfig{
 				SQLite: &graph.SQLiteConfig{},
 			},
-			HSMModules: &graph.HSMModules{
-				SoftHSM: &graph.SoftHSMConfig{
-					Library:            signaturemanagertesthelper.SoftHSMLib,
-					PinSourceDirectory: pinSourceDirectory,
-				},
-			},
+			HSMModules: hsmModules,
 		},
 	}
 

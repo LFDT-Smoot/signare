@@ -44,6 +44,7 @@ func TestSignRefusesKeysTheVaultReportsAsUnprotected(t *testing.T) {
 		{"HSM key on the previous FIPS 140-2 platform", "EC-HSM", "1", false, true},
 		{"software key", "EC", "0", false, true},
 		{"exportable HSM key", "EC-HSM", "2", true, true},
+		{"exportable HSM key on the previous platform", "EC-HSM", "1", true, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -56,6 +57,22 @@ func TestSignRefusesKeysTheVaultReportsAsUnprotected(t *testing.T) {
 			}
 			require.True(t, signaturemanager.IsPolicyRefusedError(err), "want a policy refusal, got %v", err)
 			require.Equal(t, []string{"GetKey"}, vault.calls, "a refused key is never asked to sign")
+			if c.exportable {
+				require.Contains(t, err.Error(), "exportable", "the refusal names the reason")
+			}
 		})
 	}
+}
+
+// TestSignAcceptsAKeyWhoseResponseOmitsExportable covers an ordinary vault response that carries no
+// exportable attribute at all: absence must not be read as exportable.
+func TestSignAcceptsAKeyWhoseResponseOmitsExportable(t *testing.T) {
+	body := `{"key":{"kid":"https://vault.vault.azure.net/keys/k/v1","kty":"EC-HSM","crv":"P-256K","key_ops":["sign","verify"]},"attributes":{"enabled":true,"hsmPlatform":"2","recoveryLevel":"Recoverable+Purgeable"}}`
+	var bundle azkeys.KeyBundle
+	require.NoError(t, json.Unmarshal([]byte(body), &bundle))
+	vault := &fakeVault{key: azkeys.GetKeyResponse{KeyBundle: bundle}}
+
+	_, err := newAKVSignatureManager(vault, true).Sign(context.Background(), signInput())
+	require.NoError(t, err)
+	require.Equal(t, []string{"GetKey", "Sign"}, vault.calls)
 }

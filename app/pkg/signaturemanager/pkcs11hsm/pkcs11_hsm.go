@@ -31,6 +31,9 @@ type PKCS11HSMSignatureManager struct {
 	pkcsContext       *pkcs11.Ctx
 	connectionDetails PKCS11HSMConnectionDetails
 	mutex             sync.Mutex
+	// privateKeyProtection is added to every generated private key's template and read back after
+	// generation. A field rather than a literal so a test can stand in for a token that ignores it.
+	privateKeyProtection []*pkcs11.Attribute
 }
 
 // PKCS11HSMSignatureManagerOptions defines options to create a new instance of PKCS11HSMSignatureManager.
@@ -52,6 +55,11 @@ func ProvidePKCS11HSMSignatureManager(options PKCS11HSMSignatureManagerOptions) 
 			Configuration: PKCS11HSMConfiguration{
 				Curve: CurveDefault,
 			},
+		},
+		// A sensitive key cannot be read out and a non-extractable one cannot be wrapped out.
+		privateKeyProtection: []*pkcs11.Attribute{
+			pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
+			pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false),
 		},
 	}, nil
 }
@@ -102,13 +110,11 @@ func (s *PKCS11HSMSignatureManager) GenerateKey(_ context.Context, input signatu
 		pkcs11.NewAttribute(pkcs11.CKA_SIGN, true),
 		pkcs11.NewAttribute(pkcs11.CKA_DERIVE, false),
 		pkcs11.NewAttribute(pkcs11.CKA_PRIVATE, true),
-		// Set explicitly rather than left to the token's defaults: a sensitive key cannot be read out
-		// and a non-extractable one cannot be wrapped out. Both are read back after generation.
-		pkcs11.NewAttribute(pkcs11.CKA_SENSITIVE, true),
-		pkcs11.NewAttribute(pkcs11.CKA_EXTRACTABLE, false),
 		pkcs11.NewAttribute(pkcs11.CKA_LABEL, lb),
 		pkcs11.NewAttribute(pkcs11.CKA_ID, timestamp),
 	}
+	// Set explicitly rather than left to the token's defaults, and read back after generation.
+	privateKeyTemplate = append(privateKeyTemplate, s.privateKeyProtection...)
 
 	tracer.Debug("generating key pair")
 	publicKeyHandle, privateKeyHandle, err := s.pkcsContext.GenerateKeyPair(session,
