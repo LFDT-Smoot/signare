@@ -23,7 +23,7 @@ import (
 
 var app graph.GraphShared
 
-// TestMain builds the application graph once: PKCS#11 can be initialised only once per process.
+// TestMain builds the application graph once, because PKCS#11 can be initialised only once per process.
 func TestMain(m *testing.M) {
 	a, err := dbtesthelper.InitializeApp()
 	if err != nil {
@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 }
 
 // TestLocalKeyVault_GenerateListSign_ThroughTheRealComposition runs a Local Key Vault account through
-// the handler, the adapter and the wired use cases over SQLite: generated, listed, then used to sign.
+// the handler, the adapter and the wired use cases over SQLite. It is generated, listed, then used to sign.
 // The adapter and use case tests each stop at a fake, so this is what guards the wiring between them.
 func TestLocalKeyVault_GenerateListSign_ThroughTheRealComposition(t *testing.T) {
 	ctx := context.Background()

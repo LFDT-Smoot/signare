@@ -24,8 +24,8 @@ import (
 
 const (
 	defaultOrderDirection = entities.OrderDesc
-	// localKeyWriteAttempts bounds how often a Local Key Vault key store write is retried after losing
-	// to a concurrent writer.
+	// localKeyWriteAttempts is how many times a Local Key Vault key store write is attempted before a
+	// concurrent writer is reported as a precondition failure.
 	localKeyWriteAttempts = 3
 )
 
@@ -550,7 +550,7 @@ func (u *DefaultUseCase) editLocalKeyStore(ctx context.Context, storedSlot *HSMS
 			return errors.InternalFromErr(err)
 		}
 
-		// The write missed: a concurrent writer won, or the slot was deleted. The fresh read tells which.
+		// The write missed because a concurrent writer won or the slot was deleted. The fresh read tells which.
 		reread, getErr := u.GetHSMSlot(ctx, GetHSMSlotInput{StandardID: slotID})
 		if getErr != nil {
 			return getErr

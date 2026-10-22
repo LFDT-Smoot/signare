@@ -23,7 +23,7 @@ import (
 const foreignKeyLabel = "not-an-ethereum-key"
 
 // TestListAddresses_SkipsKeyNotOnSecp256k1 guards listing against a token object signare cannot derive
-// an address from. An operator importing a key with softhsm2-util can pick the wrong curve; that
+// an address from. An operator importing a key with softhsm2-util can pick the wrong curve, and that
 // object must be skipped, not take down every eth_accounts call on the slot.
 func TestListAddresses_SkipsKeyNotOnSecp256k1(t *testing.T) {
 	foreign, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

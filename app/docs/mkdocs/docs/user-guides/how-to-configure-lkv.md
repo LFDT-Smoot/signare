@@ -37,8 +37,8 @@ There are a number of necessary steps prior to sign a transaction with our LKV s
         }
     }'
     ```
-2. Create a slot in the LKV for your application. The `slot` value is a name of your choosing; a Local Key Vault slot
-   takes no `pinSource`.
+2. Create a slot in the LKV for your application. The `slot` value is a name of your choosing, and a Local Key Vault
+   slot takes no `pinSource`.
     ```console
     curl --location --request POST 'http://localhost:32325/admin/modules/my-id/slots' \
     --header 'X-Auth-UserId: owner' \
@@ -54,7 +54,7 @@ There are a number of necessary steps prior to sign a transaction with our LKV s
     }'
     ```
 3. Generate an account in the LKV. The response contains its Ethereum address. Signare generates the key itself and
-   does not accept an existing private key; to use one, see
+   does not accept an existing private key. To use one, see
    [where keys come from](../reference/supported-modules.md#where-keys-come-from).
    ```console
    curl --location 'http://localhost:4545' \

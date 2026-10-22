@@ -29,8 +29,8 @@ func ProvideLKVSignatureManager(_ LKVSignatureManagerOptions) *LKVSignatureManag
 	return &LKVSignatureManager{}
 }
 
-// GenerateKey is not implemented: the key store lives in the slot configuration, which this manager
-// cannot write. The slot use case generates Local Key Vault keys with NewKey instead.
+// GenerateKey is not implemented, because the key store lives in the slot configuration, which this
+// manager cannot write. The slot use case generates Local Key Vault keys with NewKey instead.
 func (sm *LKVSignatureManager) GenerateKey(_ context.Context, _ signaturemanager.GenerateKeyInput) (*signaturemanager.GenerateKeyOutput, error) {
 	return nil, signaturemanager.NewNotImplementedError()
 }
@@ -95,7 +95,7 @@ func (sm *LKVSignatureManager) IsAlive(_ context.Context, _ signaturemanager.IsA
 }
 
 // NewKey generates a secp256k1 private key from crypto/rand and returns it with its address. It is the
-// only way a key enters a Local Key Vault: no API accepts a raw private key.
+// only way a key enters a Local Key Vault, since no API accepts a raw private key.
 func NewKey() (entities.HexBytes, *address.Address, error) {
 	privateKey, err := curves.NewPrivateKey()
 	if err != nil {
@@ -130,8 +130,8 @@ func deriveAddress(privateKeyBytes entities.HexBytes) (*address.Address, error) 
 
 // parsePrivateKeyScalar parses a fixed-width big-endian private key into a secp256k1 scalar, rejecting
 // a wrong length and the two out-of-range cases. SetByteSlice reports overflow, meaning D >= N, in
-// constant time; PrivKeyFromBytes would silently reduce such a scalar mod N and sign with a key other
-// than the one stored. Every key reaching here comes from the key store or NewKey, so a bad one is an
+// constant time, where PrivKeyFromBytes would silently reduce such a scalar mod N and sign with a key
+// other than the one stored. Every key reaching here comes from the key store or NewKey, so a bad one is an
 // internal error.
 func parsePrivateKeyScalar(privateKey entities.HexBytes) (*curves.PrivateKey, error) {
 	if len(privateKey) != privateKeyLengthBytes {

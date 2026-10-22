@@ -64,9 +64,9 @@ func TestDeriveAddress_KnownAnswerVectors(t *testing.T) {
 	}
 }
 
-// TestDeriveAddress_LeadingZeroCoordinate is the CRY-1 regression guard: a
-// key whose public-key X or Y coordinate has a zero top byte must still derive the correct
-// fixed-width address, not the pre-fix big.Int.Bytes() concatenation.
+// TestDeriveAddress_LeadingZeroCoordinate guards the fixed-width derivation. A key whose public-key X
+// or Y coordinate has a zero top byte must still derive the correct address, not the one a
+// big.Int.Bytes() concatenation gives.
 func TestDeriveAddress_LeadingZeroCoordinate(t *testing.T) {
 	priv, x, y := findLeadingZeroCoordinateKey(t)
 
@@ -142,7 +142,8 @@ func nonZeroKeyOfLength(length int) entities.HexBytes {
 }
 
 // TestNewKey_AddressMatchesIndependentDerivation checks a generated key against an address computed
-// without btcec's public key serialisation: raw curve multiplication, fixed-width X||Y, Keccak-256.
+// without btcec's public key serialisation, from raw curve multiplication, fixed-width X||Y and
+// Keccak-256.
 func TestNewKey_AddressMatchesIndependentDerivation(t *testing.T) {
 	for i := 0; i < 64; i++ {
 		priv, addr, err := localkeyvault.NewKey()
@@ -155,7 +156,7 @@ func TestNewKey_AddressMatchesIndependentDerivation(t *testing.T) {
 	}
 }
 
-// TestNewKey_SignsAsItsAddress is the round trip a generated account takes: stored in a key store
+// TestNewKey_SignsAsItsAddress is the round trip a generated account takes. Stored in a key store
 // under its address, it signs, and the signature recovers to that address.
 func TestNewKey_SignsAsItsAddress(t *testing.T) {
 	priv, addr, err := localkeyvault.NewKey()

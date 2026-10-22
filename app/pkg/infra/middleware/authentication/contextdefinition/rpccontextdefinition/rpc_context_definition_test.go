@@ -115,7 +115,7 @@ func TestDefineAction_UnregisteredMethod_AnswersMethodNotFound(t *testing.T) {
 
 // TestForbiddenAccessCounter_NoSeriesForUnregisteredMethods is a regression guard on metric
 // cardinality. Many distinct client-chosen methods must not create a forbidden_access_count series
-// each: they are answered before an action exists, so none is labelled with the method.
+// each. They are answered before an action exists, so none is labelled with the method.
 func TestForbiddenAccessCounter_NoSeriesForUnregisteredMethods(t *testing.T) {
 	middleware := newMiddlewareWithRPCHandler(t)
 	for i := 0; i < 1000; i++ {

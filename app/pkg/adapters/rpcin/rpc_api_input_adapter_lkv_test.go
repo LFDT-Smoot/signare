@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeSlotUseCase implements only the Local Key Vault methods; anything else panics through the
+// fakeSlotUseCase implements only the Local Key Vault methods. Anything else panics through the
 // embedded nil interface.
 type fakeSlotUseCase struct {
 	hsmslot.HSMSlotUseCase
@@ -105,7 +105,7 @@ func TestAdaptGenerateAccount_LocalKeyVaultErrorKeepsItsClass(t *testing.T) {
 	require.Equal(t, rpcerrors.PreconditionFailedErrorCode, rpcErr.Code)
 }
 
-// TestAdaptListAccounts_LocalKeyVaultErrorKeepsItsClass guards the error the adapter maps: it must be
+// TestAdaptListAccounts_LocalKeyVaultErrorKeepsItsClass guards which error the adapter maps. It must be
 // the one ListLocalKeys returned, not the resolver's nil error, which flattened every failure to an
 // internal error and dropped its cause from the log.
 func TestAdaptListAccounts_LocalKeyVaultErrorKeepsItsClass(t *testing.T) {

@@ -128,7 +128,7 @@ func TestDefaultUseCase_GenerateLocalKey(t *testing.T) {
 
 // versionedSlotStorage holds one slot and enforces the resource version guard the SQL `updateConfig`
 // statement applies. conflicts makes that many writes lose to a concurrent writer, which adds a key of
-// its own and bumps the version; deleteOnWrite makes the slot disappear at the first write.
+// its own and bumps the version. deleteOnWrite makes the slot disappear at the first write.
 type versionedSlotStorage struct {
 	hsmslot.HSMSlotStorage
 	slot          hsmslot.HSMSlot

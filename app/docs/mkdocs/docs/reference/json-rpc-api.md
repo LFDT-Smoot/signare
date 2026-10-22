@@ -226,8 +226,8 @@ described in [supported modules](supported-modules.md#where-keys-come-from).
   | -32098 | Not found           |
   | -32099 | Unauthorized        |
 
-  On a Local Key Vault slot, concurrent calls that change the slot's keys contend for its key store. Signare retries the
-  write up to three times; if the slot is still being modified, the call returns `-32097 Precondition failed` without
+  On a Local Key Vault slot, concurrent calls that change the slot's keys contend for its key store. Signare makes up to
+  three attempts at the write. If the slot is still being modified, the call returns `-32097 Precondition failed` without
   storing a key, and can be retried. `-32098 Not found` means the slot was deleted while the call ran.
 
 ### eth_removeAccount
@@ -266,7 +266,7 @@ key.
   | -32099 | Unauthorized        |
 
   On a Local Key Vault slot, a removal contends with concurrent calls that change the slot's keys in the same way as
-  `eth_generateAccount`: after three lost writes it returns `-32097 Precondition failed` without removing the key, and
+  `eth_generateAccount`. After three lost writes it returns `-32097 Precondition failed` without removing the key, and
   can be retried.
 
 ### eth_accounts

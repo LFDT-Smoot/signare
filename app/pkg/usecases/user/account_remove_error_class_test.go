@@ -20,7 +20,7 @@ func (localKeyVaultResolver) ByApplication(context.Context, hsmconnection.ByAppl
 	return &hsmconnection.HSMConnection{ModuleKind: hsmconnector.LKVModuleKind}, nil
 }
 
-// failingRemoveSlotUseCase fails RemoveLocalKey with err; anything else panics through the nil interface.
+// failingRemoveSlotUseCase fails RemoveLocalKey with err. Anything else panics through the nil interface.
 type failingRemoveSlotUseCase struct {
 	hsmslot.HSMSlotUseCase
 	err error
