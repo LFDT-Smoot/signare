@@ -44,6 +44,7 @@ func TestKeyProtectionProblems(t *testing.T) {
 		{"wrong curve", keyDescription{keyType: "EC-HSM", curve: "P-256", hsmPlatform: "2"}, 1},
 		{"previous HSM platform", keyDescription{keyType: "EC-HSM", curve: "P-256K", hsmPlatform: "1"}, 1},
 		{"nothing reported", keyDescription{}, 2},
+		{"exportable HSM key", keyDescription{keyType: "EC-HSM", curve: "P-256K", hsmPlatform: "2", exportable: true}, 1},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

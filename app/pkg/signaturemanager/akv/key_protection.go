@@ -34,6 +34,7 @@ type keyDescription struct {
 	keyType     string
 	curve       string
 	hsmPlatform string
+	exportable  bool
 }
 
 // keyReader fetches a key's public description from the vault. It needs the keys/get permission.
@@ -65,8 +66,11 @@ func (r azkeysReader) describeKey(ctx context.Context, name string, version stri
 			d.curve = string(*resp.Key.Crv)
 		}
 	}
-	if resp.Attributes != nil && resp.Attributes.HSMPlatform != nil {
-		d.hsmPlatform = *resp.Attributes.HSMPlatform
+	if resp.Attributes != nil {
+		if resp.Attributes.HSMPlatform != nil {
+			d.hsmPlatform = *resp.Attributes.HSMPlatform
+		}
+		d.exportable = resp.Attributes.Exportable != nil && *resp.Attributes.Exportable
 	}
 	return d, nil
 }
@@ -93,11 +97,16 @@ func keyProtectionProblems(d keyDescription) []string {
 	if d.hsmPlatform != "" && d.hsmPlatform != currentHSMPlatform {
 		problems = append(problems, fmt.Sprintf("hsmPlatform is %q, not %q, the FIPS 140-3 Level 3 platform", d.hsmPlatform, currentHSMPlatform))
 	}
+	// An exportable key carries a release policy, under which Secure Key Release hands the private key to
+	// an attested environment outside the HSM.
+	if d.exportable {
+		problems = append(problems, "the key is exportable, so its private key can be released from the HSM")
+	}
 	return problems
 }
 
 // keyProtection checks each key version once per process, since its type, curve and platform cannot
-// change. With hardwareOnly set, a key that fails the check is refused, and a key that cannot be read
+// change, and exportability is set when the key is created. With hardwareOnly set, a key that fails the check is refused, and a key that cannot be read
 // fails as unavailable for readErrorTTL before it is read again. Otherwise the finding is logged once and
 // signing proceeds, so a deployment without the keys/get permission or with a software key for
 // development keeps working as before. Concurrent first checks of one key version share a single read.

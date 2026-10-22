@@ -169,8 +169,8 @@ is trusted as configured, with a warning at startup if it reports itself as Soft
 * A module of kind `LocalKeyVault` cannot be created, no slot can be created in one, no key can be added
   to one, and an existing one refuses to sign. Each returns `412 Precondition failed` on the REST API or
   `-32097 Precondition failed` on JSON-RPC.
-* An Azure Key Vault key is refused unless the vault reports it as an `EC-HSM` key on curve `P-256K`
-  and, when the vault reports an `hsmPlatform`, on platform `2`. The first refusal of a key version is
+* An Azure Key Vault key is refused unless the vault reports it as an `EC-HSM` key on curve `P-256K`,
+  not exportable and, when the vault reports an `hsmPlatform`, on platform `2`. The first refusal of a key version is
   logged at warning level. A key Signare cannot read fails with `-32604 Bad gateway` and is read again
   after five seconds, so the identity needs the `keys/get` permission as well as `keys/sign`; each
   failed read is logged at warning level.

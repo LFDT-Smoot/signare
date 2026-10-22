@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add the `personal_sign` JSON-RPC method, signing an arbitrary message under the EIP-191 personal message prefix so an identity whose key is custodied in the HSM can produce a Sign-In With Ethereum signature. Granted by a new `message-signer` role, separate from `transaction-signer`, and subject to the same per-account authorization as the other signing methods (#14).
 - Add a Dependabot configuration for the Go modules, the OpenAPI generator Maven plugin, the Docker base images and GitHub Actions, with grouped update pull requests and a 30-day cooldown on version updates.
 - Add an opt-in `GOFIPS140` build setting, `off` by default; `certified` builds against the CMVP-validated Go Cryptographic Module, which covers TLS but not the secp256k1 or Keccak-256 code. See the FIPS 140-3 reference (#54).
-- Add `hsmmodules.hardwareOnly`, off by default, which refuses the Local Key Vault and any Azure Key Vault key not reported as an `EC-HSM` key on `P-256K` and, when reported, on the current HSM platform. See the FIPS 140-3 reference (#54).
+- Add `hsmmodules.hardwareOnly`, off by default, which refuses the Local Key Vault and any Azure Key Vault key not reported as a non-exportable `EC-HSM` key on `P-256K` and, when reported, on the current HSM platform. See the FIPS 140-3 reference (#54).
 - Add a `signare-nosofthsm` Docker build target without SoftHSM; the default image is unchanged (#54).
 - Add `make -C app fips_test`, which runs the application tests built with `GOFIPS140=certified` (#54).
 
@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run `rbac-validator` from a `make tools.validate_rbac` target that `make lint` depends on, and read its operation ID exemption list from `actions-manual.yaml` instead of a copy of that list in the tool's Makefile, with the RBAC coverage tests pinning that file to the published JSON-RPC method set in both directions, and that set to what the JSON-RPC router registers (#28).
 - Describe Signare's position under FIPS 140-3 instead of claiming FIPS 140-2 Level 2 compliance, in the README and a new FIPS 140-3 reference page (#54).
 - The Azure Key Vault adapter reads each key version once before its first signature, which needs the `keys/get` permission, and warns if it is not HSM-held (#54).
+- Move `azkeys` to v1.3.1, which decodes a key's `hsmPlatform` attribute. v1.1.0 discarded it, so the platform could not be checked (#54).
 
 ### Removed
 - **Breaking.** `admin.slots.updatePin` and `POST /admin/modules/{moduleId}/slots/{slotId}:update-pin`, replaced by the value-free `admin.slots.updatePinSource` on `:update-pin-source` and the new `admin.slots.verifyPinSource` on `:verify-pin-source` (#42).
