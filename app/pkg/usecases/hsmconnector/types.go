@@ -65,19 +65,6 @@ type GenerateAddressInput struct {
 	SlotConnectionData
 }
 
-// DeriveAddressFromPrivateKeyInput for account import requests.
-type DeriveAddressFromPrivateKeyInput struct {
-	// PrivateKey used to generate the address from.
-	PrivateKey entities.HexBytes
-	// ModuleKind of the Hardware Security Module.
-	ModuleKind ModuleKind `valid:"in(SoftHSM|AKV|LocalKeyVault)"`
-}
-
-type DeriveAddressFromPrivateKeyOutput struct {
-	// Address an Ethereum account to interact with the network.
-	Address address.Address `json:"address"`
-}
-
 // SlotConnectionData configuration to connect to a slot.
 type SlotConnectionData struct {
 	// Slot to be accessed.

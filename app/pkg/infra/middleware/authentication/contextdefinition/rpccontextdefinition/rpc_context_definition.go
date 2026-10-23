@@ -81,14 +81,14 @@ func (middleware *RPCContextDefinition) DefineAction(next http.Handler) http.Han
 			return
 		}
 
-		// Only fold the client-supplied method into the action when it matches a registered RPC
-		// method. An unregistered method keeps the bounded route name as the action while legitimate
-		// per-method observability is preserved.
-		composedActionID := actionID
-		if _, rpcErr := middleware.router.RPCHandler(rpcRequest.Method); rpcErr == nil {
-			composedActionID = fmt.Sprintf("%s.%s", actionID, rpcRequest.Method)
+		// Answer an unregistered method here, before authorization, which would refuse it as Unauthorized
+		// because no role grants it. It never becomes an action, so a client-chosen name cannot reach a
+		// metric label.
+		if _, rpcErr := middleware.router.RPCHandler(rpcRequest.Method); rpcErr != nil {
+			middleware.responseHandler.HandleErrorResponse(ctx, w, httpinfra.NewHTTPErrorFromError(ctx, rpcErr, httpinfra.StatusNotFound))
+			return
 		}
-		ctx = context.WithValue(ctx, requestcontext.ActionContextKey, composedActionID)
+		ctx = context.WithValue(ctx, requestcontext.ActionContextKey, fmt.Sprintf("%s.%s", actionID, rpcRequest.Method))
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

@@ -12,8 +12,6 @@ import (
 type JSONRPCAPIHandler interface {
 	// HandleGenerateAccount handles the generation of an Ethereum account.
 	HandleGenerateAccount(ctx context.Context, r RPCRequest) (any, *rpcerrors.RPCError)
-	// HandleImportAccount handles the import of an Ethereum account.
-	HandleImportAccount(ctx context.Context, r RPCRequest) (any, *rpcerrors.RPCError)
 	// HandleRemoveAccount handles the removal of an Ethereum account.
 	HandleRemoveAccount(ctx context.Context, r RPCRequest) (any, *rpcerrors.RPCError)
 	// HandleListAccounts handles the listing of all the Ethereum accounts in an Application.
@@ -35,33 +33,6 @@ func (handler *DefaultJSONRPCAPIHandler) HandleGenerateAccount(ctx context.Conte
 	reqParams.ApplicationID = *applicationID
 
 	out, rpcErr := handler.adapter.AdaptGenerateAccount(ctx, reqParams)
-	if rpcErr != nil {
-		return nil, rpcErr
-	}
-	return &RPCResponse{
-		RPCVersion: SupportedRPCVersion,
-		ID:         r.ID,
-		Result:     out,
-	}, nil
-}
-
-func (handler *DefaultJSONRPCAPIHandler) HandleImportAccount(ctx context.Context, r RPCRequest) (any, *rpcerrors.RPCError) {
-	reqParams := ImportAccountRequestParams{}
-	if err := ProcessParams(r.Params, &reqParams); err != nil {
-		return nil, err
-	}
-	err := reqParams.ValidateParams()
-	if err != nil {
-		return nil, rpcerrors.NewInvalidParamsFromErr(err)
-	}
-
-	applicationID, err := requestcontext.ApplicationFromContext(ctx)
-	if err != nil {
-		return nil, rpcerrors.NewInternalFromErr(err)
-	}
-	reqParams.ApplicationID = *applicationID
-
-	out, rpcErr := handler.adapter.AdaptImportAccount(ctx, reqParams)
 	if rpcErr != nil {
 		return nil, rpcErr
 	}

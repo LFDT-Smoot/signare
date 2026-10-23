@@ -8,7 +8,6 @@ import (
 
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/postgres/hsmslotdbout"
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
-	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
@@ -64,14 +63,10 @@ func TestHardwareOnlyRefusesLocalKeys(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	key := make([]byte, 32)
-	key[31] = 1
-	addErr := useCase.AddLocalKey(context.Background(), hsmslot.AddLocalKeyInput{
+	_, generateErr := useCase.GenerateLocalKey(context.Background(), hsmslot.GenerateLocalKeyInput{
 		StandardID: entities.StandardID{ID: "slot"},
-		Address:    address.MustNewFromHexString("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"),
-		PrivateKey: entities.HexBytes(key),
 	})
-	require.Error(t, addErr)
-	require.True(t, errors.IsPreconditionFailed(addErr))
-	require.Contains(t, addErr.Error(), "HSM-held keys only")
+	require.Error(t, generateErr)
+	require.True(t, errors.IsPreconditionFailed(generateErr))
+	require.Contains(t, generateErr.Error(), "HSM-held keys only")
 }

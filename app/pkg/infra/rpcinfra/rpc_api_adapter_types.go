@@ -17,48 +17,6 @@ type GenerateAccountRequestParams struct {
 	ApplicationID string
 }
 
-type ImportAccountRequestParams struct {
-	// ApplicationID performing the Ethereum account import. Taken from the request context, never from the body.
-	ApplicationID string `json:"-"`
-	// PrivateKey is the hexadecimal string representation of the 256-bit Ethereum account private key.
-	PrivateKey string `json:"privateKey"`
-}
-
-// UnmarshalJSON decodes the eth_importAccount params from either the positional array form ([{...}])
-// or a single object ({...}), so both forms resolve a field name the same way.
-func (p *ImportAccountRequestParams) UnmarshalJSON(data []byte) error {
-	object := paramsObject(data)
-	if object == nil {
-		return errors.New("only one object is expected")
-	}
-	// The local type sheds this method, so the decode below does not recurse.
-	type params ImportAccountRequestParams
-	var decoded params
-	if err := json.Unmarshal(object, &decoded); err != nil {
-		return err
-	}
-	*p = ImportAccountRequestParams(decoded)
-	return nil
-}
-
-// SetParamsFrom is the JSONRPCParams fallback. See SignTXRequestParams.SetParamsFrom.
-func (p *ImportAccountRequestParams) SetParamsFrom(params []any) error {
-	if len(params) != 1 {
-		return fmt.Errorf("only one object is expected")
-	}
-	if _, ok := params[0].(map[string]any); !ok {
-		return errors.New("a single object is expected")
-	}
-	return errors.New("could not decode eth_importAccount params; expected a single object with [privateKey]")
-}
-
-func (p *ImportAccountRequestParams) ValidateParams() error {
-	if len(p.PrivateKey) == 0 {
-		return errors.New("[privateKey] cannot be nil")
-	}
-	return nil
-}
-
 // RemoveAccountRequestParams request definition
 type RemoveAccountRequestParams struct {
 	// ApplicationID requesting the Ethereum account removal. Taken from the request context, never from the body.

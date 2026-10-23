@@ -37,14 +37,10 @@ func TestHardwareOnlyReachesEveryGuard(t *testing.T) {
 	})
 
 	t.Run("slot use case", func(t *testing.T) {
-		key := make([]byte, 32)
-		key[31] = 1
-		addErr := app.HSMSlotUseCase.AddLocalKey(ctx, hsmslot.AddLocalKeyInput{
+		_, generateErr := app.HSMSlotUseCase.GenerateLocalKey(ctx, hsmslot.GenerateLocalKeyInput{
 			StandardID: entities.StandardID{ID: "slot"},
-			Address:    address.MustNewFromHexString("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"),
-			PrivateKey: entities.HexBytes(key),
 		})
-		require.True(t, errors.IsPreconditionFailed(addErr), "got %v", addErr)
+		require.True(t, errors.IsPreconditionFailed(generateErr), "got %v", generateErr)
 	})
 
 	t.Run("signature manager factory", func(t *testing.T) {
