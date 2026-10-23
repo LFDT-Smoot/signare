@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/sha3"
 )
@@ -52,6 +53,8 @@ const (
 	// maxReportedCycleHops caps how much of a cycle is rendered into the error message, so an
 	// attacker-supplied type chain thousands of links long cannot inflate it.
 	maxReportedCycleHops = 8
+	// maxReportedNameRunes caps how much of a rejected type name is rendered into the error message.
+	maxReportedNameRunes = 64
 )
 
 // encodeState carries the per-digest limits across the mutually recursive encoding walk. One state
@@ -167,9 +170,9 @@ type EIP712Message map[string]interface{}
 
 // Validate checks that the typed data declares the minimum structure required to compute an
 // EIP-712 digest: a non-empty primaryType that is present in Types, an EIP712Domain type
-// definition, and a well-formed, acyclic type graph. Without these, HashTypedData hashes a
-// degenerate empty structure, or fails to terminate, instead of rejecting the input. It does not
-// re-derive the encoding; HashStruct still surfaces deeper errors.
+// definition, type names free of array notation, and an acyclic type graph. Without these,
+// HashTypedData hashes a degenerate empty structure, or fails to terminate, instead of rejecting the
+// input. It does not re-derive the encoding; HashStruct still surfaces deeper errors.
 func (d TypedData) Validate() error {
 	if d.PrimaryType == "" {
 		return errors.New("typed data primaryType must not be empty")
@@ -183,8 +186,11 @@ func (d TypedData) Validate() error {
 	if _, ok := d.Types[eip712DomainType]; !ok {
 		return errors.New("typed data types missing the EIP712Domain definition")
 	}
-	// Only the two types actually encoded are walked, so an unreachable definition is left alone
-	// rather than failing a payload that would encode fine.
+	if err := d.Types.checkTypeNames(); err != nil {
+		return err
+	}
+	// Only the two types actually encoded are walked, so an unreachable cycle is left alone rather
+	// than failing a payload that would encode fine.
 	for _, root := range []string{eip712DomainType, d.PrimaryType} {
 		if err := d.Types.checkTypeGraph(root); err != nil {
 			return err
@@ -193,14 +199,37 @@ func (d TypedData) Validate() error {
 	return nil
 }
 
-// checkTypeGraph walks the struct-type graph reachable from root and rejects the two shapes that
-// have no correct encoding. A type that refers back to itself, directly or through a chain, has no
-// finite encoding: hashStruct would descend into it forever. A declared type name carrying array
-// notation has no canonical encoding: encodeField would hash it as a struct while findDependencies
-// resolves the same field to its base type and leaves it out of the canonical type string, so the
-// digest would not match what a conforming implementation derives from the same definitions.
+// checkTypeNames rejects any declared type name containing array notation, reachable or not. Such a
+// name is not an EIP-712 identifier and has no canonical encoding: encodeField hashes it as a struct
+// while findDependencies leaves it out of the canonical type string. Other non-identifier characters
+// are not checked here.
+// Rejecting every one, not only those reachable from the roots, is what lets resolveFieldType skip
+// map lookups and stay linear in the field type's length. The lexically smallest offender is reported
+// so the error does not depend on map order.
+func (t Types) checkTypeNames() error {
+	var offender string
+	found := false
+	for name := range t {
+		if strings.ContainsAny(name, "[]") && (!found || name < offender) {
+			offender, found = name, true
+		}
+	}
+	if !found {
+		return nil
+	}
+	reported := fmt.Sprintf("%.*q", maxReportedNameRunes, offender)
+	if utf8.RuneCountInString(offender) > maxReportedNameRunes {
+		reported += fmt.Sprintf(" (truncated from %d bytes)", len(offender))
+	}
+	return fmt.Errorf("typed data declares a type named %s; a type name must not contain array notation", reported)
+}
+
+// checkTypeGraph walks the struct-type graph reachable from root and rejects a type that refers back
+// to itself, directly or through a chain: it has no finite encoding, as hashStruct would descend into
+// it forever. Non-struct field types and references to undeclared types are leaves.
 //
-// Non-struct field types and references to undeclared types are leaves.
+// It is only sound after checkTypeNames has passed: resolveFieldType maps "Foo[]" to "Foo", whereas
+// encodeField would encode a declared "Foo[]" as a struct, so the walk could miss a cycle through it.
 func (t Types) checkTypeGraph(root string) error {
 	return t.checkTypeGraphFrom(root, nil, make(map[string]bool), make(map[string]bool))
 }
@@ -212,13 +241,10 @@ func (t Types) checkTypeGraphFrom(typeName string, path []string, onPath, settle
 	if settled[typeName] || t[typeName] == nil {
 		return nil
 	}
-	if strings.ContainsAny(typeName, "[]") {
-		return fmt.Errorf("typed data declares a type named %q; a type name must not contain array notation", typeName)
-	}
 	onPath[typeName] = true
 	path = append(path, typeName)
 	for _, field := range t[typeName] {
-		if err := t.checkTypeGraphFrom(t.resolveFieldType(field.Type), path, onPath, settled); err != nil {
+		if err := t.checkTypeGraphFrom(resolveFieldType(field.Type), path, onPath, settled); err != nil {
 			return err
 		}
 	}
@@ -246,22 +272,20 @@ func cyclePath(path []string, typeName string) string {
 	return strings.Join(cycle, " -> ")
 }
 
-// resolveFieldType returns the type name the encoder resolves fieldType to. encodeField checks the
-// literal name for a struct definition, then peels one array suffix and checks again, so this walks the
-// same sequence rather than jumping straight to the base type. Otherwise a declared type whose name
-// contains brackets is treated as a leaf here and encoded as a struct there. The loop terminates
-// because each pass strictly shortens fieldType.
-func (t Types) resolveFieldType(fieldType string) string {
-	for {
-		if t[fieldType] != nil {
-			return fieldType
-		}
+// resolveFieldType returns the type name the encoder resolves fieldType to, by peeling array suffixes
+// the way encodeField does. encodeField also checks each intermediate string for a struct definition,
+// but every intermediate string ends in "]", and checkTypeNames has rejected any such name, so only the
+// final string can match. Skipping those lookups keeps this linear: each one would hash the whole
+// remaining string.
+func resolveFieldType(fieldType string) string {
+	for strings.HasSuffix(fieldType, "]") {
 		openBracket := strings.LastIndex(fieldType, "[")
-		if !strings.HasSuffix(fieldType, "]") || openBracket < 0 {
-			return fieldType
+		if openBracket < 0 {
+			break
 		}
 		fieldType = fieldType[:openBracket]
 	}
+	return fieldType
 }
 
 // baseTypeName strips array notation, so "Person[2][]" resolves to the struct type "Person".
