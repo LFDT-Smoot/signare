@@ -17,16 +17,22 @@ const privateKeyLengthBytes = 32
 // LKVSignatureManager implements the DigitalSignatureManager interface.
 // DO NOT use a Local Key Vault in production environment.
 type LKVSignatureManager struct {
+	// hardwareOnly refuses every operation, since this backend holds keys in software.
+	hardwareOnly bool
 }
 
-// LKVSignatureManagerOptions defines options to create a new instance of PKCS11HSMSignatureManager.
+// LKVSignatureManagerOptions defines options to create a new instance of LKVSignatureManager.
 type LKVSignatureManagerOptions struct {
+	// HardwareOnly refuses to sign: the deployment accepts HSM-held keys only.
+	HardwareOnly signaturemanager.HardwareOnly
 }
 
 var _ signaturemanager.DigitalSignatureManager = (*LKVSignatureManager)(nil)
 
-func ProvideLKVSignatureManager(_ LKVSignatureManagerOptions) *LKVSignatureManager {
-	return &LKVSignatureManager{}
+func ProvideLKVSignatureManager(options LKVSignatureManagerOptions) *LKVSignatureManager {
+	return &LKVSignatureManager{
+		hardwareOnly: bool(options.HardwareOnly),
+	}
 }
 
 // GenerateKey is not implemented, because the key store lives in the slot configuration, which this
@@ -44,6 +50,9 @@ func (sm *LKVSignatureManager) ListKeys(_ context.Context, _ signaturemanager.Li
 }
 
 func (sm *LKVSignatureManager) Sign(_ context.Context, input signaturemanager.SignInput) (*signaturemanager.SignOutput, error) {
+	if sm.hardwareOnly {
+		return nil, signaturemanager.NewPolicyRefusedError().WithMessage("the Local Key Vault holds keys in software and this deployment accepts HSM-held keys only")
+	}
 	if input.Config.LocalKeyVault == nil || input.Config.LocalKeyVault.KeyStore == nil {
 		return nil, signaturemanager.NewInternalError().WithMessage("cannot obtain private key to sign")
 	}

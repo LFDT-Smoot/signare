@@ -21,9 +21,9 @@ Signare, part of the LFDT Smoot lab, is an enterprise grade digital signing solu
 
 ## :mag: Scope of Lab
 
-A security concern shared by most users of DLT applications is "keeping their private key private". In the enterprise space FIPS 140 is often used to inform institutions of how they must manage their private keys. Specifically, FIPS 140-2 Level 2 adds requirements for physical tamper-evidence (and/or tamper-resistance) and role-based authentication, which necessitates the use of an HSM or Cloud HSM.
+A security concern shared by most users of DLT applications is "keeping their private key private". In the enterprise space FIPS 140-3 is often used to inform institutions of how they must manage their private keys. Security Level 2 adds physical tamper-evidence and role-based operator authentication to the Level 1 requirements, which necessitates the use of an HSM or Cloud HSM.
 
-The purpose of Signare is to provide a FIPS 140-2 Level 2 compliant signing solution for enterprise applications where various HSM and Cloud HSM vendors will be supported via plugins. Signare also provides role-based access controlled interfaces to solve multiple usecases, such as signing Ethereum transactions and for blockchain clients such as Besu to store keys in an HSM or Cloud HSM.
+The purpose of Signare is to keep signing keys inside a FIPS 140-3 validated HSM or Cloud HSM for their whole life, with various HSM and Cloud HSM vendors supported via plugins. Signare itself is an application, not a cryptographic module: the validation belongs to the HSM, and the [FIPS 140-3 reference](app/docs/mkdocs/docs/reference/fips-140-3.md) states what it does and does not cover for an Ethereum signature. Signare also provides role-based access controlled interfaces to solve multiple usecases, such as signing Ethereum transactions and for blockchain clients such as Besu to store keys in an HSM or Cloud HSM.
 
 ## :globe_with_meridians: Useful Links
 

@@ -74,6 +74,8 @@ type HSMModules struct {
 	SoftHSM *SoftHSMConfig `mapstructure:"softhsm" valid:"optional"`
 	// AKVConfig configuration for AKVConfig.
 	AKV *AKVConfig `mapstructure:"akv" valid:"optional"`
+	// HardwareOnly refuses the Local Key Vault and Azure Key Vault keys not reported as HSM-held.
+	HardwareOnly bool `mapstructure:"hardwareOnly" valid:"optional"`
 }
 
 // SoftHSMConfig configures a SoftHSM.

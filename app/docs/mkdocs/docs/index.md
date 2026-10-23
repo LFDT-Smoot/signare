@@ -13,6 +13,7 @@ This documentation is crafted to serve the needs of developers, contributors, us
     - [JSON RPC API Specification](reference/json-rpc-api.md): Specification for the JSON RPC API.
     - [Role base access control](reference/rbac.md): Role-based access control documentation.
     - [Security](reference/security.md): Security model information.
+    - [FIPS 140-3](reference/fips-140-3.md): What a signing module's FIPS 140-3 validation covers for Signare, and what to check per module.
     - [Trace Context](reference/trace-context.md): Explanation of the trace context.
     - [Supported Signing Modules](reference/supported-modules.md): List of the supported signing modules.
     - [Database reference](reference/database.md): Database configuration reference.
