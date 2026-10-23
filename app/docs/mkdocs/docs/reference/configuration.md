@@ -177,7 +177,7 @@ is trusted as configured, with a warning at startup if it reports itself as Soft
 
 Without it, Signare still reads each Azure key version once before its first signature and logs a
 warning if it is not such a key, or if it could not be read; signing proceeds. The policy is logged at
-startup next to the Go cryptographic module's FIPS 140-3 mode. See the
+startup next to the Go cryptographic module's FIPS 140-3 mode and module version. See the
 [FIPS 140-3 reference](fips-140-3.md#hardening-settings).
 
 #### SoftHSM Configuration

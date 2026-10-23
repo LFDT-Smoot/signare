@@ -153,7 +153,7 @@ func startServer(_ *cobra.Command, _ []string) {
 		logger.LogEntry(ctxMainWithCancellation).Warn(warning)
 	}
 	appConfig := toGraphConfiguration(staticConfig)
-	logger.LogEntry(ctxMainWithCancellation).Infof("Go cryptographic module FIPS 140-3 mode: %t, HSM-held keys only: %t", fips140.Enabled(), graphHardwareOnly(appConfig))
+	logger.LogEntry(ctxMainWithCancellation).Infof("Go cryptographic module FIPS 140-3 mode: %t, module version: %s, HSM-held keys only: %t", fips140.Enabled(), fips140.Version(), graphHardwareOnly(appConfig))
 	appGraph, err := graph.New(appConfig)
 	if err != nil {
 		panic(fmt.Sprintf("error initializing appGraph: [%v]", err))
