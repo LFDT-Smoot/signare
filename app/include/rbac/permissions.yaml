@@ -44,7 +44,6 @@ permissions:
       - application.users.remove
       - rpc.method.eth_generateAccount
       - rpc.method.eth_removeAccount
-      - rpc.method.eth_importAccount
       - rpc.method.eth_accounts
   - id: allow-user-transaction-sign-actions
     description: Grants access to sign transactions and EIP-712 typed data

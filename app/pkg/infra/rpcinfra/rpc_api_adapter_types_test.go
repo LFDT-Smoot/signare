@@ -19,7 +19,6 @@ func TestProcessParams_NonObjectPositionalParamReturnsInvalidParams(t *testing.T
 		name   string
 		params rpcinfra.JSONRPCParams
 	}{
-		{name: "import account", params: &rpcinfra.ImportAccountRequestParams{}},
 		{name: "remove account", params: &rpcinfra.RemoveAccountRequestParams{}},
 		{name: "sign transaction", params: &rpcinfra.SignTXRequestParams{}},
 		{name: "sign typed data", params: &rpcinfra.SignTypedDataRequestParams{}},
@@ -41,11 +40,6 @@ func TestProcessParams_NonObjectPositionalParamReturnsInvalidParams(t *testing.T
 // Guard against overcorrection: a well-formed object positional parameter must
 // still be parsed successfully.
 func TestProcessParams_ObjectPositionalParamSucceeds(t *testing.T) {
-	t.Run("import account", func(t *testing.T) {
-		params := &rpcinfra.ImportAccountRequestParams{}
-		require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{"privateKey":"deadbeef"}]`), params))
-		require.Equal(t, "deadbeef", params.PrivateKey)
-	})
 	t.Run("remove account", func(t *testing.T) {
 		params := &rpcinfra.RemoveAccountRequestParams{}
 		require.Nil(t, rpcinfra.ProcessParams(json.RawMessage(`[{"address":"0xabc"}]`), params))

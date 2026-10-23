@@ -226,13 +226,15 @@ type ListHSMSlotsByHSMModuleInput struct {
 	ApplicationID *string `valid:"optional"`
 }
 
-// AddLocalKeyInput configures the addition of a local key to a LKV HSMSlot's config.
-type AddLocalKeyInput struct {
+// GenerateLocalKeyInput identifies the LKV HSMSlot to generate a local key in.
+type GenerateLocalKeyInput struct {
 	entities.StandardID
-	// PrivateKey to store.
-	PrivateKey entities.HexBytes `valid:"hexBytes"`
-	// Addresses derived from the private key.
-	Address address.Address `valid:"address"`
+}
+
+// GenerateLocalKeyOutput defines the output of generating a local key.
+type GenerateLocalKeyOutput struct {
+	// Address derived from the generated key.
+	Address address.Address
 }
 
 // RemoveLocalKeyInput configures the removal of a local key from a LKV HSMSlot's config.

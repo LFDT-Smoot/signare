@@ -206,8 +206,8 @@ func TestSingleParamsObject_RejectsKeysItCannotResolve(t *testing.T) {
 
 // TestProcessParams_EveryMethodReadsBothFormsAlike guards the contract json-rpc-api.md publishes:
 // both param forms are read identically, for every method that takes params. Before this, only the
-// three signing methods had an UnmarshalJSON, so eth_importAccount and eth_removeAccount accepted a
-// folded field name as an object and rejected it as a one-element array.
+// three signing methods had an UnmarshalJSON, so eth_removeAccount accepted a folded field name as an
+// object and rejected it as a one-element array.
 func TestProcessParams_EveryMethodReadsBothFormsAlike(t *testing.T) {
 	tests := map[string]struct {
 		object string
@@ -216,10 +216,6 @@ func TestProcessParams_EveryMethodReadsBothFormsAlike(t *testing.T) {
 		"eth_removeAccount": {`{"Address":"0xabc"}`, func() (rpcinfra.JSONRPCParams, func() string) {
 			p := &rpcinfra.RemoveAccountRequestParams{}
 			return p, func() string { return p.Address }
-		}},
-		"eth_importAccount": {`{"PrivateKey":"0xabc"}`, func() (rpcinfra.JSONRPCParams, func() string) {
-			p := &rpcinfra.ImportAccountRequestParams{}
-			return p, func() string { return p.PrivateKey }
 		}},
 		"eth_signTransaction": {`{"From":"0xabc","nonce":"0x1"}`, func() (rpcinfra.JSONRPCParams, func() string) {
 			p := &rpcinfra.SignTXRequestParams{}
