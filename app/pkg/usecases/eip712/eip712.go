@@ -231,23 +231,28 @@ func (t Types) checkTypeNames() error {
 // It is only sound after checkTypeNames has passed: resolveFieldType maps "Foo[]" to "Foo", whereas
 // encodeField would encode a declared "Foo[]" as a struct, so the walk could miss a cycle through it.
 func (t Types) checkTypeGraph(root string) error {
-	return t.checkTypeGraphFrom(root, nil, make(map[string]bool), make(map[string]bool))
+	var path []string
+	return t.checkTypeGraphFrom(root, &path, make(map[string]bool), make(map[string]bool))
 }
 
-func (t Types) checkTypeGraphFrom(typeName string, path []string, onPath, settled map[string]bool) error {
+// checkTypeGraphFrom keeps the current path on one shared stack. Passing the slice by value would let
+// each child's append copy the whole path whenever its backing array is full, which is quadratic for a
+// long chain ending in a type with many fields.
+func (t Types) checkTypeGraphFrom(typeName string, path *[]string, onPath, settled map[string]bool) error {
 	if onPath[typeName] {
-		return fmt.Errorf("typed data types contain a cyclic definition: %s", cyclePath(path, typeName))
+		return fmt.Errorf("typed data types contain a cyclic definition: %s", cyclePath(*path, typeName))
 	}
 	if settled[typeName] || t[typeName] == nil {
 		return nil
 	}
 	onPath[typeName] = true
-	path = append(path, typeName)
+	*path = append(*path, typeName)
 	for _, field := range t[typeName] {
 		if err := t.checkTypeGraphFrom(resolveFieldType(field.Type), path, onPath, settled); err != nil {
 			return err
 		}
 	}
+	*path = (*path)[:len(*path)-1]
 	onPath[typeName] = false
 	settled[typeName] = true
 	return nil

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1044,6 +1045,56 @@ func TestTypedDataValidate_LinearInFieldTypeLength(t *testing.T) {
 			require.Less(t, elapsed, time.Second, "Validate must be linear in the field type's length")
 		})
 	}
+}
+
+// The cycle walk keeps one path stack, so a subtree that completes must be popped before the next
+// field is walked, or the reported cycle picks up types that are not on it.
+func TestTypedDataValidate_CyclePathExcludesCompletedSiblings(t *testing.T) {
+	types := domainOnlyTypes()
+	types["Top"] = []eip712.Type{{Name: "x", Type: "X"}, {Name: "y", Type: "Y"}}
+	types["X"] = []eip712.Type{{Name: "leaf", Type: "Leaf"}}
+	types["Leaf"] = []eip712.Type{{Name: "v", Type: "string"}}
+	types["Y"] = []eip712.Type{{Name: "z", Type: "Z"}}
+	types["Z"] = []eip712.Type{{Name: "top", Type: "Top"}}
+
+	_, err := hashTypedDataFor(types, "Top", eip712.EIP712Message{})
+
+	require.EqualError(t, err, "typed data types contain a cyclic definition: Top -> Y -> Z -> Top")
+}
+
+// The cycle walk used to pass its path by value, so whenever the path's backing array was exactly
+// full every child copied the whole path: a long chain ending in a type with many fields cost
+// O(depth * fields). The chain length is chosen where append leaves the array full on this runtime,
+// so the test keeps hitting the boundary whatever the growth policy. Allocation is measured rather than
+// time: the old walk allocates over a gigabyte here.
+func TestTypedDataValidate_LinearInTypeChainDepth(t *testing.T) {
+	const leaves = 16_384
+	var grown []string
+	for len(grown) < 4096 || cap(grown) != len(grown) {
+		grown = append(grown, "")
+	}
+	chain := len(grown)
+
+	types := domainOnlyTypes()
+	for i := 0; i < chain-1; i++ {
+		types[fmt.Sprintf("c%d", i)] = []eip712.Type{{Name: "next", Type: fmt.Sprintf("c%d", i+1)}}
+	}
+	last := make([]eip712.Type, leaves)
+	for i := range last {
+		name := fmt.Sprintf("l%d", i)
+		last[i] = eip712.Type{Name: "leaf", Type: name}
+		types[name] = []eip712.Type{}
+	}
+	types[fmt.Sprintf("c%d", chain-1)] = last
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := hashTypedDataFor(types, "c0", eip712.EIP712Message{})
+	runtime.ReadMemStats(&after)
+
+	require.NoError(t, err)
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<20),
+		"Validate must not copy the path per child: chain of %d types, %d leaf fields", chain, leaves)
 }
 
 // A field type ending in brackets whose base type is declared is ordinary array notation and must keep
