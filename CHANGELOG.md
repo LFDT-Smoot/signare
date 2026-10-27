@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-27
+
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
+- Add a `RELEASING.md` release guide. Releases go from `develop` to `main` through a merge-commit pull request, without release branches, after documented pre-release checks, and are tagged `vX.Y.Z` with a signed annotated tag. A hotfix branches from `main` and is merged back into `develop`.
 - Add signing for EIP-2930 (type 1, access list) transactions, emitted as a `0x01`-prefixed envelope (#5).
 - Add the `personal_sign` JSON-RPC method, signing an arbitrary message under the EIP-191 personal message prefix so an identity whose key is custodied in the HSM can produce a Sign-In With Ethereum signature. Granted by a new `message-signer` role, separate from `transaction-signer`, and subject to the same per-account authorization as the other signing methods (#14).
 - Add a Dependabot configuration for the Go modules, the OpenAPI generator Maven plugin, the Docker base images and GitHub Actions, with grouped update pull requests and a 30-day cooldown on version updates.
@@ -48,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pass every `rbac-validator` flag explicitly from its Makefile, the two list flags as empty, so a stray `OPERATIONIDINCLUSIONS` or `OPERATIONIDEXCLUSIONS` environment variable can no longer turn a failing validation into a pass through viper's automatic environment lookup (#28).
 - Fix `eth_accounts` on a Local Key Vault reporting every failure as `-32603 Internal error` and dropping its cause from the log (#38).
 - Fix `eth_accounts` on a PKCS#11 slot failing with `-32603 Internal error` while the token holds a public key signare cannot derive an address from, such as one on another curve. Such an object is now skipped (#38).
+- `make tools.generate` leaves the tree unchanged again. `app/pkg/graph/wire_gen.go` had been committed without the `goimports` pass the target ends with, and `app/go.sum` lacked the module hashes the `wire` tool builds against, so every run rewrote both.
 
 ### Security
 - Generate PKCS#11 private keys with `CKA_SENSITIVE` true and `CKA_EXTRACTABLE` false, and refuse a key pair the token reports otherwise with `-32097 Precondition failed`. A key pair whose address cannot be derived after generation is now destroyed rather than left on the token (#54).
@@ -63,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reject a JSON-RPC params object that declares the same key twice, whether the two spellings are identical or differ only in case. Per-account authorization and the signing path decoded the positional array form differently, so params carrying both `from` and `From` were authorized against one account and signed with the other, letting a caller authorized for one account in an application sign with any other account in that application's slot. Affected `eth_signTransaction` and `personal_sign` (#40).
 - Sign with `btcec` rather than `crypto/ecdsa` in the Local Key Vault backend. The standard library routes secp256k1 to a `math/big` path documented as being for deprecated custom curves, which is not constant time and is refused outright in FIPS 140-only mode; `btcec`, already the library the connector recovers signatures with, is constant time and emits RFC 6979 deterministic, low-S signatures (#35).
 - Reject every EIP-712 type name containing `[` or `]`, not only those the digest reaches, keeping typed data validation linear in a field type's length and in the length of a chain of types (#56).
+- Clear the reachable `govulncheck` findings reported against the 1.27.1 toolchain. The Go toolchain moves to `1.27.3`, across the `go` directive in the three `go.mod` files, the `run.go` setting in `.golangci.yaml` and the pinned build base image in `app/Dockerfile`, fixing reachable issues in `crypto/x509`, `crypto/tls`, `net/http` and `net/textproto`. `golang.org/x/net` moves to `v0.60.0` and `golang.org/x/text` to `v0.42.0` in `app` and `deployment`, fixing the HTTP/2 server issues and a panic in `x/text/secure/precis`, and the upgrade raises `golang.org/x/crypto` to `v0.57.0`. The `rbac-validator` tool takes the same `golang.org/x/text`, where the panic was not reachable. All three modules now report zero reachable vulnerabilities. The contributor tool table moves to `golangci-lint` 2.14.0, because 2.13.2 cannot read the export data of the Go 1.27.3 standard library and stops with a `typecheck` error.
 
 ## [1.4.2] - 2026-07-30
 
