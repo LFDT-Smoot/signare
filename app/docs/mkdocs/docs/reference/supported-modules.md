@@ -4,6 +4,8 @@ This document provides a list of supported signing modules that can be configure
 
 The target audience of this document is system administrators interested in understanding how to configure a signing module.
 
+What a module's FIPS 140-3 validation covers, and what to check on each one, is in the [FIPS 140-3 reference](fips-140-3.md).
+
 ## Available signing modules
 
 * PKCS#11: Signare integrates with any HSM that exposes the PKCS#11 (Cryptoki) interface, including on-premise hardware HSMs. Testing is carried out against SoftHSM, a software implementation of a cryptographic store accessible through PKCS#11.

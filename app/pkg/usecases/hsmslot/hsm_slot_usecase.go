@@ -11,6 +11,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/localkeyvault"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
@@ -73,6 +74,11 @@ func (u *DefaultUseCase) CreateHSMSlot(ctx context.Context, input CreateHSMSlotI
 			return nil, errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 		}
 		return nil, errors.InternalFromErr(getHSMErr)
+	}
+
+	if u.hardwareOnly && getHSMOutput.Kind == hsmmodule.LKVModuleKind {
+		msg := fmt.Sprintf("cannot create a slot in the HSM module '%s', which is of kind %s: this deployment accepts HSM-held keys only", input.HSMModuleID, hsmmodule.LKVModuleKind)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
 
 	// A PIN only means anything to a PKCS#11 module, so a source is mandatory for one and refused for the
@@ -449,6 +455,10 @@ func (u *DefaultUseCase) GenerateLocalKey(ctx context.Context, input GenerateLoc
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
+	if u.hardwareOnly {
+		msg := "cannot generate a local key: this deployment accepts HSM-held keys only"
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
 	storedSlot, err := u.localKeyVaultSlot(ctx, input.StandardID, "generate")
 	if err != nil {
 		return nil, err
@@ -665,6 +675,8 @@ type DefaultUseCaseOptions struct {
 	HSMConnector hsmconnector.HSMConnector
 	// ReferentialIntegrityUseCase to manage dependencies between resources.
 	ReferentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// HardwareOnly refuses keys that would be held in software.
+	HardwareOnly signaturemanager.HardwareOnly
 }
 
 // DefaultUseCase default management of User in configuration implementation.
@@ -680,6 +692,8 @@ type DefaultUseCase struct {
 	hsmConnector hsmconnector.HSMConnector
 	// referentialIntegrityUseCase to manage dependencies between resources.
 	referentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// hardwareOnly refuses keys that would be held in software.
+	hardwareOnly bool
 }
 
 // ProvideDefaultUseCase creates a DefaultUseCase with the given options.
@@ -706,5 +720,6 @@ func ProvideDefaultUseCase(options DefaultUseCaseOptions) (*DefaultUseCase, erro
 		hsmSlotStorage:              options.HSMSlotStorage,
 		applicationUseCase:          options.ApplicationUseCase,
 		referentialIntegrityUseCase: options.ReferentialIntegrityUseCase,
+		hardwareOnly:                bool(options.HardwareOnly),
 	}, nil
 }

@@ -13,4 +13,5 @@ The target audience of this document is every user seeking precise implementatio
 * [**JSON RPC API Specification**](json-rpc-api.md): JSON RPC API specification.
 * [**RBAC**](rbac.md): Signare's role based access control architecture and configuration reference.
 * [**Security**](security.md): Signare's API security reference.
+* [**FIPS 140-3**](fips-140-3.md): What a signing module's FIPS 140-3 validation covers for Signare, and what to check per module.
 * [**Trace Context**](trace-context.md): Trace context standard implementation in Signare.

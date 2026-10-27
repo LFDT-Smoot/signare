@@ -158,3 +158,30 @@ func TestMetricsListenerAddressHonoursListenAddress(t *testing.T) {
 		})
 	}
 }
+
+// TestHardwareOnlyReachesTheGraph pins the one hop that turns the key policy on: the enforcement
+// tests build their use cases with the flag set directly, so without this a dropped field would pass.
+func TestHardwareOnlyReachesTheGraph(t *testing.T) {
+	staticWith := func(modules *config.HSMModules) *config.StaticConfiguration {
+		return &config.StaticConfiguration{
+			DatabaseInfo: config.DatabaseInfo{PostgreSQL: &config.PostgreSQLInfo{Host: "localhost", Port: 5432, Scheme: "postgres", SSLMode: "verify-full", Database: "signare"}},
+			HSMModules:   modules,
+		}
+	}
+	cases := []struct {
+		name    string
+		modules *config.HSMModules
+		want    bool
+	}{
+		{"set", &config.HSMModules{HardwareOnly: true}, true},
+		{"unset", &config.HSMModules{}, false},
+		{"no hsmmodules section", nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := graphHardwareOnly(toGraphConfiguration(staticWith(c.modules))); got != c.want {
+				t.Fatalf("graph HardwareOnly = %t, want %t", got, c.want)
+			}
+		})
+	}
+}
