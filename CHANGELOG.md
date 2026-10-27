@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-27
+
 ### Added
 - Add a `SECURITY.md` security policy documenting how to report a vulnerability privately. GitHub private vulnerability reporting is the channel, with the Linux Foundation's reporting guidance as the route for anything broader than this repository.
 - Add a `RELEASING.md` release guide. Releases go from `develop` to `main` through a merge-commit pull request, without release branches, after documented pre-release checks, and are tagged `vX.Y.Z` with a signed annotated tag. A hotfix branches from `main` and is merged back into `develop`.
