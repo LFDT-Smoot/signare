@@ -29,6 +29,7 @@ The purpose of Signare is to keep signing keys inside a FIPS 140-3 validated HSM
 
 - [Documentation](app/docs/mkdocs/docs/index.md): Discover the signare functionality and learn to configure it properly.
 - [Changelog](CHANGELOG.md): Take a look at the record of changes.
+- [Releasing](RELEASING.md): How a version is prepared, tagged and published.
 - Feedback: Your help is key to develop the signare.
     - Found a bug? Need help fixing a problem? You can submit your issues [here](https://github.com/lfdt-smoot/signare/issues).
 
