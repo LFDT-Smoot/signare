@@ -9,6 +9,9 @@ package graph
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/google/wire"
 	"github.com/lfdt-smoot/signare/app"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/httpin"
@@ -69,8 +72,6 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/user"
-	"os"
-	"strings"
 )
 
 // Injectors from http_api_injector.go:

@@ -15,14 +15,16 @@ Besides Golang (please, refer to `app/go.mod` to check the current Golang versio
 | [redocly](https://redocly.com/docs/cli/){:target="_blank"}                   | latest  |
 | [spectral](https://github.com/stoplightio/spectral){:target="_blank"}        | 6.11.1  |
 | [gotestsum](https://github.com/gotestyourself/gotestsum){:target="_blank"}   | 1.11.0  |
-| [golangci-lint](https://github.com/golangci/golangci-lint){:target="_blank"} | 2.13.2  |
+| [golangci-lint](https://github.com/golangci/golangci-lint){:target="_blank"} | 2.14.0  |
 | [govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck){:target="_blank"} | 1.7.0   |
 
 `golangci-lint` and `govulncheck` analyse the source, so each must itself be built with a Go
 release at least as new as the `go` directive in `app/go.mod`. An older build refuses to run:
 `golangci-lint` rejects the configuration, and `govulncheck` reports every package as
 requiring a newer Go version. Reinstall both with the current toolchain when that directive
-moves, rather than only the toolchain.
+moves, rather than only the toolchain. A rebuild is not always enough. `golangci-lint` 2.13.2
+cannot read the standard library export data of Go 1.27.3 whichever Go builds it, and stops
+with a `typecheck` error, so Go 1.27.3 needs 2.14.0 or later.
 
 ## Code structure
 
