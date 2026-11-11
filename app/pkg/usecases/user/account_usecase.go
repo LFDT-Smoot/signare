@@ -148,7 +148,7 @@ func (u *DefaultUserUseCase) DeleteAllAccountsForAddress(ctx context.Context, in
 	tracer := logger.NewTracer(ctx)
 	tracer.AddProperty("address", input.Address.String())
 	tracer.AddProperty("moduleKind", hsmConnection.ModuleKind)
-	tracer.AddProperty("slot", hsmConnection.Slot)
+	tracer.AddProperty("slot", hsmConnection.Slot.Slot)
 	tracer.Debug("removing address from HSM")
 
 	// 1. Remove it from the HSM
@@ -163,7 +163,7 @@ func (u *DefaultUserUseCase) DeleteAllAccountsForAddress(ctx context.Context, in
 		removeAddressInput := hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       hsmConnection.Slot.Slot,
-				Pin:        hsmConnection.Slot.Pin,
+				PinSource:  hsmConnection.Slot.PinSource,
 				ModuleKind: hsmConnection.ModuleKind,
 			},
 			Address: input.Address,
@@ -174,6 +174,11 @@ func (u *DefaultUserUseCase) DeleteAllAccountsForAddress(ctx context.Context, in
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, errors.NotFoundFromErr(err)
+		}
+		// A refused PIN, or a Local Key Vault store still changing after its retries, is state the
+		// caller can act on, not a server fault.
+		if errors.IsPreconditionFailed(err) {
+			return nil, errors.PreconditionFailedFromErr(err)
 		}
 		return nil, errors.InternalFromErr(err)
 	}

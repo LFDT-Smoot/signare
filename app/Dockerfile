@@ -1,6 +1,6 @@
 # Go toolchain base for the build stages. Keep in lockstep with the `go` directive in
 # app/go.mod and deployment/go.mod. Pinned by digest for reproducible builds.
-ARG BUILD_BASE_IMAGE=golang:1.25.11-bookworm@sha256:b96f24a8d7d010ea0acb9c3ba99064740f02b6b984612b28bd3c9c5ab9453e38
+ARG BUILD_BASE_IMAGE=golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5
 # Final runtime base. scratch keeps the image minimal; it has no digest to pin.
 ARG BASE_IMAGE=scratch
 
@@ -33,6 +33,10 @@ ENV GID=1000
 
 ARG GOPROXY
 ARG GOSUMDB
+# Opt-in FIPS 140-3 build of the Go standard library cryptography, read by `go build` in this
+# stage. `off` builds the ordinary toolchain crypto; `certified` links the CMVP-validated Go
+# Cryptographic Module. See app/docs/mkdocs/docs/reference/fips-140-3.md for what it covers.
+ARG GOFIPS140=off
 
 RUN addgroup --gid $GID --system $GROUP
 
@@ -54,15 +58,15 @@ RUN make -C deployment build
 # install all required dynamic libraries used by C
 RUN ldd /signare/deployment/bin/signare_linux_amd64 | tr -s [:blank:] '\n' | grep ^/ | xargs -I % install -D % /dist/%
 
-FROM $BASE_IMAGE AS signare
+# signare-nosofthsm carries the binary and its runtime libraries only, for deployments that sign with a
+# hardware HSM or Azure Key Vault and must not ship a software token. Build it with
+# `--target signare-nosofthsm`. A PKCS#11 library mounted from the vendor is used as configured.
+FROM $BASE_IMAGE AS signare-nosofthsm
 
 COPY --from=signare-builder /etc/passwd /etc/passwd
 COPY --from=signare-builder /etc/group /etc/group
 COPY --from=signare-builder /signare/deployment/bin/signare_linux_amd64 /signare/bin/signare
 COPY --from=signare-builder /dist /
-
-COPY --from=softhsm-builder /dist /
-COPY --from=softhsm-builder /usr/local/lib/softhsm/libsofthsm2.so /usr/local/lib/softhsm/libsofthsm2.so
 
 COPY --from=signare-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
@@ -70,4 +74,8 @@ USER signare:signare
 
 ENTRYPOINT [ "/signare/bin/signare" ]
 
+# signare, the default image, adds SoftHSM for development and testing.
+FROM signare-nosofthsm AS signare
 
+COPY --from=softhsm-builder /dist /
+COPY --from=softhsm-builder /usr/local/lib/softhsm/libsofthsm2.so /usr/local/lib/softhsm/libsofthsm2.so

@@ -190,3 +190,82 @@ func TestAuthorizeAccount_SignTypedData_AuthorizesTheSignedAccountNotFrom(t *tes
 	require.Falsef(t, strings.EqualFold(fromAccount, capture.gotAddress),
 		"authorization must not key off the [from] field for typed data")
 }
+
+// TestAuthorizeAccount_PersonalSign_AuthorizesAddressField is the guard that matters most for
+// personal_sign. accountSigningField returns requiresAuthorization=false for any method missing from
+// accountSigningMethods, and AuthorizeAccount then passes the request straight through. A
+// personal_sign registered in the publisher and granted in the RBAC YAML but absent from that map
+// would let any transaction-signer sign with any account in the application, and the RBAC coverage
+// test would still pass because it only checks the action is registered and grantable. Nothing else
+// in the suite would catch it.
+func TestAuthorizeAccount_PersonalSign_AuthorizesAddressField(t *testing.T) {
+	const (
+		userID  = "owner"
+		appID   = "app1"
+		address = "0x970e8128ab834e8eac17ab8e3812f010678cf791"
+	)
+
+	handler, err := httpinfra.ProvideDefaultHTTPResponseHandler(httpinfra.DefaultHTTPResponseHandlerOptions{
+		HTTPMetrics: httpinfra.DefaultHTTPMetrics{},
+	})
+	require.NoError(t, err)
+
+	accountPDP := &capturingAccountPDP{}
+	point, err := pep.ProvideRPCPolicyEnforcementPoint(pep.RPCPolicyEnforcementPointOptions{
+		ResponseHandler:                       handler,
+		UserPolicyDecisionPointAdapter:        fakeUserPDP{},
+		AccountUserPolicyDecisionPointAdapter: accountPDP,
+	})
+	require.NoError(t, err)
+
+	body := `{"method":"personal_sign","id":1,"params":[{"address":"` + address + `","message":"0x48656c6c6f"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	ctx := context.WithValue(req.Context(), requestcontext.UserContextKey, userID)
+	ctx = context.WithValue(ctx, requestcontext.ApplicationContextKey, appID)
+	ctx = context.WithValue(ctx, requestcontext.ActionContextKey, "rpc.method.personal_sign")
+	req = req.WithContext(ctx)
+
+	nextCalled := false
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { nextCalled = true })
+
+	rr := httptest.NewRecorder()
+	point.AuthorizeAccount(next).ServeHTTP(rr, req)
+
+	require.True(t, nextCalled, "an authorized personal_sign must reach the handler")
+	require.Equal(t, address, strings.ToLower(accountPDP.gotAddress),
+		"personal_sign must be authorized against the [address] param; an empty value here means the method was never account-checked")
+}
+
+// TestAuthorizeAccount_PersonalSign_DeniedWhenUnauthorized is the other half: a caller authorized for
+// one account must not be able to sign with another.
+func TestAuthorizeAccount_PersonalSign_DeniedWhenUnauthorized(t *testing.T) {
+	const address = "0x970e8128ab834e8eac17ab8e3812f010678cf791"
+
+	handler, err := httpinfra.ProvideDefaultHTTPResponseHandler(httpinfra.DefaultHTTPResponseHandlerOptions{
+		HTTPMetrics: httpinfra.DefaultHTTPMetrics{},
+	})
+	require.NoError(t, err)
+
+	point, err := pep.ProvideRPCPolicyEnforcementPoint(pep.RPCPolicyEnforcementPointOptions{
+		ResponseHandler:                       handler,
+		UserPolicyDecisionPointAdapter:        fakeUserPDP{},
+		AccountUserPolicyDecisionPointAdapter: &capturingAccountPDP{err: errors.New("not authorized")},
+	})
+	require.NoError(t, err)
+
+	body := `{"method":"personal_sign","id":1,"params":[{"address":"` + address + `","message":"0x48656c6c6f"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	ctx := context.WithValue(req.Context(), requestcontext.UserContextKey, "owner")
+	ctx = context.WithValue(ctx, requestcontext.ApplicationContextKey, "app1")
+	ctx = context.WithValue(ctx, requestcontext.ActionContextKey, "rpc.method.personal_sign")
+	req = req.WithContext(ctx)
+
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("next handler must not run on a denied request")
+	})
+
+	rr := httptest.NewRecorder()
+	point.AuthorizeAccount(next).ServeHTTP(rr, req)
+
+	require.Equal(t, http.StatusForbidden, rr.Code)
+}

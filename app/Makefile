@@ -22,7 +22,7 @@ build:
 	@echo "Not applicable"
 
 .PHONY: lint
-lint:
+lint: tools.validate_rbac
 	@echo "Executing linters"
 	golangci-lint --verbose run
 
@@ -33,6 +33,19 @@ unit_test:
 	@echo "Executing tests for application packages"
 	gotestsum --jsonfile ${ARTIFACTS_DIR}/unit_tests_results.json --format short-verbose --junitfile ${ARTIFACTS_DIR}/junit.xml -- -p 1 -tags=unit -timeout=5m -coverpkg=github.com/lfdt-smoot/signare/app/pkg/... -coverprofile=${ARTIFACTS_DIR}/signare.coverage.out github.com/lfdt-smoot/signare/app/pkg/...
 	$(call postProcess, signare, github.com/lfdt-smoot/signare/app, app)
+	@$(MAKE) -C tools/rbac-validator unit_test
+
+# The application suite built against the validated Go Cryptographic Module in FIPS 140-3 mode; see
+# docs/mkdocs/docs/reference/fips-140-3.md.
+.PHONY: fips_test
+fips_test:
+	@echo "Executing tests with GOFIPS140=certified"
+	GOFIPS140=certified go test -count=1 -p 1 -tags=unit -timeout=10m github.com/lfdt-smoot/signare/app/pkg/...
+
+.PHONY: race_test
+race_test:
+	@echo "Executing tests with the race detector"
+	go test -race -p 1 -timeout=10m github.com/lfdt-smoot/signare/app/pkg/...
 
 .PHONY: integration_test
 integration_test:
@@ -99,6 +112,15 @@ tools.start_docs: tools.sync_changelog tools.verify_vendored
 tools.stop_docs:
 	@docker rm -f $(SIGNARE_DOCS) || true
 	@echo 'Closing & deleting documentation container'
+
+# An action granted to no role, or an endpoint with no action, is denied rather than erroring, so it
+# is indistinguishable from a legitimate authorization failure. Dangling permission and role
+# references do abort startup, but only once deployed. A prerequisite of lint so that a pipeline
+# calling a standardised step gets the check.
+.PHONY: tools.validate_rbac
+tools.validate_rbac:
+	@echo "Validating the RBAC roles, permissions and actions"
+	@$(MAKE) -C tools/rbac-validator tools.run_default
 
 .PHONY: tools.format
 tools.format:

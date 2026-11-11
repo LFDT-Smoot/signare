@@ -36,16 +36,16 @@ func generateEthereumSignature(signature []byte, chainID entities.HexInt256) *Et
 	}
 }
 
-// generateEIP1559TransactionSignature creates a signature for an EIP-1559 (Type 2) transaction.
-// For Type 2, V is simply yParity (0 or 1), not the EIP-155 formula.
-func generateEIP1559TransactionSignature(signature []byte) *EIP1559TransactionSignature {
+// generateYParityTransactionSignature creates a signature for a transaction with Y parity.
+// For Type 1 and 2, V is simply yParity (0 or 1), not the EIP-155 formula.
+func generateYParityTransactionSignature(signature []byte) *YParityTransactionSignature {
 	r := new(big.Int).SetBytes(signature[1:33])
 	s := new(big.Int).SetBytes(signature[33:signatureLength])
 
 	// yParity is 0 or 1 (convert from bitcoin library's 27/28 range)
 	yParity := int64(signature[0]) - signatureVMin
 
-	return &EIP1559TransactionSignature{
+	return &YParityTransactionSignature{
 		YParity: entities.Int256{Int: *big.NewInt(yParity)},
 		R:       entities.Int256{Int: *r},
 		S:       entities.Int256{Int: *s},

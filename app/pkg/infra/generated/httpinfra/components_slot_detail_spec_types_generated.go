@@ -13,6 +13,8 @@ type SlotDetailSpec struct {
 	ApplicationId *string `json:"applicationId"`
 	// Slot number assigned by the HSM.
 	Slot *string `json:"slot"`
+	// Name of the secret holding the PIN that provides access to the slot, resolved under the configured pin source directory. A reference, not the PIN: the value is never returned. Absent for a module kind that does not authenticate with a PIN, and for a slot created before pin sources existed.
+	PinSource *string `json:"pinSource,omitempty"`
 	// collection of configuration objects
 	Config *[]SlotDetailConfig `json:"config"`
 }
@@ -33,6 +35,8 @@ func (data SlotDetailSpec) ValidateWith() (*httpinfra.ValidationResult, *httpinf
 		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
 		httpError.SetMessage("error validating field [slot]")
 		return nil, httpError
+	}
+	if data.PinSource != nil {
 	}
 	if data.Config == nil {
 		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)

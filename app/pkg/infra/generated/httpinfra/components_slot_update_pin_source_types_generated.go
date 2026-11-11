@@ -6,13 +6,13 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/infra/httpinfra"
 )
 
-type SlotUpdatePin struct {
-	Meta *ResourceMetaUpdate `json:"meta"`
-	Spec *SlotUpdatePinSpec  `json:"spec"`
+type SlotUpdatePinSource struct {
+	Meta *ResourceMetaUpdate      `json:"meta"`
+	Spec *SlotUpdatePinSourceSpec `json:"spec"`
 }
 
-// ValidateWith check whether SlotUpdatePin is valid
-func (data SlotUpdatePin) ValidateWith() (*httpinfra.ValidationResult, *httpinfra.HTTPError) {
+// ValidateWith check whether SlotUpdatePinSource is valid
+func (data SlotUpdatePinSource) ValidateWith() (*httpinfra.ValidationResult, *httpinfra.HTTPError) {
 	if data.Meta == nil {
 		httpError := httpinfra.NewHTTPError(httpinfra.StatusInvalidArgument)
 		httpError.SetMessage("error validating field [meta]")
@@ -44,7 +44,7 @@ func (data SlotUpdatePin) ValidateWith() (*httpinfra.ValidationResult, *httpinfr
 }
 
 // SetDefaults sets default values as defined in the API spec
-func (data *SlotUpdatePin) SetDefaults() {
+func (data *SlotUpdatePinSource) SetDefaults() {
 	data.Meta.SetDefaults()
 	data.Spec.SetDefaults()
 }

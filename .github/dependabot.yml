@@ -1,0 +1,185 @@
+# Dependabot configuration
+# https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+#
+# There are TWO entries per ecosystem and the split is deliberate.
+#
+# Dependabot always reads THIS file from the default branch, and it always raises
+# security-update PRs against the default branch. An entry that sets
+# `target-branch` is documented to stop applying to security updates altogether:
+# "Options defined for this `package-ecosystem` no longer apply to security updates
+# because security updates always use the default branch for the repository." A
+# single `target-branch: develop` entry per ecosystem would therefore silently lose
+# its security grouping, its commit prefix and its ignores for security PRs. Hence:
+#
+#   - a version-update entry with `target-branch: develop`, so routine bumps land on
+#     develop rather than on the protected release branch;
+#   - a security-update entry with no `target-branch` and
+#     `open-pull-requests-limit: 0`, which is documented as disabling version updates
+#     for that entry, leaving it to carry the security group only.
+#
+# Grouping is the point of the file. Dependabot opens security-update PRs
+# individually and ungrouped by default, which is how a backlog of advisories turns
+# into a wall of single-dependency PRs. Every group uses `patterns: ["*"]`, so a run
+# produces one PR per ecosystem per update kind, spanning all matched directories.
+#
+# `open-pull-requests-limit: 1` caps VERSION-update PRs only: security-update PRs are
+# not subject to the limit and do not count toward it.
+#
+# `cooldown` holds a newly published version back for 30 days, which is the window in
+# which a compromised or typosquatted release is usually yanked. It applies to version
+# updates ONLY, so it is set on the version-update entries alone and an advisory-driven
+# fix is never delayed by it. A dependency still inside its cooldown is left out of
+# that run's group and picked up once it becomes eligible. `default-days` covers every
+# bump type, so the per-semver keys are only worth setting if they ever differ.
+#
+# `directories` (unlike `directory`) supports globbing, so `**/*` covers every manifest
+# without enumerating them. It matches subdirectories only, NOT the repository root, so
+# a manifest added at the root would have to be listed explicitly. At the time of
+# writing `**/*` resolves to /app, /deployment and /app/tools/rbac-validator for gomod,
+# and to the codegen plugin for maven.
+
+version: 2
+
+updates:
+  # ---- Go modules: version updates ----
+  - package-ecosystem: gomod
+    directories:
+      - "**/*"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+    groups:
+      gomod:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # ---- Go modules: security updates ----
+  # No `target-branch`, so this entry applies to security updates and files against
+  # the default branch. `open-pull-requests-limit: 0` disables its version updates,
+  # which the entry above already covers.
+  - package-ecosystem: gomod
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      gomod-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ---- Maven (OpenAPI generator plugin): version updates ----
+  - package-ecosystem: maven
+    directories:
+      - "**/*"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+    ignore:
+      # openapi-generator is pinned in pom.xml and integrity-checked against a
+      # version-named .sha256; bumping it also regenerates committed Go
+      # (see http-infra-openapi-generator/README.md), so it must be a manual,
+      # reviewed change rather than an automated PR.
+      - dependency-name: "org.openapitools:openapi-generator"
+    groups:
+      maven:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # ---- Maven (OpenAPI generator plugin): security updates ----
+  - package-ecosystem: maven
+    directories:
+      - "**/*"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore
+      include: scope
+    ignore:
+      # Repeated here on purpose. An `ignore` entry suppresses update PRs of both
+      # kinds, and an automated security bump of openapi-generator would move the
+      # pom while leaving the committed .sha256 stale, breaking the fetch step. The
+      # Dependabot ALERT is unaffected, since alerts come from repository settings
+      # and not from this file, so an advisory is still visible and the response is
+      # the manual bump documented in http-infra-openapi-generator/README.md.
+      - dependency-name: "org.openapitools:openapi-generator"
+    groups:
+      maven-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  # ---- Docker base images: version updates only ----
+  # Docker is version-updates only: container images are not covered by the GitHub
+  # Advisory Database, so a docker security-update entry would never match anything.
+  # Note also that the golang build base in app/Dockerfile is declared as
+  # `ARG BUILD_BASE_IMAGE` and consumed as `FROM $BUILD_BASE_IMAGE`. Dependabot's
+  # docker parser does not expand ARG values before matching the image on the FROM
+  # line, so that base is invisible to it and stays a manual bump, kept in lockstep
+  # with the `go` directive as the Dockerfile requires. The only image Dependabot
+  # sees here is the mkdocs base in app/docs/Dockerfile.
+  - package-ecosystem: docker
+    directories:
+      - "**/*"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+    groups:
+      docker:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # ---- GitHub Actions: version updates ----
+  # No workflows exist yet, so both actions entries are future-proofing. Until a
+  # workflow lands under .github/workflows the weekly run has no files to fetch and
+  # shows as an errored job in the Dependabot logs rather than a clean skip.
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 30
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # ---- GitHub Actions: security updates ----
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      github-actions-security:
+        applies-to: security-updates
+        patterns: ["*"]

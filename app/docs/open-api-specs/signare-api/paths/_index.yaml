@@ -7,8 +7,10 @@
   $ref: admin/slots.yaml
 '/admin/modules/{moduleId}/slots/{slotId}':
   $ref: admin/slots_id.yaml
-'/admin/modules/{moduleId}/slots/{slotId}:update-pin':
-  $ref: admin/slots_id_update_pin.yaml
+'/admin/modules/{moduleId}/slots/{slotId}:update-pin-source':
+  $ref: admin/slots_id_update_pin_source.yaml
+'/admin/modules/{moduleId}/slots/{slotId}:verify-pin-source':
+  $ref: admin/slots_id_verify_pin_source.yaml
 '/admin/modules/{moduleId}/slots/{slotId}:update-config':
   $ref: admin/slots_id_update_config.yaml
 '/admin/users':

@@ -1,6 +1,8 @@
 package hsmslot
 
 import (
+	"log/slog"
+
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 )
@@ -16,16 +18,54 @@ type HSMSlot struct {
 	HSMModuleID string `valid:"required"`
 	// Slot defines the logical container on the HSM.
 	Slot string `valid:"required"`
-	// Pin defines the alphanumeric code used for authentication in the HSM.
-	Pin string `valid:"required"`
+	// PinSource names the secret holding the PIN. A reference, not a value: the PIN is resolved at login
+	// time and never enters this struct.
+	PinSource string `valid:"optional"`
 	// Config defines the configuration for the HSM
 	Config SlotConfig `valid:"required"`
+}
+
+// LogValue implements slog.LogValuer so that logging an HSMSlot emits only its identifying fields.
+//
+// Config may hold Local Key Vault private key material, so it is not emitted. This is a guard on the
+// type rather than a fix at one call site: a tracer property or a wrapped error anywhere can otherwise
+// put the whole struct in front of a handler, and the JSON handler would marshal every field.
+//
+// PinSource is emitted: it names a secret rather than holding one, the API returns it on SlotDetail,
+// and it is what an operator needs to act on a slot that cannot open its token.
+//
+// It protects the value and pointer forms, which is what log call sites use. It does NOT extend to an
+// HSMSlot reached inside a bare slice or map: slog resolves LogValuer on the attribute value itself,
+// not on values nested inside it, so a handler marshals the raw struct in those cases.
+// TestHSMSlot_LogValueDoesNotExtendIntoABareSlice pins that boundary. Log a slot directly, and give any
+// type that carries one its own LogValue, as HSMConnection and HSMSlotCollection do.
+func (s HSMSlot) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("id", s.ID),
+		slog.String("applicationId", s.ApplicationID),
+		slog.String("hsmModuleId", s.HSMModuleID),
+		slog.String("slot", s.Slot),
+		slog.String("pinSource", s.PinSource),
+	)
 }
 
 // SlotConfig defines the configuration for a particular slot.
 type SlotConfig struct {
 	AKV           []AKVConfig          `valid:"optional"`
 	LocalKeyVault *LocalKeyVaultConfig `valid:"optional"`
+}
+
+// LogValue implements slog.LogValuer so slot configuration cannot leak key material into a log
+// record. Only the shape is reported, never the Local Key Vault key store.
+func (c SlotConfig) LogValue() slog.Value {
+	localKeys := 0
+	if c.LocalKeyVault != nil {
+		localKeys = len(c.LocalKeyVault.KeyStore)
+	}
+	return slog.GroupValue(
+		slog.Int("akvEntries", len(c.AKV)),
+		slog.Int("localKeyVaultEntries", localKeys),
+	)
 }
 
 // AKVConfig defines possible configurations for Azure Key Vault.
@@ -44,6 +84,17 @@ type LocalKeyVaultConfig struct {
 	KeyStore map[address.Address]string `valid:"-"`
 }
 
+// LogValue implements slog.LogValuer so the key store cannot reach a log record. Only the entry count
+// is reported, never an address or its private key.
+//
+// SlotConfig holds this as a pointer, and slog does not resolve LogValuer on a struct field, so the
+// guard has to live here as well for it to hold when the config is logged on its own.
+func (c LocalKeyVaultConfig) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("entries", len(c.KeyStore)),
+	)
+}
+
 // CreateHSMSlotInput configures the creation of an HSMSlot.
 type CreateHSMSlotInput struct {
 	// ID defines the identifier of the User resource.
@@ -54,8 +105,9 @@ type CreateHSMSlotInput struct {
 	HSMModuleID string `valid:"required"`
 	// Slot defines the logical container on the HSM.
 	Slot string `valid:"optional"`
-	// Pin defines the alphanumeric code used for authentication in the HSM.
-	Pin string `valid:"optional"`
+	// PinSource names the secret holding the PIN. Mandatory for a PKCS#11 module and rejected for the
+	// others, checked once the module kind is known.
+	PinSource string `valid:"optional"`
 	// Config defines the configuration for the HSM
 	Config SlotConfig `valid:"optional"`
 }
@@ -85,19 +137,31 @@ type GetHSMSlotByApplicationOutput struct {
 	HSMSlot
 }
 
-// EditPinInput configures the update of an HSMSlot's Pin.
-type EditPinInput struct {
+// EditPinSourceInput configures the update of an HSMSlot's PinSource.
+type EditPinSourceInput struct {
 	entities.StandardID
 	// ResourceVersion resource version for resource locking.
 	ResourceVersion string `valid:"required"`
-	// Pin defines the alphanumeric code used for authentication in the HSM.
-	Pin string `valid:"required"`
+	// PinSource names the secret holding the PIN.
+	PinSource string `valid:"required"`
 	// HSMModuleID represents the unique identifier of the slot's HSM.
 	HSMModuleID string `valid:"required"`
 }
 
-// EditPinOutput defines the output of editing an HSMSlot's Pin.
-type EditPinOutput struct {
+// EditPinSourceOutput defines the output of editing an HSMSlot's PinSource.
+type EditPinSourceOutput struct {
+	HSMSlot
+}
+
+// VerifyPinSourceInput configures the verification of an HSMSlot's current PinSource.
+type VerifyPinSourceInput struct {
+	entities.StandardID
+	// HSMModuleID represents the unique identifier of the slot's HSM.
+	HSMModuleID string `valid:"required"`
+}
+
+// VerifyPinSourceOutput defines the output of verifying an HSMSlot's PinSource.
+type VerifyPinSourceOutput struct {
 	HSMSlot
 }
 
@@ -112,7 +176,7 @@ type EditConfigInput struct {
 	HSMModuleID string `valid:"required"`
 }
 
-// EditConfigOutput defines the output of editing an HSMSlot's Pin.
+// EditConfigOutput defines the output of editing an HSMSlot's Config.
 type EditConfigOutput struct {
 	HSMSlot
 }
@@ -162,13 +226,15 @@ type ListHSMSlotsByHSMModuleInput struct {
 	ApplicationID *string `valid:"optional"`
 }
 
-// AddLocalKeyInput configures the addition of a local key to a LKV HSMSlot's config.
-type AddLocalKeyInput struct {
+// GenerateLocalKeyInput identifies the LKV HSMSlot to generate a local key in.
+type GenerateLocalKeyInput struct {
 	entities.StandardID
-	// PrivateKey to store.
-	PrivateKey entities.HexBytes `valid:"hexBytes"`
-	// Addresses derived from the private key.
-	Address address.Address `valid:"address"`
+}
+
+// GenerateLocalKeyOutput defines the output of generating a local key.
+type GenerateLocalKeyOutput struct {
+	// Address derived from the generated key.
+	Address address.Address
 }
 
 // RemoveLocalKeyInput configures the removal of a local key from a LKV HSMSlot's config.
@@ -199,4 +265,16 @@ type HSMSlotCollection struct {
 	Items []HSMSlot
 	// StandardCollectionPage is the page data of the collection.
 	entities.StandardCollectionPage
+}
+
+// LogValue implements slog.LogValuer so that logging a collection does not print the slots it carries.
+// HSMSlot redacts itself when logged directly, but slog does not resolve LogValuer on slice elements,
+// so without this every slot in the page, including its key material, would be marshalled.
+func (c HSMSlotCollection) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Int("items", len(c.Items)),
+		slog.Int("limit", c.Limit),
+		slog.Int("offset", c.Offset),
+		slog.Bool("moreItems", c.MoreItems),
+	)
 }

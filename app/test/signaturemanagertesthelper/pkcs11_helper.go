@@ -4,17 +4,27 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/pinsource/infile/pinsourceinfile"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
+	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 )
 
 const (
 	SoftHSMLib = "/usr/lib/softhsm/libsofthsm2.so"
 	// SlotPin and the SO-PIN ("superpin", see initToken) are fixed SoftHSM PINs
 	// used only by this test suite. They guard no production token.
-	SlotPin            = "userpin"
+	SlotPin = "userpin"
+	// SlotPinSource is the name a test slot records, and the file WritePinSourceDirectory writes
+	// SlotPin into. A slot names a secret rather than carrying its value, so every test that opens a
+	// token needs both this and a directory holding the file.
+	SlotPinSource = "test-slot-pin"
+	// WrongSlotPinSource names a file holding a PIN the token refuses, for the paths that have to reject
+	// a bad source.
+	WrongSlotPinSource = "test-slot-wrong-pin"
 	ImportedKeyAddress = "0xa2c16184fA76cD6D16685900292683dF905e4Bf2"
 
 	tokenLabel    = "WALLET-000"
@@ -157,6 +167,34 @@ func createPrivateKey() (*string, error) {
 
 	tmpFilePath := tmpFile.Name()
 	return &tmpFilePath, nil
+}
+
+// NewPinSourceDirectory writes SlotPin into a fresh directory under the name SlotPinSource and returns
+// the directory, which is what a deployment configures as hsmmodules.softhsm.pinSourceDirectory.
+//
+// The PIN is written with a trailing newline on purpose: that is what `echo pin > file` produces, so
+// every test that opens a token also exercises the resolver stripping it.
+func NewPinSourceDirectory() (string, error) {
+	directory, err := os.MkdirTemp("", "signare-pin-source-*")
+	if err != nil {
+		return "", err
+	}
+	if err = os.WriteFile(filepath.Join(directory, SlotPinSource), []byte(SlotPin+"\n"), 0o600); err != nil {
+		return "", err
+	}
+	if err = os.WriteFile(filepath.Join(directory, WrongSlotPinSource), []byte("not-the-pin\n"), 0o600); err != nil {
+		return "", err
+	}
+	return directory, nil
+}
+
+// NewPinResolver returns a resolver rooted at a directory holding SlotPin under SlotPinSource.
+func NewPinResolver() (hsmconnector.PinResolver, error) {
+	directory, err := NewPinSourceDirectory()
+	if err != nil {
+		return nil, err
+	}
+	return pinsourceinfile.NewResolver(pinsourceinfile.ResolverOptions{Directory: directory})
 }
 
 func initToken(slotNumber string) ([]byte, error) {

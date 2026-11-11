@@ -25,8 +25,8 @@ import (
 var (
 	slotID string
 
-	slotPin = signaturemanagertesthelper.SlotPin
-	app     graph.GraphShared
+	slotPinSource = signaturemanagertesthelper.SlotPinSource
+	app           graph.GraphShared
 )
 
 func TestMain(m *testing.M) {
@@ -442,7 +442,7 @@ func TestDefaultUseCase_DeleteHSM(t *testing.T) {
 			ApplicationID: applicationID,
 			HSMModuleID:   hsmID.ID,
 			Slot:          slotID,
-			Pin:           slotPin,
+			PinSource:     slotPinSource,
 		}
 		_, createHSMSlotErr := app.HSMSlotUseCase.CreateHSMSlot(ctx, createHSMSlotInput)
 		require.NoError(t, createHSMSlotErr)

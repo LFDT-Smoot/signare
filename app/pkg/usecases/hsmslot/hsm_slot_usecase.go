@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lfdt-smoot/signare/app/pkg/commons/logger"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/persistence"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/time"
 	"github.com/lfdt-smoot/signare/app/pkg/entities"
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager/localkeyvault"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
@@ -22,6 +25,9 @@ import (
 
 const (
 	defaultOrderDirection = entities.OrderDesc
+	// localKeyWriteAttempts is how many times a Local Key Vault key store write is attempted before a
+	// concurrent writer is reported as a precondition failure.
+	localKeyWriteAttempts = 3
 )
 
 // HSMSlotUseCase defines the management of HSMSlot in storage.
@@ -32,8 +38,10 @@ type HSMSlotUseCase interface {
 	GetHSMSlot(ctx context.Context, input GetHSMSlotInput) (*GetHSMSlotOutput, error)
 	// GetHSMSlotByApplication gets the HSMSlot for the specified application in storage and returns an error if it fails.
 	GetHSMSlotByApplication(ctx context.Context, input GetHSMSlotByApplicationInput) (*GetHSMSlotByApplicationOutput, error)
-	// EditPin edits the Pin of an HSMSlot in storage and returns an error if it fails.
-	EditPin(ctx context.Context, input EditPinInput) (*EditPinOutput, error)
+	// EditPinSource edits the PinSource of an HSMSlot in storage and returns an error if it fails.
+	EditPinSource(ctx context.Context, input EditPinSourceInput) (*EditPinSourceOutput, error)
+	// VerifyPinSource checks that an HSMSlot's current PinSource opens the slot and returns an error if it fails.
+	VerifyPinSource(ctx context.Context, input VerifyPinSourceInput) (*VerifyPinSourceOutput, error)
 	// EditConfig edits the config of an HSMSlot in storage and returns an error if it fails.
 	EditConfig(ctx context.Context, input EditConfigInput) (*EditConfigOutput, error)
 	// DeleteHSMSlot deletes a HSMSlot in storage and returns an error if it fails.
@@ -42,8 +50,8 @@ type HSMSlotUseCase interface {
 	ListHSMSlotsByApplication(ctx context.Context, input ListHSMSlotsByApplicationInput) (*ListHSMSlotsByApplicationOutput, error)
 	// ListHSMSlotsByHSMModule lists HSMSlot for a specific HSM in storage and returns an error if it fails.
 	ListHSMSlotsByHSMModule(ctx context.Context, input ListHSMSlotsByHSMModuleInput) (*ListHSMSlotsByHSMModuleOutput, error)
-	// AddLocalKey adds a local key to the slot's configuration (only compatible with modules of kind LKV)
-	AddLocalKey(ctx context.Context, input AddLocalKeyInput) error
+	// GenerateLocalKey generates a key in the slot's configuration and returns its address (only compatible with modules of kind LKV)
+	GenerateLocalKey(ctx context.Context, input GenerateLocalKeyInput) (*GenerateLocalKeyOutput, error)
 	// RemoveLocalKey removes a local key from the slot's configuration (only compatible with modules of kind LKV)
 	RemoveLocalKey(ctx context.Context, input RemoveLocalKeyInput) error
 	// ListLocalKeys list all local keys from the slot's configuration (only compatible with modules of kind LKV)
@@ -68,7 +76,27 @@ func (u *DefaultUseCase) CreateHSMSlot(ctx context.Context, input CreateHSMSlotI
 		return nil, errors.InternalFromErr(getHSMErr)
 	}
 
+	if u.hardwareOnly && getHSMOutput.Kind == hsmmodule.LKVModuleKind {
+		msg := fmt.Sprintf("cannot create a slot in the HSM module '%s', which is of kind %s: this deployment accepts HSM-held keys only", input.HSMModuleID, hsmmodule.LKVModuleKind)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+
+	// A PIN only means anything to a PKCS#11 module, so a source is mandatory for one and refused for the
+	// others rather than stored and never read.
+	if getHSMOutput.Kind != hsmmodule.SoftHSMModuleKind && len(input.PinSource) > 0 {
+		msg := fmt.Sprintf("a 'pinSource' cannot be set for a slot in the HSM module '%s', which is of kind %s", input.HSMModuleID, getHSMOutput.Kind)
+		return nil, errors.InvalidArgument().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+
 	if getHSMOutput.Kind == hsmmodule.SoftHSMModuleKind {
+		if len(input.PinSource) == 0 {
+			msg := fmt.Sprintf("a 'pinSource' is required for a slot in the HSM module '%s'", input.HSMModuleID)
+			return nil, errors.InvalidArgument().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		if validateErr := hsmconnector.ValidatePinSource(input.PinSource); validateErr != nil {
+			return nil, validateErr
+		}
+
 		resetInput := hsmconnector.ResetInput{
 			ModuleKind: hsmconnector.ModuleKind(getHSMOutput.Kind),
 		}
@@ -79,7 +107,7 @@ func (u *DefaultUseCase) CreateHSMSlot(ctx context.Context, input CreateHSMSlotI
 
 		findSlotInput := hsmconnector.IsAliveInput{
 			Slot:       input.Slot,
-			Pin:        input.Pin,
+			PinSource:  input.PinSource,
 			ModuleKind: hsmconnector.ModuleKind(getHSMOutput.Kind),
 		}
 		isAliveOutput, isAliveErr := u.hsmConnector.IsAlive(ctx, findSlotInput)
@@ -149,55 +177,27 @@ func (u *DefaultUseCase) GetHSMSlotByApplication(ctx context.Context, input GetH
 	}, nil
 }
 
-func (u *DefaultUseCase) EditPin(ctx context.Context, input EditPinInput) (*EditPinOutput, error) {
+func (u *DefaultUseCase) EditPinSource(ctx context.Context, input EditPinSourceInput) (*EditPinSourceOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
 		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
-	getHSMSlotInput := GetHSMSlotInput{
-		StandardID: input.StandardID,
-	}
-	getHSMSlotOutput, getHSMSlotErr := u.GetHSMSlot(ctx, getHSMSlotInput)
-	if getHSMSlotErr != nil {
-		return nil, getHSMSlotErr
+	if validateErr := hsmconnector.ValidatePinSource(input.PinSource); validateErr != nil {
+		return nil, validateErr
 	}
 
-	if getHSMSlotOutput.HSMModuleID != input.HSMModuleID {
-		msg := fmt.Sprintf("slot doesn't exist in the HSM module '%s'", input.HSMModuleID)
-		return nil, errors.NotFound().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	slot, moduleKind, err := u.pkcs11SlotOf(ctx, input.StandardID, input.HSMModuleID)
+	if err != nil {
+		return nil, err
 	}
 
-	getHSMModuleInput := hsmmodule.GetHSMModuleInput{
-		StandardID: entities.StandardID{ID: getHSMSlotOutput.HSMModuleID},
-	}
-	getHSMOutput, getHSMErr := u.hsmModuleUseCase.GetHSMModule(ctx, getHSMModuleInput)
-	if getHSMErr != nil {
-		if errors.IsNotFound(getHSMErr) {
-			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", getHSMSlotOutput.HSMModuleID)
-			return nil, errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-		}
-		return nil, errors.InternalFromErr(getHSMErr)
+	// Proven to open the slot before it is stored, so a wrong secret is rejected here rather than on the
+	// next signature.
+	if err = u.assertSlotAlive(ctx, slot.Slot, input.PinSource, moduleKind); err != nil {
+		return nil, err
 	}
 
-	isAliveInput := hsmconnector.IsAliveInput{
-		Slot:       getHSMSlotOutput.Slot,
-		Pin:        input.Pin,
-		ModuleKind: hsmconnector.ModuleKind(getHSMOutput.Kind),
-	}
-
-	isAliveOutput, isAliveErr := u.hsmConnector.IsAlive(ctx, isAliveInput)
-	if isAliveErr != nil {
-		if errors.IsPreconditionFailed(isAliveErr) {
-			return nil, isAliveErr
-		}
-		return nil, errors.InternalFromErr(isAliveErr)
-	}
-	if !isAliveOutput.IsAlive {
-		msg := fmt.Sprintf("slot %s is not reachable in the HSM module '%s', the new 'Pin' might be incorrect", getHSMSlotOutput.Slot, getHSMOutput.ID)
-		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-	}
-
-	slot := HSMSlot{
+	edited, err := u.hsmSlotStorage.EditPinSource(ctx, HSMSlot{
 		StandardResourceMeta: entities.StandardResourceMeta{
 			StandardResource: entities.StandardResource{
 				StandardID: input.StandardID,
@@ -207,9 +207,8 @@ func (u *DefaultUseCase) EditPin(ctx context.Context, input EditPinInput) (*Edit
 			},
 			ResourceVersion: input.ResourceVersion,
 		},
-		Pin: input.Pin,
-	}
-	editedSlot, err := u.hsmSlotStorage.EditPin(ctx, slot)
+		PinSource: input.PinSource,
+	})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, errors.NotFoundFromErr(err).WithMessage("hsm slot [%s] not found", input.ID)
@@ -217,9 +216,88 @@ func (u *DefaultUseCase) EditPin(ctx context.Context, input EditPinInput) (*Edit
 		return nil, errors.InternalFromErr(err)
 	}
 
-	return &EditPinOutput{
-		HSMSlot: *editedSlot,
+	return &EditPinSourceOutput{
+		HSMSlot: *edited,
 	}, nil
+}
+
+// VerifyPinSource checks the slot's stored source against the HSM without changing anything. Run after
+// rotating a secret out of band; a success also closes a breaker opened by an earlier refused PIN.
+func (u *DefaultUseCase) VerifyPinSource(ctx context.Context, input VerifyPinSourceInput) (*VerifyPinSourceOutput, error) {
+	_, err := govalidator.ValidateStruct(input)
+	if err != nil {
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
+	}
+
+	slot, moduleKind, err := u.pkcs11SlotOf(ctx, input.StandardID, input.HSMModuleID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(slot.PinSource) == 0 {
+		msg := fmt.Sprintf("slot %s has no 'pinSource' to verify", slot.ID)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+
+	if err = u.assertSlotAlive(ctx, slot.Slot, slot.PinSource, moduleKind); err != nil {
+		return nil, err
+	}
+
+	return &VerifyPinSourceOutput{
+		HSMSlot: slot.HSMSlot,
+	}, nil
+}
+
+// pkcs11SlotOf loads a slot and confirms it belongs to the named module and that the module
+// authenticates with a PIN.
+func (u *DefaultUseCase) pkcs11SlotOf(ctx context.Context, id entities.StandardID, hsmModuleID string) (*GetHSMSlotOutput, hsmconnector.ModuleKind, error) {
+	slot, err := u.GetHSMSlot(ctx, GetHSMSlotInput{StandardID: id})
+	if err != nil {
+		return nil, "", err
+	}
+
+	if slot.HSMModuleID != hsmModuleID {
+		msg := fmt.Sprintf("slot doesn't exist in the HSM module '%s'", hsmModuleID)
+		return nil, "", errors.NotFound().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+
+	module, getHSMErr := u.hsmModuleUseCase.GetHSMModule(ctx, hsmmodule.GetHSMModuleInput{
+		StandardID: entities.StandardID{ID: slot.HSMModuleID},
+	})
+	if getHSMErr != nil {
+		if errors.IsNotFound(getHSMErr) {
+			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", slot.HSMModuleID)
+			return nil, "", errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		return nil, "", errors.InternalFromErr(getHSMErr)
+	}
+
+	if module.Kind != hsmmodule.SoftHSMModuleKind {
+		msg := fmt.Sprintf("cannot operate on a pin source: configured HSM '%s' is not of kind %s", module.ID, hsmmodule.SoftHSMModuleKind)
+		return nil, "", errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+
+	return slot, hsmconnector.ModuleKind(module.Kind), nil
+}
+
+// assertSlotAlive fails unless the PIN named by source opens the slot.
+func (u *DefaultUseCase) assertSlotAlive(ctx context.Context, slot string, source string, moduleKind hsmconnector.ModuleKind) error {
+	isAliveOutput, isAliveErr := u.hsmConnector.IsAlive(ctx, hsmconnector.IsAliveInput{
+		Slot:       slot,
+		PinSource:  source,
+		ModuleKind: moduleKind,
+	})
+	if isAliveErr != nil {
+		if errors.IsPreconditionFailed(isAliveErr) || errors.IsInvalidArgument(isAliveErr) {
+			return isAliveErr
+		}
+		return errors.InternalFromErr(isAliveErr)
+	}
+	if !isAliveOutput.IsAlive {
+		msg := fmt.Sprintf("slot %s is not reachable, the pin named by '%s' might be incorrect", slot, source)
+		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	}
+	return nil
 }
 
 func (u *DefaultUseCase) EditConfig(ctx context.Context, input EditConfigInput) (*EditConfigOutput, error) {
@@ -372,57 +450,45 @@ func (u *DefaultUseCase) ListHSMSlotsByHSMModule(ctx context.Context, input List
 	}, nil
 }
 
-func (u *DefaultUseCase) AddLocalKey(ctx context.Context, input AddLocalKeyInput) error {
+func (u *DefaultUseCase) GenerateLocalKey(ctx context.Context, input GenerateLocalKeyInput) (*GenerateLocalKeyOutput, error) {
 	_, err := govalidator.ValidateStruct(input)
 	if err != nil {
-		return errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
+		return nil, errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
-	getHSMSlotInput := GetHSMSlotInput{
-		StandardID: input.StandardID,
+	if u.hardwareOnly {
+		msg := "cannot generate a local key: this deployment accepts HSM-held keys only"
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
-	storedSlot, getHSMSlotErr := u.GetHSMSlot(ctx, getHSMSlotInput)
-	if getHSMSlotErr != nil {
-		return getHSMSlotErr
-	}
-
-	getHSMModuleInput := hsmmodule.GetHSMModuleInput{
-		StandardID: entities.StandardID{ID: storedSlot.HSMModuleID},
-	}
-	storedHSM, getHSMErr := u.hsmModuleUseCase.GetHSMModule(ctx, getHSMModuleInput)
-	if getHSMErr != nil {
-		if errors.IsNotFound(getHSMErr) {
-			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", storedSlot.HSMModuleID)
-			return errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-		}
-		return errors.InternalFromErr(getHSMErr)
-	}
-
-	if storedHSM.Kind != hsmmodule.LKVModuleKind {
-		msg := fmt.Sprintf("cannot add local key: configured HSM '%s' is not of kind %s", storedHSM.ID, hsmmodule.LKVModuleKind)
-		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
-	}
-
-	if storedSlot.Config.LocalKeyVault == nil {
-		storedSlot.Config.LocalKeyVault = &LocalKeyVaultConfig{
-			KeyStore: make(map[address.Address]string),
-		}
-	}
-
-	if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[input.Address]; exists {
-		return errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", input.Address.String(), storedSlot.ID)
-	}
-
-	storedSlot.Config.LocalKeyVault.KeyStore[input.Address] = strings.TrimPrefix(input.PrivateKey.String(), "0x")
-	storedSlot.LastUpdate = time.Now()
-
-	_, err = u.hsmSlotStorage.EditConfig(ctx, storedSlot.HSMSlot)
+	storedSlot, err := u.localKeyVaultSlot(ctx, input.StandardID, "generate")
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return errors.NotFoundFromErr(err).WithMessage("hsm slot [%s] not found", input.ID)
-		}
-		return errors.InternalFromErr(err)
+		return nil, err
 	}
-	return nil
+
+	tracer := logger.NewTracer(ctx)
+	tracer.AddProperty("slotId", input.ID)
+	tracer.AddProperty("operation", "GenerateLocalKey")
+
+	privateKey, generatedAddress, err := localkeyvault.NewKey()
+	if err != nil {
+		return nil, err
+	}
+	storedKey := strings.TrimPrefix(privateKey.String(), "0x")
+
+	err = u.editLocalKeyStore(ctx, storedSlot, func(slotID string, keyStore map[address.Address]string) error {
+		if _, exists := keyStore[*generatedAddress]; exists {
+			return errors.AlreadyExists().WithMessage("address [%s] already exists in local key vault for slot [%s]", generatedAddress.String(), slotID)
+		}
+		keyStore[*generatedAddress] = storedKey
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	tracer.Debugf("generated address: '%s'", generatedAddress.String())
+	return &GenerateLocalKeyOutput{
+		Address: *generatedAddress,
+	}, nil
 }
 
 func (u *DefaultUseCase) RemoveLocalKey(ctx context.Context, input RemoveLocalKeyInput) error {
@@ -430,49 +496,81 @@ func (u *DefaultUseCase) RemoveLocalKey(ctx context.Context, input RemoveLocalKe
 	if err != nil {
 		return errors.InvalidArgumentFromErr(err).SetHumanReadableMessage("couldn't validate input data")
 	}
-	getHSMSlotInput := GetHSMSlotInput{
-		StandardID: input.StandardID,
-	}
-	storedSlot, getHSMSlotErr := u.GetHSMSlot(ctx, getHSMSlotInput)
-	if getHSMSlotErr != nil {
-		return getHSMSlotErr
+	storedSlot, err := u.localKeyVaultSlot(ctx, input.StandardID, "remove")
+	if err != nil {
+		return err
 	}
 
-	getHSMModuleInput := hsmmodule.GetHSMModuleInput{
-		StandardID: entities.StandardID{ID: storedSlot.HSMModuleID},
-	}
-	storedHSM, getHSMErr := u.hsmModuleUseCase.GetHSMModule(ctx, getHSMModuleInput)
-	if getHSMErr != nil {
-		if errors.IsNotFound(getHSMErr) {
-			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", storedSlot.HSMModuleID)
-			return errors.PreconditionFailedFromErr(getHSMErr).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+	return u.editLocalKeyStore(ctx, storedSlot, func(slotID string, keyStore map[address.Address]string) error {
+		if _, exists := keyStore[input.Address]; !exists {
+			return errors.NotFound().WithMessage("address [%s] not found in local key vault for slot [%s]", input.Address.String(), slotID)
 		}
-		return errors.InternalFromErr(getHSMErr)
+		delete(keyStore, input.Address)
+		return nil
+	})
+}
+
+// localKeyVaultSlot returns the slot, refusing one whose module is not a Local Key Vault.
+func (u *DefaultUseCase) localKeyVaultSlot(ctx context.Context, id entities.StandardID, action string) (*HSMSlot, error) {
+	storedSlot, err := u.GetHSMSlot(ctx, GetHSMSlotInput{StandardID: id})
+	if err != nil {
+		return nil, err
+	}
+
+	storedHSM, err := u.hsmModuleUseCase.GetHSMModule(ctx, hsmmodule.GetHSMModuleInput{
+		StandardID: entities.StandardID{ID: storedSlot.HSMModuleID},
+	})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			msg := fmt.Sprintf("HSM '%s' assigned to this slot does not exist", storedSlot.HSMModuleID)
+			return nil, errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		return nil, errors.InternalFromErr(err)
 	}
 
 	if storedHSM.Kind != hsmmodule.LKVModuleKind {
-		msg := fmt.Sprintf("cannot remove local key: configured HSM '%s' is not of kind %s", storedHSM.ID, hsmmodule.LKVModuleKind)
-		return errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		msg := fmt.Sprintf("cannot %s local key: configured HSM '%s' is not of kind %s", action, storedHSM.ID, hsmmodule.LKVModuleKind)
+		return nil, errors.PreconditionFailed().WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
 	}
+	return &storedSlot.HSMSlot, nil
+}
 
-	if storedSlot.Config.LocalKeyVault == nil || storedSlot.Config.LocalKeyVault.KeyStore == nil {
-		return errors.NotFound().WithMessage("address [%s] not found in local key vault for slot [%s]", input.Address.String(), storedSlot.ID)
-	}
-
-	if _, exists := storedSlot.Config.LocalKeyVault.KeyStore[input.Address]; !exists {
-		return errors.NotFound().WithMessage("address [%s] not found in local key vault for slot [%s]", input.Address.String(), storedSlot.ID)
-	}
-
-	delete(storedSlot.Config.LocalKeyVault.KeyStore, input.Address)
-	storedSlot.LastUpdate = time.Now()
-	_, err = u.hsmSlotStorage.EditConfig(ctx, storedSlot.HSMSlot)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return errors.NotFoundFromErr(err).WithMessage("hsm slot [%s] not found", input.ID)
+// editLocalKeyStore applies edit to the slot's key store and writes the store back whole. The write only
+// lands if the slot is unchanged since it was read, so a write that loses to a concurrent writer is
+// retried on a fresh read, with edit applied again on top of the other writer's change.
+func (u *DefaultUseCase) editLocalKeyStore(ctx context.Context, storedSlot *HSMSlot, edit func(slotID string, keyStore map[address.Address]string) error) error {
+	slotID := entities.StandardID{ID: storedSlot.ID}
+	for attempt := 1; ; attempt++ {
+		if storedSlot.Config.LocalKeyVault == nil {
+			storedSlot.Config.LocalKeyVault = &LocalKeyVaultConfig{}
 		}
-		return errors.InternalFromErr(err)
+		if storedSlot.Config.LocalKeyVault.KeyStore == nil {
+			storedSlot.Config.LocalKeyVault.KeyStore = make(map[address.Address]string)
+		}
+		if err := edit(storedSlot.ID, storedSlot.Config.LocalKeyVault.KeyStore); err != nil {
+			return err
+		}
+		storedSlot.LastUpdate = time.Now()
+
+		_, err := u.hsmSlotStorage.EditConfig(ctx, *storedSlot)
+		if err == nil {
+			return nil
+		}
+		if !errors.IsNotFound(err) {
+			return errors.InternalFromErr(err)
+		}
+
+		// The write missed because a concurrent writer won or the slot was deleted. The fresh read tells which.
+		reread, getErr := u.GetHSMSlot(ctx, GetHSMSlotInput{StandardID: slotID})
+		if getErr != nil {
+			return getErr
+		}
+		if attempt == localKeyWriteAttempts {
+			msg := fmt.Sprintf("hsm slot [%s] was modified concurrently, retry", storedSlot.ID)
+			return errors.PreconditionFailedFromErr(err).WithMessage("%s", msg).SetHumanReadableMessage("%s", msg)
+		}
+		storedSlot = &reread.HSMSlot
 	}
-	return nil
 }
 
 func (u *DefaultUseCase) ListLocalKeys(ctx context.Context, input ListLocalKeysInput) (*ListLocalKeysOutput, error) {
@@ -536,7 +634,7 @@ func (u *DefaultUseCase) createSlot(ctx context.Context, input CreateHSMSlotInpu
 		ApplicationID: input.ApplicationID,
 		HSMModuleID:   input.HSMModuleID,
 		Slot:          input.Slot,
-		Pin:           input.Pin,
+		PinSource:     input.PinSource,
 		Config:        input.Config,
 	}
 	hsmSlot.InternalResourceID = entities.NewInternalResourceID()
@@ -577,6 +675,8 @@ type DefaultUseCaseOptions struct {
 	HSMConnector hsmconnector.HSMConnector
 	// ReferentialIntegrityUseCase to manage dependencies between resources.
 	ReferentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// HardwareOnly refuses keys that would be held in software.
+	HardwareOnly signaturemanager.HardwareOnly
 }
 
 // DefaultUseCase default management of User in configuration implementation.
@@ -592,6 +692,8 @@ type DefaultUseCase struct {
 	hsmConnector hsmconnector.HSMConnector
 	// referentialIntegrityUseCase to manage dependencies between resources.
 	referentialIntegrityUseCase referentialintegrity.ReferentialIntegrityUseCase
+	// hardwareOnly refuses keys that would be held in software.
+	hardwareOnly bool
 }
 
 // ProvideDefaultUseCase creates a DefaultUseCase with the given options.
@@ -618,5 +720,6 @@ func ProvideDefaultUseCase(options DefaultUseCaseOptions) (*DefaultUseCase, erro
 		hsmSlotStorage:              options.HSMSlotStorage,
 		applicationUseCase:          options.ApplicationUseCase,
 		referentialIntegrityUseCase: options.ReferentialIntegrityUseCase,
+		hardwareOnly:                bool(options.HardwareOnly),
 	}, nil
 }

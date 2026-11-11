@@ -91,7 +91,11 @@ func ProvideAdminAPIRoutes(options AdminAPIPublisherOptions) (AdminAPIRoutesPubl
 	if err != nil {
 		return 0, err
 	}
-	err = PublishAdminSlotsUpdatePin(options.HTTPInfra, options.Handler)
+	err = PublishAdminSlotsUpdatePinSource(options.HTTPInfra, options.Handler)
+	if err != nil {
+		return 0, err
+	}
+	err = PublishAdminSlotsVerifyPinSource(options.HTTPInfra, options.Handler)
 	if err != nil {
 		return 0, err
 	}
@@ -329,14 +333,28 @@ func PublishAdminSlotsUpdateConfig(httpInfra httpinfra.HTTPRouter, handler Admin
 	return nil
 }
 
-// PublishAdminSlotsUpdatePin publishes the AdminSlotsUpdatePin endpoint
-func PublishAdminSlotsUpdatePin(httpInfra httpinfra.HTTPRouter, handler AdminAPIHTTPHandler) error {
-	opts := httpinfra.HandlerMatchOptions{Path: "/admin/modules/{moduleId}/slots/{slotId}:update-pin", Methods: []string{
+// PublishAdminSlotsUpdatePinSource publishes the AdminSlotsUpdatePinSource endpoint
+func PublishAdminSlotsUpdatePinSource(httpInfra httpinfra.HTTPRouter, handler AdminAPIHTTPHandler) error {
+	opts := httpinfra.HandlerMatchOptions{Path: "/admin/modules/{moduleId}/slots/{slotId}:update-pin-source", Methods: []string{
 		http.MethodPost,
 	},
-		Action: "admin.slots.updatePin",
+		Action: "admin.slots.updatePinSource",
 	}
-	err := httpInfra.RegisterRawHandler(opts, handler.HandleHTTPAdminSlotsUpdatePin)
+	err := httpInfra.RegisterRawHandler(opts, handler.HandleHTTPAdminSlotsUpdatePinSource)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// PublishAdminSlotsVerifyPinSource publishes the AdminSlotsVerifyPinSource endpoint
+func PublishAdminSlotsVerifyPinSource(httpInfra httpinfra.HTTPRouter, handler AdminAPIHTTPHandler) error {
+	opts := httpinfra.HandlerMatchOptions{Path: "/admin/modules/{moduleId}/slots/{slotId}:verify-pin-source", Methods: []string{
+		http.MethodPost,
+	},
+		Action: "admin.slots.verifyPinSource",
+	}
+	err := httpInfra.RegisterRawHandler(opts, handler.HandleHTTPAdminSlotsVerifyPinSource)
 	if err != nil {
 		return err
 	}

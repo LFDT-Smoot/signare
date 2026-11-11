@@ -22,7 +22,34 @@ for implementation-defined server errors. Signare defines the following ones:
 | -32097 | Precondition failed | The request can not be executed in the current system state |
 | -32098 | Not found           | The specified resource was not found.                       |
 | -32099 | Unauthorized        | The request was not authorized.                             |
+| -32604 | Bad gateway         | An upstream dependency, such as the HSM, returned a fault.  |
 | -32605 | Already exists      | The specified resource already exists.                      |
+
+A method signare does not publish returns `-32601 Method not found`. This is answered before the caller's identity
+is checked.
+
+### Parameter naming
+
+Every method that takes parameters accepts them either as a single object (`{...}`) or as that object
+wrapped in a one-element array (`[{...}]`). Both forms are read identically, so a request is equally
+valid either way, and field names are matched without regard to case.
+
+A parameter object that declares the same key twice is refused rather than one of the two values
+being chosen. This covers an exact repeat, `{"from": "0x..", "from": "0x.."}`, and two spellings that
+differ only in case, `{"from": "0x..", "From": "0x.."}`. It applies to every key, including one that
+matches no field of the method. It applies to the object's own keys only, so nested caller data, such
+as an EIP-712 `typedData` message, may contain members that differ only in case.
+
+!!! warning "Response to a refused request"
+    How the refusal is reported depends on where it is caught, and the two differ.
+
+    For `eth_signTransaction`, `eth_signTypedData` and `personal_sign`, the duplicate key is caught by
+    the account authorization middleware, which responds with an HTTP **400** and an empty body. There
+    is no JSON-RPC error object, so a client that only parses the response body sees nothing. This is
+    the one case where the "always responds with 200 OK" rule above does not hold.
+
+    Every other method is caught while decoding the parameters and responds as documented: HTTP 200
+    with `-32602 Invalid params` in the response body.
 
 ## Ethereum JSON RPC API supported methods
 
@@ -31,6 +58,27 @@ for implementation-defined server errors. Signare defines the following ones:
 The `eth_signTransaction` method is supported following the [Ethereum JSON-RPC API](https://ethereum.org/developers/docs/apis/json-rpc/#eth_signtransaction) specification.
 
 Please, refer to Ethereum's documentation for details about its input and output parameters.
+
+The following transaction types are supported. The type is inferred from the combination of fields present in the request body (there is no explicit `type` field):
+
+| Transaction type      | How it is inferred                                                                                        |
+|-----------------------|-----------------------------------------------------------------------------------------------------------|
+| Legacy (Type 0)       | `gasPrice` is set (or no gas fields are set) and no `accessList` is set                                   |
+| EIP-2930 (Type 1)     | `accessList` is set (an empty accessList is valid), together with `gasPrice` or with no gas fields at all |
+| EIP-1559 (Type 2)     | `maxFeePerGas` and `maxPriorityFeePerGas` are set; `accessList` is optional                               |
+
+Any other combination is rejected with an invalid params error. The checks are applied in this order, so
+the first row that matches decides the response:
+
+| Request | Response |
+|---------|----------|
+| `authorizationList` is set | `Not supported transaction type`: EIP-7702 (Type 4) signing is not supported |
+| `maxFeePerBlobGas` or `blobVersionedHashes` is set | `Not supported transaction type`: EIP-4844 (Type 3) signing is not supported |
+| `gasPrice` together with `maxFeePerGas` or `maxPriorityFeePerGas` | `Could not determine transaction type`: the request names both a legacy and an EIP-1559 gas price |
+| Only one of `maxFeePerGas` and `maxPriorityFeePerGas` | `Could not determine transaction type`: an EIP-1559 transaction needs both |
+
+Because the two unsupported types are checked first, a request that sets both an `accessList` and a blob
+or authorization field is rejected rather than signed as a type 1 transaction with that field dropped.
 
 !!! info
     If the ``gasPrice`` field of the request body is not informed, it is set to 0.
@@ -90,12 +138,67 @@ If the `typedData` `domain` declares a `chainId`, it must equal the application'
     {"jsonrpc":"2.0","id":1,"result":"0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c"}
     ```
 
+### personal_sign
+
+Calculates an Ethereum specific signature over an arbitrary message under the EIP-191 personal message
+prefix: `sign(keccak256("\x19Ethereum Signed Message:\n" + len(message) + message))`. This is the
+signature format Sign-In With Ethereum (EIP-4361) verifiers expect, so it allows an identity whose key
+is custodied only in the HSM to authenticate.
+
+Unlike `eth_signTransaction` and `eth_signTypedData` there is no chain binding: EIP-191 carries no
+chain id, and the recovery byte is the plain 27/28 form rather than the EIP-155 one. Binding a personal
+signature to a chain is the verifier's job, normally through the message text.
+
+> **Parameter shape.** Signare takes a **named object**, consistent with its other signing methods,
+> rather than the positional `[message, address]` form wallets use for `personal_sign`. Naming the
+> fields removes the argument-order confusion between `personal_sign` and `eth_sign`, which take their
+> two arguments in opposite orders.
+
+* Request:
+
+  Input parameters:
+
+  | Name    | Type   | Required | Notes                                                       |
+  |---------|--------|----------|-------------------------------------------------------------|
+  | address | string | ✔        | The account that signs. Must be authorized for the caller.  |
+  | message | string | ✔        | The message to sign, as a **`0x`-prefixed** hex string.     |
+
+  The `0x` prefix is required rather than optional, so that a plain-text message which happens to be
+  valid hex cannot be silently decoded into different bytes than the caller intended. An empty message
+  is rejected.
+
+  Example, signing the message `Hello` (`0x48656c6c6f`):
+    ```
+    curl -X POST -H "X-Auth-UserId: <user>" -H "X-Auth-ApplicationId: <application>" --data '{"jsonrpc":"2.0","method":"personal_sign","params":[{"address":"0xcc753268336A33e56Da47500D9C786077CC24311","message":"0x48656c6c6f"}], "id":1}' http://localhost:4545
+    ```
+
+* Success response:
+
+  The hex-encoded 65-byte `r || s || v` signature, with `v` being 27 or 28.
+
+    ```
+    {"jsonrpc":"2.0","id":1,"result":"0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c"}
+    ```
+
+* Error responses:
+
+  | Code   | Message             |
+  |--------|---------------------|
+  | -32602 | Invalid params      |
+  | -32603 | Internal error      |
+  | -32604 | Bad gateway         |
+  | -32099 | Unauthorized        |
+
 ## Custom RPC methods
 
 ### eth_generateAccount
 
 Generates a new key pair in the HSM slot configured for the application sent in the header and returns the Ethereum
-address that corresponds to the public key.
+address that corresponds to the public key. On a Local Key Vault slot, signare generates the key and stores it in the
+slot's configuration.
+
+Signare never accepts a private key through its API. To use an existing key, load it with the module's own tooling, as
+described in [supported modules](supported-modules.md#where-keys-come-from).
 
 * Request:
 
@@ -120,43 +223,12 @@ address that corresponds to the public key.
   | -32602 | Invalid params      | 
   | -32603 | Internal error      | 
   | -32097 | Precondition failed |
+  | -32098 | Not found           |
   | -32099 | Unauthorized        |
 
-### eth_importAccount
-
-Imports a private key into the HSM slot configured for the application (only supported for Local Key Vault HSM kind) and
-returns the Ethereum
-address that derives from its public key.
-
-* Request:
-
-  Input parameters:
-
-  | Name       | Type   | Required |
-  |------------|--------|----------|
-  | privateKey | string | ✔        |
-
-  Example:
-    ```
-    curl -X POST -H "X-Auth-UserId: <user>" -H "X-Auth-ApplicationId: <application>" --data '{"jsonrpc":"2.0","method":"eth_importAccount","params":[{"privateKey": "6d36964f44cf2a57968238b5bead10bee82a37e21cdd3e875e4a29d572c1d205"}], "id":1}' http://localhost:4545
-    ```
-
-* Success response:
-
-  Example:
-    ```
-    {"jsonrpc":"2.0","id":1,"result":"0x56cDb4eE596BA7b055B75077794Dd1F408ee150F"}
-    ```
-
-* Error responses:
-
-  | Code   | Message             |
-  |--------|---------------------|
-  | -32605 | Already exists      | 
-  | -32602 | Invalid params      | 
-  | -32603 | Internal error      | 
-  | -32097 | Precondition failed |
-  | -32099 | Unauthorized        |
+  On a Local Key Vault slot, concurrent calls that change the slot's keys contend for its key store. Signare makes up to
+  three attempts at the write. If the slot is still being modified, the call returns `-32097 Precondition failed` without
+  storing a key, and can be retried. `-32098 Not found` means the slot was deleted while the call ran.
 
 ### eth_removeAccount
 
@@ -193,6 +265,10 @@ key.
   | -32098 | Not found           |
   | -32099 | Unauthorized        |
 
+  On a Local Key Vault slot, a removal contends with concurrent calls that change the slot's keys in the same way as
+  `eth_generateAccount`. After three lost writes it returns `-32097 Precondition failed` without removing the key, and
+  can be retried.
+
 ### eth_accounts
 
 Lists all the key pairs stored in the HSM slot configured for the application sent in the header as an array of the
@@ -220,4 +296,5 @@ Ethereum addresses that correspond to the stored public keys.
   | -32602 | Invalid params      |
   | -32603 | Internal error      |
   | -32097 | Precondition failed |
+  | -32098 | Not found           |
   | -32099 | Unauthorized        |

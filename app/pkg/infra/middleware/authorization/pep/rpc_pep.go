@@ -23,6 +23,7 @@ import (
 var accountSigningMethods = map[string]bool{
 	rpcinfra.SignTransactionMethod: false, // eth_signTransaction signs with `from`
 	rpcinfra.SignTypedDataMethod:   true,  // eth_signTypedData signs with `address`
+	rpcinfra.PersonalSignMethod:    true,  // personal_sign signs with `address`
 }
 
 // accountSigningField reports whether the action must pass per-account authorization and, if so,
@@ -39,7 +40,7 @@ func accountSigningField(actionID string) (usesAddressParam bool, requiresAuthor
 }
 
 // AuthorizeAccount checks if a user is authorized to use an account when performing an account
-// signing action (eth_signTransaction or eth_signTypedData).
+// signing action (any method listed in accountSigningMethods).
 func (policyEnforcementPoint *RPCPolicyEnforcementPoint) AuthorizeAccount(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -73,13 +74,10 @@ func (policyEnforcementPoint *RPCPolicyEnforcementPoint) AuthorizeAccount(next h
 			return
 		}
 
-		addr, err := getAddressFromParamsArray(ctx, authorizeAccountRPCBody, usesAddressParam)
+		addr, err := getSigningAccount(ctx, authorizeAccountRPCBody, usesAddressParam)
 		if err != nil {
-			addr, err = getAddressFromParamsObject(ctx, authorizeAccountRPCBody, usesAddressParam)
-			if err != nil {
-				policyEnforcementPoint.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusInvalidArgument))
-				return
-			}
+			policyEnforcementPoint.responseHandler.HandleErrorResponse(r.Context(), w, httpinfra.NewHTTPErrorFromError(ctx, err, httpinfra.StatusInvalidArgument))
+			return
 		}
 
 		authorizeAccountInput := AuthorizeAccountUserInput{
@@ -99,28 +97,16 @@ func (policyEnforcementPoint *RPCPolicyEnforcementPoint) AuthorizeAccount(next h
 	})
 }
 
-func getAddressFromParamsArray(ctx context.Context, params AuthorizeAccountRPCBody, usesAddressParam bool) (*address.Address, error) {
-	var rpcAddress []AuthorizeAccountRPCParams
-	err := json.Unmarshal(params.Params, &rpcAddress)
+// getSigningAccount returns the account the request signs with, from either param form. It uses the
+// same unwrap and the same struct decode as the handler, so the account authorized here is the one
+// signed with.
+func getSigningAccount(ctx context.Context, params AuthorizeAccountRPCBody, usesAddressParam bool) (*address.Address, error) {
+	object, err := rpcinfra.SingleParamsObject(params.Params)
 	if err != nil {
 		return nil, err
 	}
-	if len(rpcAddress) == 0 {
-		return nil, errors.New("no account params provided")
-	}
-	signer := rpcAddress[0].signerAddress(usesAddressParam)
-	addr, err := address.NewFromHexString(signer)
-	if err != nil {
-		logger.LogEntry(ctx).Errorf("invalid account address: %s", signer)
-		return nil, err
-	}
-	return &addr, nil
-}
-
-func getAddressFromParamsObject(ctx context.Context, params AuthorizeAccountRPCBody, usesAddressParam bool) (*address.Address, error) {
 	var rpcAddress AuthorizeAccountRPCParams
-	err := json.Unmarshal(params.Params, &rpcAddress)
-	if err != nil {
+	if err = json.Unmarshal(object, &rpcAddress); err != nil {
 		return nil, err
 	}
 	signer := rpcAddress.signerAddress(usesAddressParam)

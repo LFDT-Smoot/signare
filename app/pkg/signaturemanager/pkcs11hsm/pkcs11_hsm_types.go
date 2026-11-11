@@ -13,6 +13,15 @@ const (
 	CurveSecp256k1 Curve = "secp256k1"
 )
 
+// pkcsErrTranslator maps PKCS#11 return codes onto signature manager errors. The values are shared
+// across every request that hits a given code, so they must be treated as immutable: see
+// signaturemanager.Error.WithMessage, which returns a copy rather than mutating the receiver.
+//
+// The persistence layer has the same shape, a dialect error map holding shared *persistence.Error
+// values, and its WithMessage still mutates. It is deliberately left alone here: no caller there
+// chains WithMessage onto a translated error, so it is latent rather than live, and its TranslateError
+// hands out the shared instance directly, so copying at WithMessage alone would not fully de-share it.
+// Fixing it belongs with that layer rather than in this change.
 var pkcsErrTranslator = map[pkcs11.Error]*signaturemanager.Error{
 	pkcs11.CKR_SLOT_ID_INVALID:              signaturemanager.NewInvalidSlotError(),
 	pkcs11.CKR_PIN_INCORRECT:                signaturemanager.NewPinIncorrectError(),

@@ -73,6 +73,7 @@ func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationAccountsRemove(ctx 
 func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationUsersCreate(ctx context.Context, data generatedhttpinfra.ApplicationUsersCreateRequest) (*generatedhttpinfra.ApplicationUsersCreateResponseWrapper, *httpinfra.HTTPError) {
 	input := user.CreateUserInput{
 		ApplicationID: data.ApplicationId,
+		Caller:        callerFromContext(ctx),
 	}
 	if data.UserCreation.Meta != nil && data.UserCreation.Meta.Id != nil {
 		input.ID = data.UserCreation.Meta.Id
@@ -124,6 +125,7 @@ func (adapter *DefaultApplicationAPIAdapter) AdaptApplicationUsersEdit(ctx conte
 			ApplicationID: data.ApplicationId,
 		},
 		ResourceVersion: *data.UserUpdate.Meta.ResourceVersion,
+		Caller:          callerFromContext(ctx),
 	}
 	if data.UserUpdate.Spec != nil && data.UserUpdate.Spec.Roles != nil {
 		input.Roles = *data.UserUpdate.Spec.Roles

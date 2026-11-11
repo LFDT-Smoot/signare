@@ -62,7 +62,7 @@ Our RBAC model consists of the following concepts:
   <figcaption>signare RBAC model diagram</figcaption>
 </figure>
 
-Three YAML files define the RBAC model, you can configure the RBAC as you wish by editing them. Let's dive into how to configure those files: 
+Four YAML files define the RBAC model, you can configure the RBAC as you wish by editing them. Let's dive into how to configure those files: 
 
 ### How to generate new actions
 
@@ -73,7 +73,7 @@ A command in the ``/app`` directory of the signare project, automatically genera
 make tools.generate 
 ``` 
 
-The result of the `make tools.generate` command is outputted in `app/include/rbac/actions/generated.yaml`.
+The result of the `make tools.generate` command is outputted in `app/include/rbac/actions-generated.yaml`.
 
 Below is an example of how a defined action looks:
 
@@ -91,7 +91,10 @@ actions:
   - rpc.method.eth_accounts
   - rpc.method.eth_signTransaction
   - rpc.method.eth_signTypedData
+  - rpc.method.personal_sign
 ```
+
+Because those actions have no operation ID, they are also the list of actions exempt from the 1 to 1 check that `make tools.validate_rbac` runs, which is why the validator reads this file directly. Only a published RPC method belongs here: the RBAC coverage tests assert that every method the signare publishes has an action in this file that a permission grants, and that every entry in this file names a method the signare publishes. Adding an entry for anything else fails those tests, which `make unit_test` runs.
 
 ### How to edit permissions
 
@@ -103,6 +106,10 @@ Move over to ``/app/include/rbac`` and by editing the file ``permissions.yaml`` 
     actions:
       - rpc.method.eth_signTransaction
       - rpc.method.eth_signTypedData
+  - id: allow-user-personal-sign-actions
+    description: Grants access to sign EIP-191 personal messages
+    actions:
+      - rpc.method.personal_sign
 ```
 
 ### How to edit roles
@@ -138,9 +145,14 @@ The default RBAC configuration consists of the following roles and allowed actio
 | **signer-admin**       | Admin     | Admins, Users, Accounts, Applications, Modules, Slots | ✗                                                    |
 | **application-admin**  | User      | Users, Accounts                                       | eth_generateAccount, eth_removeAccount, eth_accounts |
 | **transaction-signer** | User      | ✗                                                     | eth_signTransaction, eth_signTypedData               |
+| **message-signer**     | User      | ✗                                                     | personal_sign                                        |
+
+``personal_sign`` is granted by its own role rather than bundled into ``transaction-signer``, so an identity that
+only needs to authenticate (for example via Sign-In With Ethereum) can be given ``message-signer`` without also
+being able to sign transactions. A user that needs both is assigned both roles.
 
 ### Transaction signing
 
-One special case in our RBAC model is the access model configured for the account signing RPC methods, ``eth_signTransaction`` and ``eth_signTypedData``. 
+One special case in our RBAC model is the access model configured for the account signing RPC methods, ``eth_signTransaction``, ``eth_signTypedData`` and ``personal_sign``. 
 Beyond the role-based permission to call the method, the signing account must be enabled in the accounts' list of the user defined in the HTTP header of the request. 
-The signing account is taken from the `from` field for ``eth_signTransaction`` and from the `address` field for ``eth_signTypedData``.
+The signing account is taken from the `from` field for ``eth_signTransaction`` and from the `address` field for ``eth_signTypedData`` and ``personal_sign``.

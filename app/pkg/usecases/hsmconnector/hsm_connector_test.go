@@ -14,6 +14,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/pkg/entities/address"
 	"github.com/lfdt-smoot/signare/app/pkg/graph"
 	"github.com/lfdt-smoot/signare/app/pkg/internal/errors"
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/application"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmmodule"
@@ -21,6 +22,7 @@ import (
 	"github.com/lfdt-smoot/signare/app/test/dbtesthelper"
 	"github.com/lfdt-smoot/signare/app/test/signaturemanagertesthelper"
 
+	btcececdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +36,7 @@ var (
 	chainID       = entities.NewInt256FromInt(44844)
 	chainIDHex    = entities.NewHexInt256(big.NewInt(44844))
 	validAddress  = address.MustNewFromHexString("0x970e8128ab834e8eac17ab8e3812f010678cf791")
-	slotPin       = signaturemanagertesthelper.SlotPin
+	slotPinSource = signaturemanagertesthelper.SlotPinSource
 )
 
 func TestMain(m *testing.M) {
@@ -61,9 +63,13 @@ func TestMain(m *testing.M) {
 }
 
 func TestProvideDefaultUseCase(t *testing.T) {
+	pinResolver, resolverErr := signaturemanagertesthelper.NewPinResolver()
+	require.NoError(t, resolverErr)
+
 	t.Run("success", func(t *testing.T) {
 		options := hsmconnector.DefaultUseCaseOptions{
 			DigitalSignatureManagerFactory: app.DigitalSignatureManagerFactory,
+			PinResolver:                    pinResolver,
 		}
 		defaultUseCase, err := hsmconnector.ProvideDefaultHSMConnector(options)
 		require.NoError(t, err)
@@ -72,12 +78,21 @@ func TestProvideDefaultUseCase(t *testing.T) {
 	t.Run("nil digitalSignatureManagerFactory", func(t *testing.T) {
 		options := hsmconnector.DefaultUseCaseOptions{
 			DigitalSignatureManagerFactory: nil,
+			PinResolver:                    pinResolver,
 		}
 		defaultUseCase, err := hsmconnector.ProvideDefaultHSMConnector(options)
 		require.Error(t, err)
 		require.Nil(t, defaultUseCase)
 	})
-
+	t.Run("nil pinResolver", func(t *testing.T) {
+		options := hsmconnector.DefaultUseCaseOptions{
+			DigitalSignatureManagerFactory: app.DigitalSignatureManagerFactory,
+			PinResolver:                    nil,
+		}
+		defaultUseCase, err := hsmconnector.ProvideDefaultHSMConnector(options)
+		require.Error(t, err)
+		require.Nil(t, defaultUseCase)
+	})
 }
 
 func TestDefaultUseCase_GenerateAddress(t *testing.T) {
@@ -85,7 +100,7 @@ func TestDefaultUseCase_GenerateAddress(t *testing.T) {
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -97,7 +112,7 @@ func TestDefaultUseCase_GenerateAddress(t *testing.T) {
 		removeAddressInput := hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			Address: generateAddressOutput.Address,
@@ -111,7 +126,7 @@ func TestDefaultUseCase_GenerateAddress(t *testing.T) {
 		generateAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: "invalid module kind",
 			},
 		}
@@ -127,7 +142,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 		createAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -139,7 +154,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 			Address: createAddressOutput.Address,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -152,7 +167,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 		removeAddressInput := hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: "invalid type",
 			},
 			Address: validAddress,
@@ -165,7 +180,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 		removeAddressInput = hsmconnector.RemoveAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			Address: address.ZeroAddress,
@@ -181,7 +196,7 @@ func TestDefaultUseCase_RemoveAddress(t *testing.T) {
 			Address: validAddress,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -197,7 +212,7 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 		createAddressInput := hsmconnector.GenerateAddressInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -211,7 +226,7 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 		listAddressInput := hsmconnector.ListAddressesInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 		}
@@ -244,7 +259,7 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 		listAddressInput := hsmconnector.ListAddressesInput{
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: "invalid module kind",
 			},
 		}
@@ -253,6 +268,48 @@ func TestDefaultUseCase_ListAddress(t *testing.T) {
 		require.True(t, errors.IsInvalidArgument(listAddressErr))
 		require.Nil(t, listAddressOutput)
 	})
+}
+
+// requireSignedTx asserts that the output reports the expected transaction type and that its
+// transaction re-encodes to exactly the bytes in SignedTx. That second assertion is the one that
+// matters: SignTx derives SignedTx from the envelope rather than from RLPEncode, so without it the
+// two routes could diverge and only the golden-vector fixtures would notice.
+func requireSignedTx(t *testing.T, out *hsmconnector.SignTxOutput, wantType string) hsmconnector.SignedTransaction {
+	t.Helper()
+	require.NotNil(t, out)
+	require.Equal(t, wantType, out.TxType)
+	require.NotNil(t, out.Transaction)
+	encoded, err := out.Transaction.RLPEncode()
+	require.NoError(t, err)
+	require.Equal(t, out.SignedTx, encoded.Encode())
+	return out.Transaction
+}
+
+// requireEIP2930 asserts the output holds a signed type-1 transaction and returns it.
+func requireEIP2930(t *testing.T, out *hsmconnector.SignTxOutput) hsmconnector.EIP2930Transaction {
+	t.Helper()
+	signed := requireSignedTx(t, out, entities.TransactionType1EIP2930)
+	tx, ok := signed.(hsmconnector.EIP2930Transaction)
+	require.Truef(t, ok, "expected an EIP2930Transaction, got %T", signed)
+	return tx
+}
+
+// requireEIP1559 asserts the output holds a signed type-2 transaction and returns it.
+func requireEIP1559(t *testing.T, out *hsmconnector.SignTxOutput) hsmconnector.EIP1559Transaction {
+	t.Helper()
+	signed := requireSignedTx(t, out, entities.TransactionType2EIP1559)
+	tx, ok := signed.(hsmconnector.EIP1559Transaction)
+	require.Truef(t, ok, "expected an EIP1559Transaction, got %T", signed)
+	return tx
+}
+
+// requireLegacy asserts the output holds a signed type-0 transaction and returns it.
+func requireLegacy(t *testing.T, out *hsmconnector.SignTxOutput) hsmconnector.EthereumTransaction {
+	t.Helper()
+	signed := requireSignedTx(t, out, entities.TransactionType0Legacy)
+	tx, ok := signed.(hsmconnector.EthereumTransaction)
+	require.Truef(t, ok, "expected an EthereumTransaction, got %T", signed)
+	return tx
 }
 
 func TestDefaultUseCase_SignTx(t *testing.T) {
@@ -267,7 +324,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -300,7 +357,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From:     address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -323,7 +380,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -360,7 +417,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -397,7 +454,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
+		requireEIP1559(t, signTxOutput)
 		require.NotEmpty(t, signTxOutput.SignedTx)
 	})
 
@@ -409,7 +466,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -441,8 +498,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Nil(t, signTxOutput.EIP1559Tx.To)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Nil(t, eip1559Tx.To)
 	})
 
 	t.Run("success: EIP-1559 transaction with default gas", func(t *testing.T) {
@@ -453,7 +510,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -478,7 +535,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
+		requireEIP1559(t, signTxOutput)
 	})
 
 	t.Run("success: EIP-1559 transaction with nil value", func(t *testing.T) {
@@ -489,7 +546,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -517,7 +574,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
+		requireEIP1559(t, signTxOutput)
 	})
 
 	t.Run("success: EIP-1559 transaction with empty access list", func(t *testing.T) {
@@ -530,7 +587,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -562,8 +619,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Len(t, signTxOutput.EIP1559Tx.AccessList, 0)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Len(t, eip1559Tx.AccessList, 0)
 	})
 
 	t.Run("success: EIP-1559 transaction with populated access list", func(t *testing.T) {
@@ -578,7 +635,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -619,8 +676,8 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Len(t, signTxOutput.EIP1559Tx.AccessList, 2)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Len(t, eip1559Tx.AccessList, 2)
 	})
 
 	t.Run("success: EIP-1559 output contains valid signature fields", func(t *testing.T) {
@@ -631,7 +688,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -663,14 +720,14 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.NotNil(t, signTxOutput.EIP1559Tx.Signature)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.NotNil(t, eip1559Tx.Signature)
 		// YParity should be 0 or 1 for EIP-1559
-		yParity := signTxOutput.EIP1559Tx.Signature.YParity.Int64()
+		yParity := eip1559Tx.Signature.YParity.Int64()
 		require.True(t, yParity == 0 || yParity == 1, "YParity should be 0 or 1, got %d", yParity)
 		// R and S should be non-zero
-		require.NotEqual(t, big.NewInt(0), &signTxOutput.EIP1559Tx.Signature.R.Int)
-		require.NotEqual(t, big.NewInt(0), &signTxOutput.EIP1559Tx.Signature.S.Int)
+		require.NotZero(t, eip1559Tx.Signature.R.Sign())
+		require.NotZero(t, eip1559Tx.Signature.S.Sign())
 	})
 
 	t.Run("success: EIP-1559 output preserves input fields correctly", func(t *testing.T) {
@@ -681,7 +738,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -713,13 +770,13 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
 		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.EIP1559Tx)
-		require.Equal(t, signTxInput.From.String(), signTxOutput.EIP1559Tx.From.String())
-		require.Equal(t, signTxInput.To.String(), signTxOutput.EIP1559Tx.To.String())
-		require.Equal(t, entities.UInt64(5000), signTxOutput.EIP1559Tx.Gas.UInt64)
-		require.Equal(t, int64(100), signTxOutput.EIP1559Tx.MaxFeePerGas.Int64())
-		require.Equal(t, int64(10), signTxOutput.EIP1559Tx.MaxPriorityFeePerGas.Int64())
-		require.Equal(t, nonce, signTxOutput.EIP1559Tx.Nonce.UInt64)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Equal(t, signTxInput.From.String(), eip1559Tx.From.String())
+		require.Equal(t, signTxInput.To.String(), eip1559Tx.To.String())
+		require.Equal(t, entities.UInt64(5000), eip1559Tx.Gas.UInt64)
+		require.Equal(t, int64(100), eip1559Tx.MaxFeePerGas.Int64())
+		require.Equal(t, int64(10), eip1559Tx.MaxPriorityFeePerGas.Int64())
+		require.Equal(t, nonce, eip1559Tx.Nonce.UInt64)
 	})
 
 	t.Run("success: EIP-1559 signed tx has type 2 prefix", func(t *testing.T) {
@@ -730,7 +787,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -771,7 +828,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -817,7 +874,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From:     address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -830,8 +887,9 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
 		require.NoError(t, err)
-		require.NotNil(t, signTxOutput)
-		require.NotNil(t, signTxOutput.Transaction)
+		legacyTx := requireLegacy(t, signTxOutput)
+		// An omitted gasPrice is signed as legacy with a zero gasPrice, not rejected.
+		require.Equal(t, int64(0), legacyTx.GasPrice.BigInt().Int64())
 	})
 
 	t.Run("failure: partial EIP-1559 fields (only MaxFeePerGas)", func(t *testing.T) {
@@ -841,7 +899,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -869,7 +927,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -890,7 +948,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		require.Nil(t, signTxOutput)
 	})
 
-	t.Run("failure: partial EIP-1559 fields (MaxFeePerGas and MaxPriorityFeePerGas but no AccessList)", func(t *testing.T) {
+	t.Run("success: EIP-1559 transaction without an access list", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		maxFeePerGas := big.NewInt(100)
 		maxPriorityFeePerGas := big.NewInt(10)
@@ -898,7 +956,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -919,22 +977,219 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			},
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, signTxOutput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		eip1559Tx := requireEIP1559(t, signTxOutput)
+		require.Len(t, eip1559Tx.AccessList, 0)
+		// EIP-1559 (Type 2) transactions must start with 0x02
+		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x02"))
 	})
 
-	t.Run("failure: type 1 (EIP-2930) transaction is not supported", func(t *testing.T) {
+	t.Run("success: EIP-2930 transaction with empty access list", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
 			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 1000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Len(t, eip2930Tx.AccessList, 0)
+		require.NotEmpty(t, signTxOutput.SignedTx)
+		// EIP-2930 (Type 1) transactions must start with 0x01
+		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x01"))
+	})
+
+	t.Run("success: EIP-2930 transaction with populated access list", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+		storageKey1 := entities.HexBytes32{}
+		storageKey2 := entities.HexBytes32{}
+		storageKey2[31] = 0x01
+		anotherAddress := address.MustNewFromHexString("0x1234567890abcdef1234567890abcdef12345678")
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				PinSource:  slotPinSource,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 2000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{
+				{
+					Address:     toAddress,
+					StorageKeys: []entities.HexBytes32{storageKey1, storageKey2},
+				},
+				{
+					Address:     anotherAddress,
+					StorageKeys: []entities.HexBytes32{},
+				},
+			},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Len(t, eip2930Tx.AccessList, 2)
+	})
+
+	t.Run("success: EIP-2930 output contains valid signature and preserves input fields", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				PinSource:  slotPinSource,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 5000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.NotNil(t, eip2930Tx.Signature)
+		// YParity should be 0 or 1 for EIP-2930
+		yParity := eip2930Tx.Signature.YParity.Int64()
+		require.True(t, yParity == 0 || yParity == 1, "YParity should be 0 or 1, got %d", yParity)
+		require.NotZero(t, eip2930Tx.Signature.R.Sign())
+		require.NotZero(t, eip2930Tx.Signature.S.Sign())
+		require.Equal(t, signTxInput.From.String(), eip2930Tx.From.String())
+		require.Equal(t, signTxInput.To.String(), eip2930Tx.To.String())
+		require.Equal(t, entities.UInt64(5000), eip2930Tx.Gas.UInt64)
+		require.Equal(t, nonce, eip2930Tx.Nonce.UInt64)
+	})
+
+	t.Run("success: EIP-2930 signature EC-recovers the expected sender", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				PinSource:  slotPinSource,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   &toAddress,
+			Gas: &entities.HexUInt64{
+				UInt64: 5000,
+			},
+			GasPrice: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *gasPrice,
+				},
+			},
+			Value: &entities.HexInt256{
+				Int256: entities.Int256{
+					Int: *value,
+				},
+			},
+			Data: *data,
+			Nonce: entities.HexUInt64{
+				UInt64: nonce,
+			},
+			AccessList: hsmconnector.AccessList{},
+		}
+		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.NotNil(t, eip2930Tx.Signature)
+
+		// Recover the signer from the type-1 signing hash and the emitted (yParity, r, s), which is
+		// what a node does on receipt. This proves the signature commits to the 0x01-prefixed hash
+		// and that yParity carries the correct recovery id. Asserting on the echoed From field
+		// cannot catch either mistake, because the connector copies it from the input.
+		hash, err := eip2930Tx.Hash()
+		require.NoError(t, err)
+
+		signature := eip2930Tx.Signature
+		// RecoverCompact expects [27+recid || R || S] with R and S left-padded to 32 bytes.
+		compactSignature := make([]byte, 0, 65)
+		compactSignature = append(compactSignature, byte(27+signature.YParity.Int64()))
+		compactSignature = append(compactSignature, signature.R.BigInt().FillBytes(make([]byte, 32))...)
+		compactSignature = append(compactSignature, signature.S.BigInt().FillBytes(make([]byte, 32))...)
+
+		publicKey, _, err := btcececdsa.RecoverCompact(compactSignature, hash.Bytes())
+		require.NoError(t, err)
+
+		recovered, err := signaturemanager.DeriveAddressFromPublicKey(publicKey.SerializeUncompressed())
+		require.NoError(t, err)
+		require.Equal(t, signTxInput.From.String(), recovered.String())
+	})
+
+	t.Run("success: EIP-2930 transaction with nil To (contract deployment)", func(t *testing.T) {
+		data := entities.NewHexBytes(hexStringToBytes("0x1234"))
+		signTxInput := hsmconnector.SignTxInput{
+			ChainID: *chainIDHex,
+			SlotConnectionData: hsmconnector.SlotConnectionData{
+				Slot:       slotID,
+				PinSource:  slotPinSource,
+				ModuleKind: hsmconnector.SoftHSMModuleKind,
+			},
+			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+			To:   nil,
 			Gas: &entities.HexUInt64{
 				UInt64: 1000,
 			},
@@ -950,34 +1205,25 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			AccessList: hsmconnector.AccessList{},
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, signTxOutput)
-		useCaseErr, ok := errors.CastAsUseCaseError(err)
-		require.True(t, ok)
-		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Nil(t, eip2930Tx.To)
 	})
 
-	t.Run("failure: type 1 (EIP-2930) transaction is not supported (non-empty AccessList)", func(t *testing.T) {
+	t.Run("success: EIP-2930 transaction with an access list and no gas price", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
-		storageKey := entities.HexBytes32{}
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
 			To:   &toAddress,
 			Gas: &entities.HexUInt64{
 				UInt64: 1000,
-			},
-			GasPrice: &entities.HexInt256{
-				Int256: entities.Int256{
-					Int: *gasPrice,
-				},
 			},
 			Data: *data,
 			Nonce: entities.HexUInt64{
@@ -986,18 +1232,18 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			AccessList: hsmconnector.AccessList{
 				{
 					Address:     toAddress,
-					StorageKeys: []entities.HexBytes32{storageKey},
+					StorageKeys: []entities.HexBytes32{{}},
 				},
 			},
 		}
 		signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
-		require.Error(t, err)
-		require.True(t, errors.IsInvalidArgument(err))
-		require.Nil(t, signTxOutput)
-		useCaseErr, ok := errors.CastAsUseCaseError(err)
-		require.True(t, ok)
-		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		require.NoError(t, err)
+		require.NotNil(t, signTxOutput)
+		// The access list must not be dropped by signing the transaction as legacy.
+		eip2930Tx := requireEIP2930(t, signTxOutput)
+		require.Len(t, eip2930Tx.AccessList, 1)
+		require.Equal(t, int64(0), eip2930Tx.GasPrice.BigInt().Int64())
+		require.True(t, strings.HasPrefix(signTxOutput.SignedTx, "0x01"))
 	})
 
 	t.Run("failure: type 3 (EIP-4844) transaction is not supported (MaxFeePerBlobGas field is not nil)", func(t *testing.T) {
@@ -1009,7 +1255,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1056,7 +1302,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1100,7 +1346,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1148,7 +1394,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1195,7 +1441,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1238,7 +1484,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1278,6 +1524,102 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
+	// An access list is also carried by transaction types the signer does not support. The presence of a
+	// blob or authorization field must win over it, so that an unsupported request is rejected instead of
+	// signed as a Type 1 transaction with that field silently discarded.
+	unsupportedWithAccessList := []struct {
+		name  string
+		apply func(*hsmconnector.SignTxInput)
+	}{
+		{
+			name: "MaxFeePerBlobGas",
+			apply: func(in *hsmconnector.SignTxInput) {
+				in.MaxFeePerBlobGas = &entities.HexInt256{Int256: entities.Int256{Int: *big.NewInt(1)}}
+			},
+		},
+		{
+			name: "BlobVersionedHashes",
+			apply: func(in *hsmconnector.SignTxInput) {
+				in.BlobVersionedHashes = []entities.HexBytes32{{}}
+			},
+		},
+		{
+			name: "AuthorizationList",
+			apply: func(in *hsmconnector.SignTxInput) {
+				in.AuthorizationList = hsmconnector.AuthorizationList{}
+			},
+		},
+	}
+	for _, unsupported := range unsupportedWithAccessList {
+		t.Run("failure: unsupported transaction type (AccessList and "+unsupported.name+" are set)", func(t *testing.T) {
+			data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
+			signTxInput := hsmconnector.SignTxInput{
+				ChainID: *chainIDHex,
+				SlotConnectionData: hsmconnector.SlotConnectionData{
+					Slot:       slotID,
+					PinSource:  slotPinSource,
+					ModuleKind: hsmconnector.SoftHSMModuleKind,
+				},
+				From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+				To:   &toAddress,
+				Gas: &entities.HexUInt64{
+					UInt64: 1000,
+				},
+				GasPrice: &entities.HexInt256{
+					Int256: entities.Int256{
+						Int: *gasPrice,
+					},
+				},
+				Data: *data,
+				Nonce: entities.HexUInt64{
+					UInt64: nonce,
+				},
+				AccessList: hsmconnector.AccessList{
+					{
+						Address:     toAddress,
+						StorageKeys: []entities.HexBytes32{{}},
+					},
+				},
+			}
+			unsupported.apply(&signTxInput)
+
+			signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+			require.Error(t, err)
+			require.True(t, errors.IsInvalidArgument(err))
+			require.Nil(t, signTxOutput)
+			useCaseErr, ok := errors.CastAsUseCaseError(err)
+			require.True(t, ok)
+			require.NotNil(t, useCaseErr.HumanReadableMessage())
+			require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		})
+	}
+
+	// Regression guard: with no gas pricing field to key off, these requests used to fall through to
+	// legacy and be signed with the blob or authorization field silently dropped from the payload.
+	for _, unsupported := range unsupportedWithAccessList {
+		t.Run("failure: unsupported transaction type ("+unsupported.name+" alone)", func(t *testing.T) {
+			signTxInput := hsmconnector.SignTxInput{
+				ChainID: *chainIDHex,
+				SlotConnectionData: hsmconnector.SlotConnectionData{
+					Slot:       slotID,
+					PinSource:  slotPinSource,
+					ModuleKind: hsmconnector.SoftHSMModuleKind,
+				},
+				From:  address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
+				To:    &toAddress,
+				Nonce: entities.HexUInt64{UInt64: nonce},
+			}
+			unsupported.apply(&signTxInput)
+
+			signTxOutput, err := app.HSMConnector.SignTx(ctx, signTxInput)
+			require.Error(t, err)
+			require.Nil(t, signTxOutput)
+			useCaseErr, ok := errors.CastAsUseCaseError(err)
+			require.True(t, ok)
+			require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
+		})
+	}
+
 	t.Run("failure: ambiguous transaction type (GasPrice and MaxFeePerGas are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		maxFeePerGas := big.NewInt(100)
@@ -1285,7 +1627,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1322,7 +1664,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1352,14 +1694,14 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
-	t.Run("failure: ambiguous transaction type (GasPrice and MaxFeePerBlobGas are set)", func(t *testing.T) {
+	t.Run("failure: unsupported transaction type (GasPrice and MaxFeePerBlobGas are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		maxFeePerBlobGas := big.NewInt(1)
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1386,16 +1728,16 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		useCaseErr, ok := errors.CastAsUseCaseError(err)
 		require.True(t, ok)
 		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
+		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
-	t.Run("failure: ambiguous transaction type (GasPrice and BlobVersionedHashes are set)", func(t *testing.T) {
+	t.Run("failure: unsupported transaction type (GasPrice and BlobVersionedHashes are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1418,16 +1760,16 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		useCaseErr, ok := errors.CastAsUseCaseError(err)
 		require.True(t, ok)
 		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
+		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
-	t.Run("failure: ambiguous transaction type (GasPrice and AuthorizationList are set)", func(t *testing.T) {
+	t.Run("failure: unsupported transaction type (GasPrice and AuthorizationList are set)", func(t *testing.T) {
 		data := entities.NewHexBytes(hexStringToBytes("0x1f170873"))
 		signTxInput := hsmconnector.SignTxInput{
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1450,7 +1792,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 		useCaseErr, ok := errors.CastAsUseCaseError(err)
 		require.True(t, ok)
 		require.NotNil(t, useCaseErr.HumanReadableMessage())
-		require.Equal(t, "Could not determine transaction type", *useCaseErr.HumanReadableMessage())
+		require.Equal(t, "Not supported transaction type", *useCaseErr.HumanReadableMessage())
 	})
 
 	t.Run("failure: ambiguous transaction type (GasPrice, MaxFeePerGas and AccessList are set)", func(t *testing.T) {
@@ -1460,7 +1802,7 @@ func TestDefaultUseCase_SignTx(t *testing.T) {
 			ChainID: *chainIDHex,
 			SlotConnectionData: hsmconnector.SlotConnectionData{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			},
 			From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1506,7 +1848,7 @@ func TestDefaultUseCase_SignTx_RejectsNonPositiveChainID(t *testing.T) {
 	from := address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress)
 	slot := hsmconnector.SlotConnectionData{
 		Slot:       slotID,
-		Pin:        slotPin,
+		PinSource:  slotPinSource,
 		ModuleKind: hsmconnector.SoftHSMModuleKind,
 	}
 
@@ -1593,7 +1935,7 @@ func provisionTest(ctx context.Context) error {
 		ApplicationID: applicationID,
 		HSMModuleID:   moduleID,
 		Slot:          slotID,
-		Pin:           slotPin,
+		PinSource:     slotPinSource,
 	}
 	_, err = app.HSMSlotUseCase.CreateHSMSlot(ctx, createSlotInput)
 	if err != nil {
@@ -1619,7 +1961,7 @@ func Benchmark_Concurrent_SignTx(b *testing.B) {
 				ChainID: *chainIDHex,
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 				From: address.MustNewFromHexString(signaturemanagertesthelper.ImportedKeyAddress),
@@ -1662,7 +2004,7 @@ func Benchmark_Concurrent_GenerateAddress(b *testing.B) {
 			generateAddressInput := hsmconnector.GenerateAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -1686,7 +2028,7 @@ func Benchmark_Concurrent_RemoveAddress(b *testing.B) {
 			generateAddressInput := hsmconnector.GenerateAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -1698,7 +2040,7 @@ func Benchmark_Concurrent_RemoveAddress(b *testing.B) {
 			removeAddressInput := hsmconnector.RemoveAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 				Address: generateAddressOutput.Address,
@@ -1723,7 +2065,7 @@ func Benchmark_Concurrent_ListAddresses(b *testing.B) {
 			createAddressInput := hsmconnector.GenerateAddressInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -1739,7 +2081,7 @@ func Benchmark_Concurrent_ListAddresses(b *testing.B) {
 			listAddressInput := hsmconnector.ListAddressesInput{
 				SlotConnectionData: hsmconnector.SlotConnectionData{
 					Slot:       slotID,
-					Pin:        slotPin,
+					PinSource:  slotPinSource,
 					ModuleKind: hsmconnector.SoftHSMModuleKind,
 				},
 			}
@@ -1763,7 +2105,7 @@ func Benchmark_Concurrent_IsAlive(b *testing.B) {
 			defer wg.Done()
 			isAliveInput := hsmconnector.IsAliveInput{
 				Slot:       slotID,
-				Pin:        slotPin,
+				PinSource:  slotPinSource,
 				ModuleKind: hsmconnector.SoftHSMModuleKind,
 			}
 			_, err := app.HSMConnector.IsAlive(ctx, isAliveInput)

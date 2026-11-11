@@ -5,12 +5,14 @@ package graph
 import (
 	"github.com/google/wire"
 
+	"github.com/lfdt-smoot/signare/app/pkg/signaturemanager"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/hsmconnector"
 
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/referentialintegrity"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/transactionalmanager"
 
 	embedded "github.com/lfdt-smoot/signare/app"
+	"github.com/lfdt-smoot/signare/app/pkg/adapters/pinsource/infile/pinsourceinfile"
 	"github.com/lfdt-smoot/signare/app/pkg/adapters/storage/infile/roleinfile"
 	"github.com/lfdt-smoot/signare/app/pkg/commons/metricrecorder"
 	"github.com/lfdt-smoot/signare/app/pkg/usecases/admin"
@@ -97,8 +99,10 @@ var useCasesSet = wire.NewSet(
 	wire.Struct(new(role.DefaultRoleUseCaseOptions), "*"),
 
 	// Digital Signature Manager DigitalSignatureManagerFactory
+	providePinResolver,
 	provideSoftHSMConfiguration,
 	provideAKVConfiguration,
+	provideHardwareOnly,
 	hsmconnector.ProvideDefaultDigitalSignatureManagerFactory,
 	wire.Bind(new(hsmconnector.DigitalSignatureManagerFactory), new(*hsmconnector.DefaultDigitalSignatureManagerFactory)),
 	wire.Struct(new(hsmconnector.DefaultDigitalSignatureManagerFactoryOptions), "*"),
@@ -129,12 +133,31 @@ func initializeUseCases(
 	return &useCasesGraph{}, nil
 }
 
+// providePinResolver builds the resolver that turns a slot's pin source into the PIN it names. The
+// directory is optional, so a deployment with no PKCS#11 slot, or one whose slots still carry a stored
+// PIN, starts without it and only hears about it if a source is actually used.
+func providePinResolver(config Config) (hsmconnector.PinResolver, error) {
+	options := pinsourceinfile.ResolverOptions{}
+	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.SoftHSM != nil {
+		options.Directory = config.Libraries.HSMModules.SoftHSM.PinSourceDirectory
+	}
+	return pinsourceinfile.NewResolver(options)
+}
+
 func provideSoftHSMConfiguration(config Config) *hsmconnector.PKCS11Library {
 	if config.Libraries.HSMModules != nil && config.Libraries.HSMModules.SoftHSM != nil {
 		softHSMConfig := hsmconnector.PKCS11Library(config.Libraries.HSMModules.SoftHSM.Library)
 		return &softHSMConfig
 	}
 	return nil
+}
+
+// provideHardwareOnly reads the deployment-wide key policy; absent configuration means off.
+func provideHardwareOnly(config Config) signaturemanager.HardwareOnly {
+	if config.Libraries.HSMModules != nil {
+		return signaturemanager.HardwareOnly(config.Libraries.HSMModules.HardwareOnly)
+	}
+	return false
 }
 
 func provideAKVConfiguration(config Config) *string {

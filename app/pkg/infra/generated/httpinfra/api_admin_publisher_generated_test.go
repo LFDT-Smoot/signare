@@ -116,10 +116,17 @@ func Test_PublishAdminSlotsUpdateConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Test_PublishAdminSlotsUpdatePin_Success test the PublishAdminSlotsUpdatePin happy path
-func Test_PublishAdminSlotsUpdatePin_Success(t *testing.T) {
+// Test_PublishAdminSlotsUpdatePinSource_Success test the PublishAdminSlotsUpdatePinSource happy path
+func Test_PublishAdminSlotsUpdatePinSource_Success(t *testing.T) {
 	http := httpinfra.ProvideHTTPRouter()
-	err := generatedHTTPInfra.PublishAdminSlotsUpdatePin(http, generatedHTTPInfra.DefaultAdminAPIHTTPHandler{})
+	err := generatedHTTPInfra.PublishAdminSlotsUpdatePinSource(http, generatedHTTPInfra.DefaultAdminAPIHTTPHandler{})
+	require.NoError(t, err)
+}
+
+// Test_PublishAdminSlotsVerifyPinSource_Success test the PublishAdminSlotsVerifyPinSource happy path
+func Test_PublishAdminSlotsVerifyPinSource_Success(t *testing.T) {
+	http := httpinfra.ProvideHTTPRouter()
+	err := generatedHTTPInfra.PublishAdminSlotsVerifyPinSource(http, generatedHTTPInfra.DefaultAdminAPIHTTPHandler{})
 	require.NoError(t, err)
 }
 

@@ -46,19 +46,19 @@ type AuthorizeAccountRPCBody struct {
 }
 
 // AuthorizeAccountRPCParams is used to unmarshal the signer account of a request. eth_signTransaction
-// carries it in [from]; eth_signTypedData carries it in [address].
+// carries it in [from]; eth_signTypedData and personal_sign carry it in [address].
 type AuthorizeAccountRPCParams struct {
 	// From is an Ethereum account, used by eth_signTransaction.
 	From string `json:"from"`
-	// Address is an Ethereum account, used by eth_signTypedData.
+	// Address is an Ethereum account, used by eth_signTypedData and personal_sign.
 	Address string `json:"address"`
 }
 
 // signerAddress returns the account the request signs with. The caller selects the field from the
 // action being authorized so the check keys off the same param the signing path reads: the `address`
-// param for eth_signTypedData, the `from` param for eth_signTransaction. It never falls back across
-// fields, so a stray `from` on a typed-data request (or vice versa) cannot divert authorization to a
-// different account than the one that is actually signed.
+// param for eth_signTypedData and personal_sign, the `from` param for eth_signTransaction. It never
+// falls back across fields, so a stray `from` on a typed-data request (or vice versa) cannot divert
+// authorization to a different account than the one that is actually signed.
 func (p AuthorizeAccountRPCParams) signerAddress(usesAddressParam bool) string {
 	if usesAddressParam {
 		return p.Address

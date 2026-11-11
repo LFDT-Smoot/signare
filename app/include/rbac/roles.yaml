@@ -14,3 +14,8 @@ roles:
     scope: application
     permissions:
       - allow-user-transaction-sign-actions
+  - id: message-signer
+    description: User of a given application with EIP-191 personal message signing permissions
+    scope: application
+    permissions:
+      - allow-user-personal-sign-actions

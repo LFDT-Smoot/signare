@@ -1,18 +1,15 @@
 post:
-  operationId: admin.slots.updatePin
+  operationId: admin.slots.verifyPinSource
   tags:
     - Admin
-  summary: Updates the PIN of the slot
-  description: Update the slot's PIN of a given Hardware Security Module (HSM)
+  summary: Verifies the PIN source of the slot
+  description: |
+    Checks that the slot's current PIN source still opens it, without changing anything. Run this after
+    rotating the secret out of band. A success also clears a slot that Signare had stopped retrying
+    because its PIN was refused.
   parameters:
     - $ref: '../../components/_index.yaml#/parameters/ModuleId'
     - $ref: '../../components/_index.yaml#/parameters/SlotId'
-  requestBody:
-    description: The new PIN of the slot
-    content:
-      application/json:
-        schema:
-          $ref: '../../components/_index.yaml#/schemas/SlotUpdatePin'
   responses:
     '200':
       description: Slot details
@@ -26,5 +23,7 @@ post:
       $ref: '../../components/_index.yaml#/responses/PermissionDeniedResponse'
     '404':
       $ref: '../../components/_index.yaml#/responses/NotFoundResponse'
+    '412':
+      $ref: '../../components/_index.yaml#/responses/FailedPreconditionResponse'
     '500':
       $ref: '../../components/_index.yaml#/responses/InternalServerErrorResponse'

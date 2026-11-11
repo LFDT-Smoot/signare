@@ -27,9 +27,22 @@ func (adapter *DefaultAPIAdapter) AdaptGenerateAccount(ctx context.Context, data
 		return nil, adaptError(err)
 	}
 
+	// A Local Key Vault keeps its keys in the slot configuration, which only the slot use case writes.
+	if hsmConnection.ModuleKind == hsmconnector.LKVModuleKind {
+		generateLocalKeyInput := hsmslot.GenerateLocalKeyInput{
+			StandardID: hsmConnection.Slot.StandardID,
+		}
+		out, generateErr := adapter.slotUseCase.GenerateLocalKey(ctx, generateLocalKeyInput)
+		if generateErr != nil {
+			return nil, adaptError(generateErr)
+		}
+		response := out.Address.String()
+		return &response, nil
+	}
+
 	generateAddressInput := hsmconnector.GenerateAddressInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
-			Pin:        hsmConnection.Slot.Pin,
+			PinSource:  hsmConnection.Slot.PinSource,
 			Slot:       hsmConnection.Slot.Slot,
 			ModuleKind: hsmConnection.ModuleKind,
 		},
@@ -39,47 +52,6 @@ func (adapter *DefaultAPIAdapter) AdaptGenerateAccount(ctx context.Context, data
 		return nil, adaptError(err)
 	}
 	response := out.Address.String()
-	return &response, nil
-}
-
-func (adapter *DefaultAPIAdapter) AdaptImportAccount(ctx context.Context, data rpcinfra.ImportAccountRequestParams) (*string, *rpcerrors.RPCError) {
-	if len(data.PrivateKey) == 0 {
-		return nil, rpcerrors.NewInvalidRequest()
-	}
-
-	privateKey, err := entities.NewHexBytesFromString(data.PrivateKey)
-	if err != nil {
-		return nil, rpcerrors.NewInvalidParamsFromErr(err)
-	}
-
-	getHSMConnectionInput := hsmconnection.ByApplicationInput{
-		ApplicationID: data.ApplicationID,
-	}
-	hsmConnection, err := adapter.hsmConnectionResolver.ByApplication(ctx, getHSMConnectionInput)
-	if err != nil {
-		return nil, adaptError(err)
-	}
-
-	deriveAddressInput := hsmconnector.DeriveAddressFromPrivateKeyInput{
-		PrivateKey: privateKey,
-		ModuleKind: hsmConnection.ModuleKind,
-	}
-	deriveAddressOutput, err := adapter.hsmConnector.DeriveAddressFromPrivateKey(ctx, deriveAddressInput)
-	if err != nil {
-		return nil, adaptError(err)
-	}
-
-	addLocalKeyInput := hsmslot.AddLocalKeyInput{
-		StandardID: hsmConnection.Slot.StandardID,
-		PrivateKey: privateKey,
-		Address:    deriveAddressOutput.Address,
-	}
-	err = adapter.slotUseCase.AddLocalKey(ctx, addLocalKeyInput)
-	if err != nil {
-		return nil, adaptError(err)
-	}
-
-	response := deriveAddressOutput.Address.String()
 	return &response, nil
 }
 
@@ -117,7 +89,7 @@ func (adapter *DefaultAPIAdapter) AdaptListAccounts(ctx context.Context, data rp
 		}
 		out, listErr := adapter.slotUseCase.ListLocalKeys(ctx, listLocalKeysInput)
 		if listErr != nil {
-			return nil, adaptError(err)
+			return nil, adaptError(listErr)
 		}
 		response := make([]string, len(out.Addresses))
 		for i, addr := range out.Addresses {
@@ -128,7 +100,7 @@ func (adapter *DefaultAPIAdapter) AdaptListAccounts(ctx context.Context, data rp
 
 	listAddressesInput := hsmconnector.ListAddressesInput{
 		SlotConnectionData: hsmconnector.SlotConnectionData{
-			Pin:        hsmConnection.Slot.Pin,
+			PinSource:  hsmConnection.Slot.PinSource,
 			Slot:       hsmConnection.Slot.Slot,
 			ModuleKind: hsmConnection.ModuleKind,
 		},
@@ -315,6 +287,46 @@ func (adapter *DefaultAPIAdapter) AdaptSignTypedData(ctx context.Context, data r
 	return &response, nil
 }
 
+func (adapter *DefaultAPIAdapter) AdaptPersonalSign(ctx context.Context, data rpcinfra.PersonalSignRequestParams) (*string, *rpcerrors.RPCError) {
+	byApplicationInput := hsmconnection.ByApplicationInput{
+		ApplicationID: data.ApplicationID,
+	}
+	hsmConnection, err := adapter.hsmConnectionResolver.ByApplication(ctx, byApplicationInput)
+	if err != nil {
+		return nil, adaptError(err)
+	}
+
+	slotConnectionData, moduleErr := adaptSlotConnectionData(hsmConnection.ModuleKind, hsmConnection)
+	if moduleErr != nil {
+		return nil, moduleErr
+	}
+
+	signer, err := address.NewFromHexString(data.Address)
+	if err != nil {
+		return nil, rpcerrors.NewInvalidParamsFromErr(fmt.Errorf("invalid [address]: %w", err))
+	}
+
+	message, err := entities.NewHexBytesFromString(data.Message)
+	if err != nil {
+		return nil, rpcerrors.NewInvalidParamsFromErr(fmt.Errorf("invalid [message]: %w", err))
+	}
+
+	// No chain id: EIP-191 has no chain binding, so unlike the typed data path there is nothing to
+	// reconcile against the application's default chain.
+	personalSignInput := hsmconnector.PersonalSignInput{
+		SlotConnectionData: *slotConnectionData,
+		Address:            signer,
+		Message:            message,
+	}
+
+	out, err := adapter.hsmConnector.PersonalSign(ctx, personalSignInput)
+	if err != nil {
+		return nil, adaptError(err)
+	}
+	response := out.SignedData
+	return &response, nil
+}
+
 func adaptHSMModule(moduleKind hsmconnector.ModuleKind, hsmConnection *hsmconnection.HSMConnection) (*hsmconnector.SignTxInput, *rpcerrors.RPCError) {
 	slotConnectionData, err := adaptSlotConnectionData(moduleKind, hsmConnection)
 	if err != nil {
@@ -336,7 +348,7 @@ func adaptSlotConnectionData(moduleKind hsmconnector.ModuleKind, hsmConnection *
 	}
 	if moduleKind == hsmconnector.SoftHSMModuleKind {
 		slotConnectionData.Slot = hsmConnection.Slot.Slot
-		slotConnectionData.Pin = hsmConnection.Slot.Pin
+		slotConnectionData.PinSource = hsmConnection.Slot.PinSource
 	}
 	if moduleKind == hsmconnector.AKVModuleKind {
 		slotConnectionData.Config.AKV = make([]hsmconnector.AKVConfig, len(hsmConnection.Slot.Config.AKV))

@@ -63,13 +63,22 @@ curl --location --request POST 'http://localhost:32325/admin/modules/hsm-soft-21
     "spec": {
         "applicationId": "application",
         "slot": "560778468",
-        "pin": "userpin"
+        "pinSource": "test-slot-pin"
     }
 }'
 ```
 
-!!! info 
-    Remember that the ``slot`` and ``pin`` attributes have to be valid values according to what has been setup in the desired HSM.
+!!! info
+    The PIN itself is never sent to Signare. Write it to a file in the configured
+    [`pinSourceDirectory`](../reference/configuration.md#softhsm-configuration) and name that file in
+    `pinSource`:
+
+    ```console
+    printf 'userpin' > /etc/signare/slot-pins/test-slot-pin
+    ```
+
+    Remember that the ``slot`` attribute and the PIN in that file have to be valid values according to
+    what has been setup in the desired HSM. Signare checks both before storing the slot.
 
 
 ## Creating a new account

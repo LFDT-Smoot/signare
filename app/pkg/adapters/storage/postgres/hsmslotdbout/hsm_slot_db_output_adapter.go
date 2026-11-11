@@ -64,14 +64,14 @@ func (r *Repository) GetByApplication(ctx context.Context, applicationID entitie
 	return mapFromDB(storageData[0])
 }
 
-// EditPin edits an HSMSlot's Pin in storage.
-func (r *Repository) EditPin(ctx context.Context, data hsmslot.HSMSlot) (*hsmslot.HSMSlot, error) {
-	db, err := mapToUpdatePinDB(data)
+// EditPinSource edits an HSMSlot's PinSource in storage.
+func (r *Repository) EditPinSource(ctx context.Context, data hsmslot.HSMSlot) (*hsmslot.HSMSlot, error) {
+	db, err := mapToUpdatePinSourceDB(data)
 	if err != nil {
 		return nil, errors.InternalFromErr(err)
 	}
 
-	result, err := r.infra.EditPin(ctx, *db)
+	result, err := r.infra.EditPinSource(ctx, *db)
 	if err != nil {
 		return nil, mapPersistenceErrorToSignerError(err)
 	}
