@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-11
+
+### Security
+- Move the Go toolchain to `1.27.4`, across the `go` directive in the three `go.mod` files, the `run.go` setting in `.golangci.yaml` and the pinned build base image in `app/Dockerfile`, fixing GO-2026-6859 (CVE-2026-97054) in `net/http`. An HTTP/1 server that bounds request bodies with `MaxBytesReader` can crash when a handler reads the body while writing a response header, and both API listeners wrap every request in it before authentication, so `govulncheck` reports it as reachable. Signare's handlers read the body and respond on one goroutine, so the crash is not expected to be triggerable, and the release removes it regardless.
+
 ## [2.0.0] - 2026-10-27
 
 ### Added
